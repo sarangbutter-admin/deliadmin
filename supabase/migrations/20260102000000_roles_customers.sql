@@ -117,6 +117,9 @@ begin
     drop policy if exists "shop-media owner insert" on storage.objects;
     drop policy if exists "shop-media owner update" on storage.objects;
     drop policy if exists "shop-media owner delete" on storage.objects;
+    drop policy if exists "shop-media owner select" on storage.objects;
+    create policy "shop-media owner select" on storage.objects for select to authenticated
+      using (bucket_id = 'shop-media' and public.is_owner());
     create policy "shop-media owner insert" on storage.objects for insert to authenticated
       with check (bucket_id = 'shop-media' and public.is_owner());
     create policy "shop-media owner update" on storage.objects for update to authenticated

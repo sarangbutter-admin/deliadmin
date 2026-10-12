@@ -27,7 +27,7 @@ If `config.js` is left empty the site runs in **demo mode**: everything is store
 ### 1. Supabase (the database)
 
 1. Create a project at <https://supabase.com> (any region close to your customers). Save the database password somewhere safe.
-2. Open **SQL Editor → New query**, paste the whole file `supabase/migrations/20260101000000_delidome_schema.sql`, press **Run**. Then do the same with `20260102000000_roles_customers.sql` (staff roles + customer list) and `20260103000000_hardening.sql` (tighter permissions). All are safe to run again later.
+2. Open **SQL Editor → New query**, paste the whole file `supabase/migrations/20260101000000_delidome_schema.sql`, press **Run**. Then do the same with `20260102000000_roles_customers.sql` (staff roles + customer list) `20260103000000_hardening.sql` (tighter permissions) and `20260104000000_storage_select.sql` (picture uploads). All are safe to run again later.
 3. Create your owner login: **Authentication → Users → Add user → Create new user**. Enter your email and a long password, and tick **Auto Confirm User**.
 4. Tell the database that this email is the owner. In **SQL Editor** run (use your own email):
    ```sql
