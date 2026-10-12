@@ -1,0 +1,39 @@
+# Netlify settings. No build step: the site is plain files.
+[build]
+  publish = "site"
+  command = ""
+  # Cost control: never build the "main" branch automatically.
+  # (exit 0 = skip the build, exit 1 = build). Only other branches such as "dev" build.
+  ignore = "test \"$BRANCH\" = \"main\""
+
+# Pull-request previews are off unless you turn them on in Netlify.
+[context.production]
+  ignore = "exit 0"
+
+# Security headers for every page
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' data: https://*.supabase.co; frame-src https://www.youtube-nocookie.com https://player.vimeo.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+    Strict-Transport-Security = "max-age=63072000; includeSubDomains; preload"
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()"
+    Cross-Origin-Opener-Policy = "same-origin"
+
+# The page itself must always be fresh so updates show straight away
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/*.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/*.css"
+  [headers.values]
+    Cache-Control = "no-cache"
