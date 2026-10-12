@@ -1,8 +1,4 @@
-/* Delidome settings. The two values below are SAFE to publish:
-   the anon key only lets visitors call the public shop functions
-   (everything else is locked by the database; see supabase/migrations).
-   Leave both empty to run in DEMO mode (data stays in this browser only). */
 window.DELIDOME_CONFIG = {
-  supabaseUrl: "",      // e.g. "https://abcdxyz.supabase.co"
-  supabaseAnonKey: ""   // Project Settings > API > "anon" / "publishable" key
+  supabaseUrl: "https://mxkzsdjekhcuvdgsyvpr.supabase.co",
+  supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im14a3pzZGpla2hjdXZkZ3N5dnByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE4MjYyMTAsImV4cCI6MjEwNzQwMjIxMH0.svGG0PEq7coImnUwBCX7WVmOK0_d9U1oehXa9sARMZc"
 };
