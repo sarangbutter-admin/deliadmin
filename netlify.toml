@@ -1,10 +1,12 @@
-# Netlify settings. No build step: the site is plain files.
+# Netlify settings for the CUSTOMER shop. No build step: the site is plain files.
+# (The team/admin site is a second Netlify site with Base directory "admin-site"; it uses admin-site/netlify.toml.)
 [build]
   publish = "site"
   command = ""
-  # Cost control: never build the "main" branch automatically.
-  # (exit 0 = skip the build, exit 1 = build). Only other branches such as "dev" build.
-  ignore = "test \"$BRANCH\" = \"main\""
+  # Cost control (exit 0 = skip the build):
+  #  - never build the "main" branch automatically
+  #  - skip when a push didn't change the shop files (e.g. only the admin site changed)
+  ignore = "test \"$BRANCH\" = \"main\" || ( test -n \"$CACHED_COMMIT_REF\" && test \"$CACHED_COMMIT_REF\" != \"$COMMIT_REF\" && git diff --quiet \"$CACHED_COMMIT_REF\" \"$COMMIT_REF\" -- site netlify.toml )"
 
 # Pull-request previews are off unless you turn them on in Netlify.
 [context.production]

@@ -30,7 +30,6 @@ const PLATES = ["#000096","#D9DCFA","#2328C8","#EEF0FF"];
 const STATUSES = [["awaiting","Awaiting payment"],["review","Check payment"],["new","Payment confirmed"],["baking","Baking"],["ready","Ready / Out for delivery"],["completed","Delivered / Picked up"],["cancelled","Cancelled"]];
 const DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const DOW_LONG = ["Sundays","Mondays","Tuesdays","Wednesdays","Thursdays","Fridays","Saturdays"];
-
 /* --- utils --- */
 const $ = s => document.querySelector(s);
 const imgOk = s => /^(data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+\/=]+|https:\/\/[^\s"'<>\\]+)$/i.test(String(s||"")) ? String(s) : "";
@@ -52,7 +51,6 @@ const uid = () => Math.random().toString(36).slice(2,9);
 const newCode = () => "DD-"+Math.random().toString(36).slice(2,6).toUpperCase();
 function listJoin(a){return a.length<2?a.join(""):a.slice(0,-1).join(", ")+" or "+a[a.length-1]}
 function rng(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
-
 /* --- seed data --- */
 function seedDB(){
   const now=Date.now(), H=3600e3;
@@ -115,7 +113,6 @@ function seedDB(){
   return db;
 }
 function countItems(box){const c={};box.forEach(id=>c[id]=(c[id]||0)+1);return c}
-
 /* --- load / save --- */
 let DB;
 function defaultAnnouncer(){return {on:true,sticky:true,size:"M",cdColor:"#C8102E",cdBg:"#FFFFFF",cdFx:true,imgOn:true,imgFx:true,
@@ -139,6 +136,7 @@ function migrate(db){
   db.label=Object.assign(defaultLabel(),db.label||{});
   db.thanks=Object.assign(defaultThanks(),db.thanks||{});
   if(!Array.isArray(db.broadcasts))db.broadcasts=[];
+  if(!Array.isArray(db.customers))db.customers=[];
   if(!Array.isArray(db.coupons))db.coupons=[{id:"cp1",code:"WELCOME10",desc:"10% off your box",type:"percent",value:10,minSpend:0,appliesTo:"all",startsAt:"",endsAt:"",maxUses:0,onePerPhone:true,stack:true,show:true,on:true}];
   db.alerts=deepFill(defaultAlerts(),db.alerts);
   if(!Array.isArray(db.payMethods))db.payMethods=[{id:"pm1",name:"Bank transfer",details:(db.settings&&db.settings.payBank)||"Example Bank\nAccount 123 456 7890\nName: Delidome Cookies",img:"",on:true}];
@@ -160,7 +158,6 @@ function migrate(db){
 }
 function loadDB(){if(SBH.on){SBH.initDB();return}try{const s=JSON.parse(localStorage.getItem(DB_KEY)||"null");if(s&&s.v===1){DB=migrate(s);return}}catch(e){}DB=migrate(seedDB());saveDB()}
 function saveDB(){if(SBH.on)return SBH.save();try{localStorage.setItem(DB_KEY,JSON.stringify(DB));return true}catch(e){return false}}
-
 /* --- pricing --- */
 const prod = (id,db=DB) => db.products.find(p=>p.id===id);
 function saleStatus(s,at=Date.now()){return at<s.start?"scheduled":at<s.end?"live":"ended"}
@@ -208,7 +205,6 @@ function quote(c,db=DB,{at=Date.now(),withDelivery=true}={}){
 }
 const saleOffText = s => s.type==="percent"?`${s.value}% off`:`${money(s.value)} off`;
 const saleAppliesText = s => s.appliesTo==="all"?"every box":`the box of ${s.appliesTo}`;
-
 /* --- cookie drawing --- */
 let gid=0;
 function cookieSVG(f, seed){
@@ -246,7 +242,6 @@ function crumbColors(p){
   if(!hasImage(p))return {dough:"#000096",edge:"#2328C8",chips:["#D9DCFA"]};
   return artOf(p);
 }
-
 /* ================= SHOP ================= */
 loadDB();
 const fresh = () => ({size:6, box:[], step:1, mode:"pickup", day:null, time:null, note:"", addons:[], coupon:""});
@@ -276,7 +271,6 @@ const full = () => S.box.length===S.size && S.size>0;
 const countOf = id => S.box.filter(x=>x===id).length;
 const Q = () => quote(S,DB,{withDelivery:S.step===2});
 const total = () => {const q=Q();return S.step===2?q.total:r2(q.total-q.addons)};
-
 const TZS=["Asia/Jakarta","Asia/Makassar","Asia/Jayapura","Asia/Singapore","Asia/Kuala_Lumpur","Asia/Bangkok","Asia/Manila","Asia/Hong_Kong","Asia/Tokyo","Australia/Sydney","Europe/London","Europe/Paris","America/New_York","America/Chicago","America/Los_Angeles","UTC"];
 // "now" on the shop's clock, so the day list matches what the server accepts wherever the visitor is
 function shopNow(){
@@ -288,7 +282,6 @@ function dayOptions(){
   const now=shopNow(),start=addDays(now.d,now.h>=DB.settings.cutoffHour?2:1);
   return Array.from({length:7},(_,i)=>addDays(start,i));
 }
-
 let shopCat="all";
 const catName = id => (DB.categories.find(c=>c.id===id)||{}).name||"";
 function renderMenu(){
@@ -327,7 +320,6 @@ function renderStoreStatic(){
   $("#extras").innerHTML=act.map(a=>`<button class="extra" type="button" data-addon="${a.id}" aria-pressed="false"><span class="tick">✓</span><span><b>${esc(a.name)}</b><small>${esc(a.desc)}</small></span><span class="pr">+${money(a.price)}</span></button>`).join("");
   heroFloats($("#dome"),DB.page.hero);
 }
-
 function ctaState(){
   const left=S.size-S.box.length;
   if(S.step===1) return left>0?{label:`Pick ${left} more`,dis:true}:{label:"Choose a day",dis:false,go:"step2"};
@@ -422,7 +414,6 @@ function updateFlash(now=Date.now()){
   el.hidden=false;anRender(el,k,AN,AN,text,ms);
   if(!AN.sticky)el.classList.remove("pinned");
 }
-
 /* --- motion helpers --- */
 const RM = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const pop = new Map();
@@ -464,10 +455,8 @@ function ghostOut(i){
 function celebrate(){if(RM)return;const p=$(".boxpanel");
   p.animate([{transform:"scale(1)"},{transform:"scale(1.03) rotate(-.6deg)"},{transform:"scale(.99) rotate(.4deg)"},{transform:"scale(1)"}],{duration:600,delay:400,easing:"ease-out"});
   if(inView(p.getBoundingClientRect()))crumbs(p.querySelector(".slots"),{dough:"#FFFFFF",edge:"#D9DCFA",chips:["#FFFFFF","#EEF0FF"]})}
-
 /* --- box actions --- */
 function setSize(n){S.size=n;if(S.box.length>n)S.box=S.box.slice(0,n);if(!full())S.step=1;renderStore()}
-
 function cpMsg(t,ok){const m=$("#cpnMsg");if(!m)return;m.textContent=t||"";m.hidden=!t;m.classList.toggle("ok",!!ok);clearTimeout(cpMsg.t);if(t)cpMsg.t=setTimeout(()=>{m.hidden=true},6000)}
 function renderCoupon(q){
   const ap=$("#cpnAp"),f=$("#cpnForm"),ch=$("#cpnCh");if(!ap)return;
@@ -534,7 +523,6 @@ function goStep(n){if(n===2&&!full())return;S.step=n;renderStore();
   if(document.activeElement)document.activeElement.blur();
   scrollToEl($(n===2?"#step2":"#build"))}
 function cta(go){if(go==="step2")goStep(2);else if(go==="checkout")openCheckout()}
-
 const CUST_KEY="delidome-cust-v1";
 function loadCust(){try{return JSON.parse(localStorage.getItem(CUST_KEY)||"{}")||{}}catch(e){return {}}}
 function saveCust(){try{const r=document.querySelector('input[name="coNotify"]:checked');localStorage.setItem(CUST_KEY,JSON.stringify({name:$("#coName").value,phone:$("#coPhone").value,email:$("#coEmail").value,address:$("#coAddr").value,notify:r?r.value:"both"}))}catch(e){}}
@@ -561,7 +549,6 @@ function openCheckout(){
   $("#sheet").hidden=false;document.body.style.overflow="hidden";setTimeout(()=>$("#coEmail").focus(),50);
 }
 function closeSheet(){$("#sheet").hidden=true;document.body.style.overflow="";$("#sheet .sheet-card").style.background="";$("#dnFx")&&($("#dnFx").innerHTML="");endPreview()}
-
 /* --- shop wiring --- */
 /* --- shop reviews --- */
 const RV={pid:null,stars:0};
@@ -623,7 +610,7 @@ $("#barCta").addEventListener("click",e=>cta(e.currentTarget.dataset.go));
 $("#pillBtn").addEventListener("click",()=>scrollToEl($("#build")));
 $("#closeSheet").addEventListener("click",closeSheet);
 $("#sheet").addEventListener("click",e=>{if(e.target.id==="sheet")closeSheet()});
-document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;if(!$("#sheet").hidden)closeSheet();if(!$("#drawer").hidden)closeDrawer();closeModal();closeReviews();closeMO()});
+document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;if(!$("#sheet").hidden)closeSheet();closeReviews();closeMO()});
 $("#moSheet").addEventListener("input",e=>{if(e.target.id==="moMail"){const v=e.target.value.replace(/\D/g,"");if(v!==e.target.value)e.target.value=v}});
 $("#coPhone").addEventListener("input",e=>{const v=e.target.value.replace(/\D/g,"");if(v!==e.target.value)e.target.value=v});
 $("#coForm").addEventListener("submit",e=>{
@@ -669,7 +656,6 @@ function fxBurst(fx,T,fb){
   fx.innerHTML=h;fx._t=setTimeout(()=>{fx.innerHTML=""},9000);
 }
 function dnBurst(){fxBurst($("#dnFx"),DB.thanks)}
-
 function renderDone(o,ed,preview){
   const T=DB.thanks,box=$("#doneBox");
   box.style.setProperty("--dn-acc",T.accent);box.style.setProperty("--dn-cd",T.cdColor);
@@ -705,7 +691,6 @@ $("#doneClose").addEventListener("click",doneGo);
 $("#donePay").addEventListener("click",doneGo);
 $("#doneView").addEventListener("click",e=>{const b=e.target.closest("[data-pmsave]");if(b)savePayImg(b.dataset.pmsave)});
 $("#newBox").addEventListener("click",()=>{S=fresh();renderEditBar();$("#coForm").reset();closeSheet();sanitizeCart();renderStoreStatic();renderStore();scrollToEl($("#build"))});
-
 /* --- My orders (customer): pay, proof, track, edit --- */
 const normPhone=v=>String(v||"").replace(/\D/g,"").replace(/^(0|62)/,"");
 const MINE_KEY="delidome-mine-v1";let MINE=[];try{MINE=JSON.parse(localStorage.getItem(MINE_KEY)||"[]")||[]}catch(e){}
@@ -804,7 +789,6 @@ function moSteps(o){
   return `<ol class="track-l">${labels.map((l,i)=>{const done=i<idx||(o.status==="completed"&&i===5),now=i===idx&&!done;
     return `<li class="${done?"done":now?"now":""}"><span class="dot">${done?"✓":""}</span><span>${l}${(done||now||(i===4&&ship&&o.status==="completed"))&&sub(i)?`<small>${sub(i)}</small>`:""}</span></li>`}).join("")}</ol>`;
 }
-
 /* --- ratings and complaints (customer) --- */
 const COMPLAINT_REASONS=["Damaged product","Wrong item","Missing item","Product quality","Late delivery","Other"];
 const CP_STATUS={open:"New",review:"In review",resolved:"Resolved",rejected:"Rejected"};
@@ -870,7 +854,7 @@ function renderMO(){
     <div><div class="mo-sub">Transfer exactly</div><div class="mo-big">${money(o.total)}</div></div>
     ${payMethodsHTML()}
     <form class="form" id="moPay" novalidate><h4 style="margin:0">Send your payment proof</h4>
-      <div class="field"><label for="mpName">Name on the payment</label><input id="mpName" value="${esc(o.customer.name)}" autocomplete="name"></div>
+      <div class="field"><label for="mpName">Full name</label><input id="mpName" value="${esc(o.customer.name)}" autocomplete="name" required placeholder="Name of the person who paid"></div>
       <div class="field"><label for="mpFile">Proof of payment (photo or screenshot)</label><input id="mpFile" type="file" accept="image/*"></div>
       <img class="proofimg" id="mpPrev" alt="Proof preview" hidden>
       <p class="err" id="mpErr" hidden></p>
@@ -959,7 +943,7 @@ $("#moSheet").addEventListener("submit",async e=>{
     const o=DB.orders.find(x=>x.id===MO.id),err=$("#mpErr"),name=$("#mpName").value.trim(),f=$("#mpFile").files[0];
     const bad=m=>{err.textContent=m;err.hidden=false};
     if(!o||o.status!=="awaiting"){bad("This order is no longer waiting for payment.");return}
-    if(name.length<2){bad("Please enter the name on the payment.");$("#mpName").focus();return}
+    if(name.length<2){bad("Please enter your full name.");$("#mpName").focus();return}
     if(!f){bad("Please attach your proof of payment.");return}
     const btn=e.target.querySelector("button[type=submit]");btn.disabled=true;btn.textContent="Sending...";
     try{
@@ -984,220 +968,21 @@ function sweepOrders(){
   if(!expireOrders())return;
   renderBag();
   if(view==="store"){sanitizeCart();renderStoreStatic();renderStore();renderEditBar();if(!$("#moSheet").hidden)renderMO()}
-  else if(view==="admin")renderAdmin();
 }
 setInterval(()=>{tickCountdowns();if(Math.round(Date.now()/1000)%10===0)sweepOrders()},1000);
-
-/* ================= ADMIN ================= */
-const A={sel:new Set(),lbl:null,lblPrev:"sample",rvPid:null,tab:"dashboard",nf:{type:"news",title:"",text:"",pid:"",code:"",until:""},dd:"today",vr:"today",dsig:"",filter:"all",od:"all",q:"",pq:"",pcat:"all",modal:null,np:null,bakeDay:null,openOrder:null,
-  draft:{name:"Flash sale",type:"percent",value:20,appliesTo:"all",startMode:"now",startAt:"",durH:1,durM:0}};
 function toast(msg){const t=$("#toast");t.textContent=msg;t.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>t.hidden=true,Math.max(1600,msg.length*45))}
-let saveTimer;function saveSoon(){clearTimeout(saveTimer);saveTimer=setTimeout(()=>{saveDB();toast("Saved")},500)}
 function armed(btn,fn){if(btn.dataset.armed){fn();return}btn.dataset.armed="1";const t=btn.textContent;btn.textContent="Tap again to confirm";btn.classList.add("armed");
   setTimeout(()=>{if(btn.isConnected){delete btn.dataset.armed;btn.textContent=t;btn.classList.remove("armed")}},3000)}
 const stLabel=(k,mode)=>k==="ready"?(mode==="delivery"?"Out for delivery":"Ready for pickup"):k==="completed"?(mode==="delivery"?"Delivered":"Picked up"):STATUSES.find(x=>x[0]===k)[1];
-const statusSel = o => `<select class="st st-${o.status}" data-status-for="${o.id}" aria-label="Status for ${o.code}">${STATUSES.map(([k])=>`<option value="${k}" ${k===o.status?"selected":""}>${stLabel(k,o.mode)}</option>`).join("")}</select>`;
-const miniPlate = p => p?`<div class="mini">${plateHTML(p)}</div>`:`<div class="mini"></div>`;
-const head = (title,sub) => `<div class="ahead"><div><h1>${title}</h1><p>${sub}</p></div></div>`;
-const MOCK = SBH.on ? "" : `<div class="mocknote"><span>●</span><span><b>Mockup.</b> Changes save in this browser and show in the shop straight away. Orders tagged <b>Example</b> are sample data. This becomes the Supabase backend later.</span></div>`;
-
-function renderAdmin(){
-  if(A.tab!=="labels")A.lbl=null;
-  document.querySelectorAll("#anav [data-tab]").forEach(b=>b.setAttribute("aria-current",b.dataset.tab===A.tab?"page":"false"));
-  const nNew=DB.orders.filter(o=>o.status==="review"||o.status==="new").length,nLive=DB.sales.filter(s=>saleStatus(s)==="live").length;
-  $("#cOrders").textContent=nNew||"";$("#cOrders").hidden=!nNew;
-  {const nc=DB.orders.filter(o=>o.complaint&&(o.complaint.status==="open")).length;$("#cComplaints").textContent=nc||"";$("#cComplaints").hidden=!nc;$("#cComplaints").classList.toggle("live",!!nc)}
-  {const nc=DB.coupons.filter(c=>cpState(c)==="live").length;$("#cCoupons").textContent=nc?nc+" live":"";$("#cCoupons").hidden=!nc;$("#cCoupons").classList.toggle("live",!!nc)}
-  $("#cSales").textContent=nLive?nLive+" live":"";$("#cSales").hidden=!nLive;
-  const lowN=DB.products.filter(isLow).length;
-  $("#cProducts").textContent=lowN?lowN+" low":DB.products.filter(p=>p.status==="available").length;$("#cProducts").classList.toggle("live",!!lowN);
-  $("#amain").innerHTML=({notify:viewNotify,dashboard:viewDashboard,orders:viewOrders,sales:viewSales,products:viewProducts,complaints:viewComplaints,boxes:viewBoxes,marquee:viewMarquee,announcer:viewAnnouncer,coupons:viewCoupons,hero:viewHero,labels:viewLabels,landing:viewLanding,settings:viewSettings})[A.tab]();
-  tickAdmin();
-  if(A.tab==="sales")updatePreview();
-  if(A.tab==="marquee")afterViewMarquee();
-  if(A.tab==="announcer")anDrawPrev();
-  if(A.tab==="hero")hrDraw();
-  if(A.tab==="labels")fitLabel();
-}
-
-
-/* --- Announcer (owner) --- */
-A.an=null;A.anK="live";A.anEnd=Date.now()+2*3600e3+17*60e3;
-const anClone=o=>JSON.parse(JSON.stringify(o));
-const anDraft=()=>A.an||(A.an=anClone(DB.announcer));
-const anDirty=()=>A.an&&JSON.stringify(A.an)!==JSON.stringify(DB.announcer);
-function anSample(k,AN){
-  if(k==="live")return {text:AN.live.text.replace(/\{name\}/g,"Weekend crunch").replace(/\{off\}/g,"20% off").replace(/\{applies\}/g,"on every box"),ms:A.anEnd-Date.now()};
-  if(k==="soon")return {text:AN.soon.text.replace(/\{name\}/g,"Weekend crunch").replace(/\{off\}/g,"20% off").replace(/\{applies\}/g,"on every box"),ms:A.anEnd-Date.now()};
-  return {text:AN.custom.text||"Your announcement here",ms:anCustomMs(AN.custom,Date.now())};
-}
-function anDrawPrev(){const el=document.getElementById("anPrev");if(!el)return;const AN=anDraft(),sm=anSample(A.anK,AN);
-  el.parentNode.classList.toggle("off",!AN.on);el._sig=null;anRender(el,A.anK,AN,AN,sm.text,sm.ms);el.classList.remove("pinned");
-  const st=document.getElementById("anDirty");if(st){st.hidden=!anDirty()}
-  const sv=document.getElementById("anSave");if(sv)sv.disabled=!anDirty();const ds=document.getElementById("anDisc");if(ds)ds.disabled=!anDirty()}
-function anTick(now){const el=document.getElementById("anPrev"),cd=el&&el.querySelector(".cdn");if(!cd)return;const AN=anDraft(),sm=anSample(A.anK,AN);if(sm.ms===null)return;const c=AN[A.anK];cd.textContent=(c.label?c.label+" ":"")+fmtDur(sm.ms)}
-function viewAnnouncer(){
-  const AN=anDraft(),K=A.anK,c=AN[K];
-  const col=(label,path,v)=>`<label class="af">${label}<input type="color" data-an="${path}" value="${v}" style="width:100%;height:42px"></label>`;
-  const sw=(label,path,v,hint)=>`<div class="stockrow" style="display:flex;align-items:center;gap:10px;margin-top:10px"><label class="sw"><input type="checkbox" data-an="${path}" ${v?"checked":""} aria-label="${label}"><span></span></label><span class="stlabel"><b>${label}</b>${hint?`<br><small style="color:var(--muted)">${hint}</small>`:""}</span></div>`;
-  const tabs=[["live","Flash sale live"],["soon","Coming up"],["custom","My announcement"]].map(([k,l])=>`<button type="button" class="${K===k?"on":""}" data-ank="${k}" style="border:1.5px solid ${K===k?"var(--blue)":"var(--line)"};background:${K===k?"var(--blue)":"#fff"};color:${K===k?"#fff":"var(--ink)"};border-radius:99px;padding:7px 14px;font-weight:600;cursor:pointer">${l}</button>`).join("");
-  return head("Announcer","The banner pinned under the shop header. It stays visible while customers scroll. Changes appear in the preview only; nothing goes live until you press Save.")+MOCK+`
-  <div class="stack">
-    <section class="panel" style="position:sticky;top:8px;z-index:6">
-      <div class="phead"><div><h2>Preview <span id="anDirty" hidden style="font-size:12px;background:var(--red);color:#fff;border-radius:99px;padding:2px 9px;margin-left:6px;vertical-align:middle">Not saved yet</span></h2><p class="sub">This is how it looks in the shop. The timer below is a sample.</p></div></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 10px">${tabs}</div>
-      <div style="border-radius:14px;overflow:hidden;border:1px solid var(--line)"><div class="flash" id="anPrev"></div></div>
-      <p class="note" style="margin-top:8px" ${AN.on?"hidden":""}>The announcer is switched off, so customers won't see any banner.</p>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px"><button class="btn btn-blue" id="anSave" type="button" data-ansave disabled>Save &amp; publish</button><button class="btn btn-ghost-blue" id="anDisc" type="button" data-andisc disabled>Discard changes</button><button class="danger" type="button" data-anreset>Reset to default</button></div>
-    </section>
-    <section class="panel">
-      <h2>Show &amp; behave</h2>
-      ${sw("Announcer on","on",AN.on,"Master switch for the whole banner.")}
-      ${sw("Keep pinned while scrolling","sticky",AN.sticky,"Locked under the header on every scroll. Off lets it scroll away with the page.")}
-      ${sw("Show image","imgOn",AN.imgOn,"Uses the picture you upload for each banner below.")}
-      ${sw("Lively image","imgFx",AN.imgFx,"The picture wiggles and bounces.")}
-      ${sw("Lively countdown","cdFx",AN.cdFx,"The timer pulses and a shine sweeps across the banner.")}
-    </section>
-    <section class="panel">
-      <h2>${({live:"When a flash sale is live",soon:"When a sale is coming up (24 hours before)",custom:"Your own announcement"})[K]}</h2>
-      ${K==="custom"?sw("Show my announcement","custom.on",AN.custom.on,"Shows when no flash sale is live or coming up."):""}
-      <label class="af" style="margin-top:10px">Message<input class="in" data-an="${K}.text" maxlength="140" value="${esc(c.text)}"></label>
-      ${K!=="custom"?`<p class="note" style="margin:4px 0 0">Fill-ins: <b>{name}</b> sale name, <b>{off}</b> discount, <b>{applies}</b> what it covers.</p>`:""}
-      <div class="grid3" style="margin-top:12px;align-items:end">
-        <label class="af">Timer label<input class="in" data-an="${K}.label" maxlength="20" value="${esc(c.label)}"></label>
-        ${K==="custom"?`<label class="af">Ends at (optional)<input class="in" type="datetime-local" data-an="custom.endsAt" value="${esc(c.endsAt)}"></label><span class="note">Leave empty for no timer. The banner hides itself when time is up.</span>`:`<span></span><span></span>`}
-      </div>
-      <div class="grid3" style="margin-top:12px;align-items:end">${col("Background",K+".bg",c.bg)}${col("Text color",K+".ink",c.ink)}
-        <label class="af">Text size<select class="in" data-an="size"><option value="S" ${AN.size==="S"?"selected":""}>Small</option><option value="M" ${AN.size==="M"?"selected":""}>Medium</option><option value="L" ${AN.size==="L"?"selected":""}>Large</option></select></label></div>
-      <div class="grid3" style="margin-top:12px;align-items:end">${col("Timer text (red by default)","cdColor",AN.cdColor)}${col("Timer background","cdBg",AN.cdBg)}<span></span></div>
-      <div style="margin-top:14px"><h2 style="font-size:15px;margin:0 0 6px">Banner image</h2>
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">${c.img?`<img src="${esc(c.img)}" alt="" style="height:48px;border-radius:10px;border:1px solid var(--line)">`:`<span class="note">No image yet. A lightning bolt shows instead.</span>`}
-        <label class="ghost mqbtn">${c.img?"Replace image":"Upload image"}<input type="file" accept="image/*" hidden data-animg></label>${c.img?`<button class="danger" type="button" data-anrm>Remove</button>`:""}</div></div>
-    </section>
-  </div>`;
-}
-
-
-/* --- Top banner / hero (owner) --- */
-A.hr=null;
-const hrDraft=()=>A.hr||(A.hr=anClone(DB.page.hero));
-const hrDirty=()=>A.hr&&JSON.stringify(A.hr)!==JSON.stringify(DB.page.hero);
-function hrDraw(){
-  const el=document.getElementById("hrPrev");if(!el)return;const pg=DB.page,wrap=el.parentNode;
-  wrap.style.setProperty("--blue",pg.brand);wrap.style.setProperty("--display",lpFamily(pg.headFont,pg));wrap.style.setProperty("--body",lpFamily(pg.bodyFont,pg));
-  const h=anClone(hrDraft());if(!h.bg)h.bg=pg.brand;heroFill(el,h);
-  const d=hrDirty();["hrDirty"].forEach(i=>{const n=document.getElementById(i);if(n)n.hidden=!d});
-  ["hrSave","hrDisc"].forEach(i=>{const n=document.getElementById(i);if(n)n.disabled=!d});
-}
-function viewHero(){
-  const pg=DB.page,h=hrDraft(),prods=DB.products.filter(p=>p.status!=="hidden"&&hasImage(p)).slice(0,6);
-  const inp=(label,path,max,rows)=>`<label class="af">${label}${rows?`<textarea class="in" rows="${rows}" data-hr="${path}" maxlength="${max}">${esc(h[path])}</textarea>`:`<input class="in" data-hr="${path}" maxlength="${max}" value="${esc(h[path])}">`}</label>`;
-  const slot=i=>{const c=safeMedia(h.cookies[i]),pr=prods[i];
-    const thumb=c?`<img src="${esc(c)}" alt="" style="width:100%;height:100%;object-fit:contain">`:pr?`<div class="plate" style="background:#1A1FB0;width:100%">${plateInner(pr)}</div>`:`<span class="note">Empty</span>`;
-    return `<div class="pmcard" style="text-align:center;gap:8px"><b style="font-size:13px">Cookie ${i+1}</b><div style="width:72px;height:72px;margin:0 auto;display:grid;place-items:center;background:#EEF0FF;border-radius:50%;overflow:hidden">${thumb}</div>
-      <span class="note" style="margin:0">${c?"Your image":pr?"Default (flavor photo)":"Nothing to show"}</span>
-      <label class="ghost mqbtn" style="justify-self:center">${c?"Replace":"Upload"}<input type="file" accept="image/*" hidden data-hrck="${i}"></label>${c?`<button class="danger" type="button" data-hrckrm="${i}">Use default</button>`:""}</div>`};
-  const mt=h.mediaType,src=h.src||"",isData=/^data:/i.test(src);
-  const col=(l,k,v)=>`<label class="af">${l}<input type="color" data-hr="${k}" value="${v}" style="width:100%;height:42px"></label>`;
-  return head("Top banner","The big dome at the top of your shop. Edit everything here and check the preview. Nothing changes in the shop until you press Save.")+MOCK+`
-  <div class="stack">
-    <section class="panel hrsticky">
-      <div class="phead"><div><h2>Preview <span id="hrDirty" hidden style="font-size:12px;background:var(--red);color:#fff;border-radius:99px;padding:2px 9px;margin-left:6px;vertical-align:middle">Not saved yet</span></h2><p class="sub">Updates as you edit.</p></div></div>
-      <div style="--blue:${pg.brand}"><div class="dome" id="hrPrev"><div class="hm"></div><div class="ho"></div><p class="eyebrow"></p><h1></h1><p class="lede"></p><div class="hero-ctas"><a class="btn btn-white"></a><a class="btn btn-ghost"></a></div></div></div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px"><button class="btn btn-blue" id="hrSave" type="button" data-hrsave disabled>Save &amp; publish</button><button class="btn btn-ghost-blue" id="hrDisc" type="button" data-hrdisc disabled>Discard changes</button><button class="danger" type="button" data-hrreset>Reset to default</button></div>
-    </section>
-    <section class="panel"><h2>Words and buttons</h2>
-      <div class="grid2" style="margin-top:10px">${inp("Small line above the title","eyebrow",60)}${inp("Title","title",90)}</div>
-      <div style="margin-top:10px">${inp("Intro text","lede",240,3)}</div>
-      <div class="grid2" style="margin-top:10px">${inp("Button 1 label (empty hides it)","btn1",30)}${inp("Button 2 label (empty hides it)","btn2",30)}</div>
-      <div class="grid2" style="margin-top:10px">${col("Banner color","bg",h.bg||pg.brand)}${col("Text color","color",h.color||"#ffffff")}</div>
-    </section>
-    <section class="panel"><h2>Background picture or video</h2>
-      <label class="af" style="margin-top:10px">Media<select class="in" data-hr="mediaType" data-hrrr="1"><option value="none" ${mt==="none"?"selected":""}>None (solid color)</option><option value="image" ${mt==="image"?"selected":""}>Image</option><option value="video" ${mt==="video"?"selected":""}>Video</option></select></label>
-      ${mt!=="none"?`<div class="colin" style="margin-top:10px"><label class="ghost mqbtn">${src?"Replace":"Upload"} ${mt}<input type="file" accept="${mt==="image"?"image/*":"video/mp4,video/webm"}" hidden data-hrmedia></label>${src?`<button class="danger" type="button" data-hrmediarm>Remove</button>`:""}</div>
-        <label class="af" style="margin-top:10px">Or paste a link (https)<input class="in" data-hr="src" value="${isData?"":esc(src)}" placeholder="${isData?"Uploaded file":"https://..."}"></label>
-        ${mt==="video"?`<p class="note">Uploaded videos are limited to 3 MB. For longer ones paste an .mp4 link.</p>`:""}
-        <label class="af" style="margin-top:10px">Darken the picture: ${h.overlay}%<input type="range" min="0" max="80" step="5" value="${h.overlay}" data-hr="overlay" data-hrnum="1"></label>`:""}
-    </section>
-    <section class="panel"><h2>Floating cookies</h2>
-      <div style="display:flex;gap:10px;align-items:center;margin:10px 0"><label class="sw"><input type="checkbox" data-hr="floats" ${h.floats?"checked":""} aria-label="Show floating cookies"><span></span></label><span class="stlabel">Show floating cookies</span></div>
-      <p class="sub" style="margin:0 0 10px">Upload your own picture for any spot. Spots you leave alone keep showing your flavor photos, as before.</p>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px">${[0,1,2,3,4,5].map(slot).join("")}</div>
-    </section>
-  </div>`;
-}
-
-
-/* --- Coupons (owner) --- */
-A.cp=null;
-const CP_BLANK=()=>({id:"",code:"",desc:"",type:"percent",value:10,minSpend:0,appliesTo:"all",startsAt:"",endsAt:"",maxUses:0,onePerPhone:true,stack:true,show:true,on:true});
-function cpGiven(c){return DB.orders.filter(o=>o.coupon===c.code&&o.status!=="cancelled").reduce((a,o)=>a+(o.couponDisc||0),0)}
-function viewCoupons(){
-  const F=A.cp,ST={live:["Live","#0A6B34"],scheduled:["Scheduled","#8a5a00"],expired:["Ended","#777"],used:["Used up","#777"],off:["Off","#777"]};
-  const list=DB.coupons.map(c=>{const st=cpState(c),u=cpUses(c.code,DB).length;return `<div class="pmcard" style="gap:6px">
-    <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap"><b style="font-size:17px;letter-spacing:.06em">${esc(c.code)}</b><span style="font-size:12px;font-weight:700;color:${ST[st][1]}">${ST[st][0]}${c.show?" · promoted":""}</span></div>
-    <div>${esc(cpOff(c))}${c.minSpend>0?` · min box ${money(c.minSpend)}`:""}${c.appliesTo!=="all"?` · box of ${c.appliesTo} only`:""}</div>
-    ${c.desc?`<div class="note" style="margin:0">${esc(c.desc)}</div>`:""}
-    <div class="note" style="margin:0">Used ${u}${c.maxUses>0?` of ${c.maxUses}`:""} · given ${money(cpGiven(c))}${c.endsAt?` · ends ${esc(c.endsAt.replace("T"," "))}`:""}</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="ghost" type="button" data-cpedit="${c.id}">Edit</button><button class="ghost" type="button" data-cptog="${c.id}">${c.on?"Turn off":"Turn on"}</button><button class="danger" type="button" data-cpdel="${c.id}">Delete</button></div></div>`}).join("");
-  const sw=(l,k,h)=>`<div style="display:flex;gap:10px;align-items:center;margin-top:10px"><label class="sw"><input type="checkbox" data-cpf="${k}" ${F[k]?"checked":""} aria-label="${l}"><span></span></label><span class="stlabel"><b>${l}</b><br><small style="color:var(--muted)">${h}</small></span></div>`;
-  const sizes=DB.sizes.filter(z=>z.active).map(z=>`<option value="${z.n}" ${String(F&&F.appliesTo)===String(z.n)?"selected":""}>Box of ${z.n} only</option>`).join("");
-  const form=F?`<section class="panel"><h2>${F.id?"Edit coupon":"New coupon"}</h2>
-    <div class="grid2" style="margin-top:10px"><label class="af">Code (letters and numbers)<input class="in" data-cpf="code" maxlength="20" value="${esc(F.code)}" style="text-transform:uppercase" placeholder="SWEET10"></label>
-      <label class="af">What customers see<input class="in" data-cpf="desc" maxlength="60" value="${esc(F.desc)}" placeholder="10% off your box"></label></div>
-    <div class="grid3" style="margin-top:10px"><label class="af">Type<select class="in" data-cpf="type" data-cprr="1"><option value="percent" ${F.type==="percent"?"selected":""}>Percent off</option><option value="amount" ${F.type==="amount"?"selected":""}>Amount off</option><option value="freedelivery" ${F.type==="freedelivery"?"selected":""}>Free delivery</option></select></label>
-      ${F.type!=="freedelivery"?`<label class="af">${F.type==="percent"?"Percent (1 to 100)":"Amount off"}<input class="in" type="number" min="0" step="${F.type==="percent"?1:0.01}" data-cpf="value" value="${F.value}"></label>`:`<span></span>`}
-      <label class="af">Minimum box price<input class="in" type="number" min="0" step="0.01" data-cpf="minSpend" value="${F.minSpend}"></label></div>
-    <div class="grid3" style="margin-top:10px"><label class="af">Works on<select class="in" data-cpf="appliesTo"><option value="all" ${F.appliesTo==="all"?"selected":""}>Every box</option>${sizes}</select></label>
-      <label class="af">Starts (optional)<input class="in" type="datetime-local" data-cpf="startsAt" value="${esc(F.startsAt)}"></label>
-      <label class="af">Ends (optional)<input class="in" type="datetime-local" data-cpf="endsAt" value="${esc(F.endsAt)}"></label></div>
-    <label class="af" style="margin-top:10px;max-width:260px">Total uses allowed (0 = unlimited)<input class="in" type="number" min="0" step="1" data-cpf="maxUses" value="${F.maxUses}"></label>
-    ${sw("One use per customer","onePerPhone","Checked by WhatsApp number.")}${sw("Can be used with a flash sale","stack","Off means it won't apply while a flash sale discounts that box.")}${sw("Promote it in the shop","show","Shows as a tappable offer in the customer's box panel.")}${sw("Active","on","Turn off to pause it.")}
-    <p class="err" id="cpErr" hidden></p>
-    <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap"><button class="btn btn-blue" type="button" data-cpsave>Save coupon</button><button class="btn btn-ghost-blue" type="button" data-cpcancel>Cancel</button></div></section>`:"";
-  return head("Coupons","Create discount codes that customers type in (or tap) in their box. Discounts apply to the box price, and show on the order.")+MOCK+`<div class="stack">
-    ${form}
-    <section class="panel"><div class="phead"><div><h2>All coupons</h2><p class="sub">Coupons marked "promoted" appear as tappable offers next to the coupon box.</p></div>${F?"":`<button class="btn btn-blue btn-sm" type="button" data-cpnew>+ New coupon</button>`}</div>
-    ${DB.coupons.length?`<div class="pmlist" style="margin-top:10px;display:grid;gap:10px">${list}</div>`:`<div class="empty">No coupons yet.</div>`}</section></div>`;
-}
-
-/* --- Notifications to all customers (owner) --- */
 const NF_TYPES=[["news","📣","News"],["deal","🎁","Deal"],["flash","🔥","Flash sale"],["info","ℹ️","Info"]];
 const nfIcon=t=>(NF_TYPES.find(x=>x[0]===t)||NF_TYPES[0])[1],nfName=t=>(NF_TYPES.find(x=>x[0]===t)||NF_TYPES[0])[2];
 const bcActive=b=>!b.until||b.until>=ymd(today0());
 const activeBroadcasts=()=>(DB.broadcasts||[]).filter(bcActive);
-function viewNotify(){
-  const f=A.nf;
-  return head("Notifications","Send news, deals and info to every customer. They see it under the bell on the shop.")+MOCK+`
-  <div class="stack">
-    <section class="panel">
-      <h2>🔔 Send a notification</h2><p class="sub">Every customer sees it under the bell 🔔 on the shop. Order updates and flash sales are added there automatically.</p>
-      <div class="stack" style="gap:14px">
-        <div class="af">Type<div class="chips">${NF_TYPES.map(([k,i,n])=>`<button class="fchip" type="button" data-nftype="${k}" aria-pressed="${f.type===k}">${i} ${n}</button>`).join("")}</div></div>
-        <label class="af">Title<input class="in" data-nf="title" maxlength="80" value="${esc(f.title)}" placeholder="e.g. Weekend deal: 10% off all cookies"></label>
-        <label class="af">Message (optional)<textarea class="in" rows="3" data-nf="text" maxlength="240" placeholder="e.g. Use the code at checkout. Valid until Sunday!">${esc(f.text)}</textarea></label>
-        <div class="grid3">
-          <label class="af">Link to a flavor (optional)<select class="in" data-nf="pid"><option value="">None</option>${DB.products.filter(p=>p.status!=="hidden").map(p=>`<option value="${p.id}" ${f.pid===p.id?"selected":""}>${esc(p.name)}</option>`).join("")}</select></label>
-          <label class="af">Coupon code to show (optional)<input class="in" data-nf="code" maxlength="20" value="${esc(f.code)}" placeholder="e.g. BUTTER10" style="text-transform:uppercase"></label>
-          <label class="af">Show until (optional)<input class="in" type="date" data-nf="until" value="${esc(f.until)}"></label>
-        </div>
-        <p class="err" id="nfErr" hidden></p>
-        <div><button class="btn btn-blue" type="button" data-nfsend>📣 Send to all customers</button></div>
-        <p class="note" style="margin:0">This code is shown under the bell and customers can tap to copy it. To make it work at checkout, create the same code in the Coupons tab.</p>
-      </div>
-    </section>
-    <section class="panel">
-      <h2>Sent notifications (${DB.broadcasts.length})</h2>
-      ${DB.broadcasts.length?DB.broadcasts.map(b=>`<div class="db-row"><div class="grow"><b>${nfIcon(b.type)} ${esc(b.title)}</b>${b.text?`<span class="meta">${esc(b.text)}</span>`:""}<span class="meta">${nfName(b.type)} · sent ${fmtAgo(b.at)}${b.code?` · code ${esc(b.code)}`:""}${b.pid&&prod(b.pid)?` · links to ${esc(prod(b.pid).name)}`:""}${b.until?` · ${bcActive(b)?"shows until":"expired"} ${fmtDay(b.until)}`:""}</span></div><button class="danger" type="button" data-nfdel="${b.id}">Delete</button></div>`).join(""):`<p class="note" style="margin:6px 0 0">Nothing sent yet.</p>`}
-    </section>
-  </div>`;
-}
-/* --- Dashboard (owner) --- */
-const VIS_KEY="delidome-visits-v1",VID_KEY="delidome-vid-v1",LASTV_KEY="delidome-lastv-v1",STAFF_KEY="delidome-staff-v1";
+const VIS_KEY="delidome-visits-v1",VID_KEY="delidome-vid-v1",LASTV_KEY="delidome-lastv-v1";
 let VIS=[];const loadVis=()=>{try{VIS=JSON.parse(localStorage.getItem(VIS_KEY)||"[]")||[]}catch(e){VIS=[]}};loadVis();
 function trackVisit(){
   try{
-    if(localStorage.getItem(STAFF_KEY)||navigator.webdriver||/bot|crawl|spider|slurp|headless|preview/i.test(navigator.userAgent))return;
+    if(navigator.webdriver||/bot|crawl|spider|slurp|headless|preview/i.test(navigator.userAgent))return;
     const now=Date.now(),last=+localStorage.getItem(LASTV_KEY)||0;if(now-last<30*60e3)return;
     let vid=localStorage.getItem(VID_KEY);if(!vid){vid=uid()+uid();localStorage.setItem(VID_KEY,vid)}
     localStorage.setItem(LASTV_KEY,String(now));
@@ -1205,229 +990,6 @@ function trackVisit(){
     loadVis();VIS=VIS.filter(v=>now-v.t<40*864e5).slice(-4000);VIS.push({t:now,v:vid});localStorage.setItem(VIS_KEY,JSON.stringify(VIS));
   }catch(e){}
 }
-function dashRange(k){
-  const t=today0().getTime();
-  if(k==="all")return [0,Infinity];if(k==="today")return [t,t+864e5];
-  if(k==="week")return [t-6*864e5,t+864e5];if(k==="month")return [t-29*864e5,t+864e5];
-  const d=fromYmd(k).getTime();return [d,d+864e5];
-}
-const dashSig=()=>DB.orders.map(o=>o.status+(o.proof?1:0)+(o.complaint?o.complaint.status:"")).join(",")+"|"+DB.orders.length+"|"+VIS.length;
-function viewDashboard(){
-  A.dsig=dashSig();
-  const [s0,s1]=dashRange(A.dd),inR=(ms,a=s0,b=s1)=>ms>=a&&ms<b;
-  const lbl=A.dd==="all"?"all dates":A.dd==="today"?"today":fmtDay(A.dd);
-  const ordersIn=DB.orders.filter(o=>o.status!=="cancelled"&&inR(o.createdAt)).sort((a,b)=>b.createdAt-a.createdAt);
-  const paidIn=DB.orders.filter(o=>canLabel(o)&&inR(o.paidAt||o.createdAt));
-  const rev=paidIn.reduce((a,o)=>a+o.total,0);
-  const review=DB.orders.filter(o=>o.status==="review").sort((a,b)=>((a.proof&&a.proof.at)||0)-((b.proof&&b.proof.at)||0));
-  const prog=DB.orders.filter(o=>["new","baking","ready"].includes(o.status)).length;
-  const cps=DB.orders.filter(o=>o.complaint&&o.complaint.status==="open").length;
-  // visitors
-  const [v0,v1]=dashRange(A.vr),vs=VIS.filter(v=>inR(v.t,v0,v1)),uniq=new Set(vs.map(v=>v.v)).size;
-  const placed=DB.orders.filter(o=>o.status!=="cancelled"&&inR(o.createdAt,v0,v1)).length,conv=uniq?Math.min(100,Math.round(placed/uniq*100)):0;
-  const nb=A.vr==="today"?24:A.vr==="week"?7:30,step=A.vr==="today"?3600e3:864e5,cnt=Array(nb).fill(0);
-  vs.forEach(v=>{const i=Math.min(nb-1,Math.floor((v.t-v0)/step));if(i>=0)cnt[i]++});
-  const mx=Math.max(...cnt,0);
-  const axis=A.vr==="today"?[0,6,12,18].map(h=>[h/24*100,h+"h"]):A.vr==="week"?cnt.map((_,i)=>[(i+.5)/7*100,new Date(v0+i*864e5).toLocaleDateString("en-US",{weekday:"short"})]):[0,7,14,21,29].map(i=>[(i+.5)/30*100,new Date(v0+i*864e5).toLocaleDateString("en-US",{month:"short",day:"numeric"})]);
-  const unit=A.vr==="today"?"hour":"day",note=`Visits per ${unit}${A.vr==="today"?" today":A.vr==="week"?", last 7 days":", last 30 days"}. Staff and search-engine bots are not counted; a visitor returning within 30 minutes counts once.`;
-  // activity
-  const ev=[];DB.orders.forEach(o=>{
-    ev.push({at:o.createdAt,i:"🍪",t:`New order #${o.code} · ${o.customer.name} · ${money(o.total)}`});
-    if(o.proof)ev.push({at:o.proof.at,i:"🧾",t:`Payment submitted for #${o.code} (${o.proof.name})`});
-    if(o.complaint)ev.push({at:o.complaint.at,i:"⚠️",t:`Complaint on #${o.code} · ${o.complaint.reason}`});
-    if(o.completedAt)ev.push({at:o.completedAt,i:"📦",t:`#${o.code} ${stLabel("completed",o.mode).toLowerCase()}`})});
-  ev.sort((a,b)=>b.at-a.at);const t0=today0().getTime();
-  const when=ms=>ms>=t0?new Date(ms).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"}):fmtDT(ms);
-  return head("Dashboard","How the shop is doing right now, and what needs you.")+MOCK+`
-  <div class="stack">
-    <section class="panel">
-      <div class="db-top"><button class="fchip" type="button" data-dd="all" aria-pressed="${A.dd==="all"}">All dates</button><button class="fchip" type="button" data-dd="today" aria-pressed="${A.dd==="today"}">Today</button><input class="oc-date" type="date" data-dddate value="${A.dd!=="all"&&A.dd!=="today"?A.dd:""}" aria-label="Show a single date"></div>
-      <p class="note" style="margin:10px 0 12px">Orders and Paid follow the date filter. Items waiting for you always show every date.</p>
-      <div class="db-kpis">
-        <button class="db-k" type="button" data-dashgo="orders"><strong>${ordersIn.length}</strong><small>Orders · ${esc(lbl)}</small></button>
-        <button class="db-k" type="button" data-dashgo="orders"><strong>${money(rev)}</strong><small>Paid · ${esc(lbl)}</small></button>
-        <button class="db-k${review.length?" hot":""}" type="button" data-dashgo="orders" data-dfilter="review"><strong>${review.length}</strong><small>Payments to confirm</small></button>
-        <button class="db-k" type="button" data-dashgo="orders"><strong>${prog}</strong><small>Orders in progress</small></button>
-        <button class="db-k" type="button" data-dashgo="complaints"><strong>${cps}</strong><small>Open complaints</small></button>
-      </div>
-    </section>
-    <section class="panel">
-      <h2>👥 Visitors</h2>
-      <div class="chips" style="margin-top:10px">${[["today","Today"],["week","This week"],["month","This month"]].map(([k,l])=>`<button class="fchip" type="button" data-vr="${k}" aria-pressed="${A.vr===k}">${l}</button>`).join("")}</div>
-      <div class="db-vis"><div><strong>${vs.length}</strong><small>Visits</small></div><div><strong>${uniq}</strong><small>Unique visitors</small></div><div><strong>${placed}</strong><small>Orders placed</small></div><div><strong>${conv}%</strong><small>Visitors who ordered</small></div></div>
-      <div class="db-chart" role="img" aria-label="${esc(note)} Total ${vs.length}.">${cnt.map((c,i)=>`<i class="${c?"":"z"}" style="height:${c&&mx?Math.max(4,c/mx*100):0}%" title="${c} visit${c===1?"":"s"}"></i>`).join("")}</div>
-      <div class="db-axis" aria-hidden="true">${axis.map(([p,l])=>`<span style="left:${p}%">${l}</span>`).join("")}</div>
-      <p class="note" style="margin:6px 0 0">${esc(note)}</p>
-    </section>
-    <section class="panel">
-      <div class="db-top"><button class="ghost" type="button" data-dashgo="orders" data-dfilter="all">Open all orders</button><button class="ghost" type="button" data-dashsound>${DB.alerts.sound?"🔔 Sound on":"🔕 Sound off"}</button></div>
-      <p class="note" style="margin:10px 0 0"><span class="db-live"></span>Live: new orders, payments and complaints appear here and as a pop-up while this page is open.</p>
-    </section>
-    <section class="panel">
-      <h2>💰 Waiting for your payment confirmation</h2>
-      ${review.length?review.map(o=>`<div class="db-row"><div class="grow"><b>#${esc(o.code)}</b> ${esc(o.customer.name)} · ${money(o.total)}<span class="meta">${o.proof?`from ${esc(o.proof.name)} · ${fmtAgo(o.proof.at)}`:""}</span></div><div class="colin" style="flex:none;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button class="ghost" type="button" data-dproof="${o.id}">🧾 Proof</button><button class="btn btn-blue btn-sm" type="button" data-dconfirm="${o.id}">✓ Confirm</button></div></div>`).join(""):`<div class="empty" style="margin-top:10px">Nothing is waiting. You're all caught up.</div>`}
-    </section>
-    <section class="panel">
-      <h2><span class="db-live"></span>Live activity</h2>
-      ${ev.length?ev.slice(0,10).map(e=>`<div class="db-row"><span class="grow">${e.i} ${esc(e.t)}</span><span class="note" style="margin:0;white-space:nowrap">${esc(when(e.at))}</span></div>`).join(""):`<div class="empty">No activity yet.</div>`}
-    </section>
-    <section class="panel">
-      <h2>📋 Latest orders · ${esc(lbl)}</h2>
-      ${ordersIn.length?ordersIn.slice(0,8).map(o=>`<button class="db-row" type="button" data-order="${o.id}" style="width:100%;background:none;border:0;border-top:1px solid var(--ice-2);text-align:left;font:inherit;color:var(--ink);cursor:pointer"><span class="grow"><b>#${esc(o.code)}</b> ${esc(o.customer.name)} · ${money(o.total)}</span><span class="mo-chip st-${o.status}">${esc(stLabel(o.status,o.mode))}</span></button>`).join(""):`<div class="empty" style="margin-top:10px">No orders for ${esc(lbl)}.</div>`}
-    </section>
-  </div>`;
-}
-/* --- Orders dashboard --- */
-function viewOrders(){
-  const now=Date.now(),t=today0(),tomorrow=ymd(addDays(t,1)),todayS=ymd(t);
-  const live=DB.orders.filter(o=>o.status!=="cancelled"&&o.status!=="awaiting");
-  const wk=live.filter(o=>o.createdAt>=now-7*86400e3),rev=wk.reduce((a,o)=>a+o.total,0);
-  const nNew=DB.orders.filter(o=>o.status==="review"||o.status==="new").length;
-  const tmr=live.filter(o=>o.day===tomorrow);
-  const days=[...new Set(live.filter(o=>o.day>=todayS&&o.status!=="completed").map(o=>o.day))].sort();
-  if(!A.bakeDay||!days.includes(A.bakeDay))A.bakeDay=days[0]||null;
-  // bake sheet
-  let bake=`<div class="empty">No boxes to bake yet.</div>`;
-  if(A.bakeDay){
-    const os=live.filter(o=>o.day===A.bakeDay&&o.status!=="completed"),agg={};let cookies=0;const bySize={};let pick=0,deliv=0;
-    os.forEach(o=>{Object.entries(o.items).forEach(([id,n])=>{agg[id]=(agg[id]||0)+n;cookies+=n});bySize[o.size]=(bySize[o.size]||0)+1;o.mode==="delivery"?deliv++:pick++});
-    const rows=Object.entries(agg).sort((a,b)=>b[1]-a[1]),max=rows[0]?rows[0][1]:1;
-    bake=`<ul class="bake">${rows.map(([id,n])=>{const p=prod(id);return `<li>${miniPlate(p)}<div><div style="font-weight:600">${esc(p?p.name:"Removed flavor")}</div><div class="bar-t"><i style="width:${n/max*100}%"></i></div></div><b>${n}</b></li>`}).join("")}</ul>
-      <div class="bakesum"><span>${cookies} cookies</span>${Object.entries(bySize).sort((a,b)=>a[0]-b[0]).map(([n,c])=>`<span>${c} × box of ${n}</span>`).join("")}<span>${pick} pickup</span><span>${deliv} delivery</span></div>`;
-  }
-  const base=ordRows(),rows=shownRows(),todayYmd=ymd(t);
-  const cnt=k=>k==="all"?base.length:base.filter(o=>o.status===k).length;
-  const toPrint=rows.filter(o=>canLabel(o)&&!o.labelAt).length;
-  const dayTxt=A.od==="all"?"all dates":A.od==="today"?"today":fmtDay(A.od);
-  const alerts=DB.products.filter(isLow).sort((a,b)=>a.stock-b.stock);
-  return head("Orders","Today's work at a glance: what's new, what to bake, and every order's status.")+MOCK+`
-  <div class="stack">
-    ${alerts.length?`<section class="panel"><div class="phead"><div><h2>Stock alert</h2><p class="sub">Flavors at or below ${DB.settings.lowStockAt} cookies. Customers see "Only N left" and can't order more than what's in stock.</p></div><button class="btn btn-blue btn-sm" type="button" data-goto="products">Restock flavors</button></div><div class="chips">${alerts.map(p=>`<span class="fchip${p.stock===0?" outc":""}">${esc(p.name)} <i>${p.stock===0?"Out of stock":p.stock+" left"}</i></span>`).join("")}</div></section>`:""}
-    <div class="kpis">
-      <div class="kpi${nNew?" alert":""}"><small>New orders</small><strong>${nNew}</strong><span>paid or payment to check</span></div>
-      <div class="kpi"><small>Boxes for tomorrow</small><strong>${tmr.length}</strong><span>${tmr.reduce((a,o)=>a+o.size,0)} cookies, ${fmtDay(tomorrow)}</span></div>
-      <div class="kpi"><small>Sales, last 7 days</small><strong>${money(rev)}</strong><span>${wk.length} orders</span></div>
-      <div class="kpi"><small>Average order</small><strong>${money(wk.length?rev/wk.length:0)}</strong><span>last 7 days</span></div>
-    </div>
-    <section class="panel">
-        <div class="phead"><div><h2>Bake sheet</h2><p class="sub">Cookies to bake for each day, from open orders.</p></div>${A.bakeDay?`<div class="colin" style="flex-wrap:wrap;gap:8px"><button class="btn btn-blue btn-sm" type="button" data-bakeprint>🖨 Print bake sheet</button><button class="ghost" type="button" data-bakedl>Save file</button></div>`:""}</div>
-        <div class="chips">${days.map(d=>`<button class="fchip" type="button" data-bake="${d}" aria-pressed="${d===A.bakeDay}">${d===todayS?"Today":d===tomorrow?"Tomorrow":fmtDay(d)}</button>`).join("")}</div>
-        ${bake}
-      </section>
-      <section class="panel">
-        <div class="oc-dates">
-          <button class="fchip" type="button" data-od="all" aria-pressed="${A.od==="all"}">All dates</button>
-          <button class="fchip" type="button" data-od="today" aria-pressed="${A.od==="today"}">Today</button>
-          <input class="oc-date" type="date" data-oddate value="${A.od!=="all"&&A.od!=="today"?A.od:""}" aria-label="Show orders placed on a date">
-        </div>
-        <div class="chips" style="margin-top:12px">${[["all","All"],...STATUSES].map(([k,l])=>`<button class="fchip" type="button" data-filter="${k}" aria-pressed="${A.filter===k}">${l} <i>${cnt(k)}</i></button>`).join("")}</div>
-        <div class="tools-row" style="margin:12px 0 14px">
-          <span class="note" style="margin:0">${rows.length} order${rows.length===1?"":"s"} · ${esc(dayTxt)} (by order date)</span>
-          <div class="colin" style="flex-wrap:wrap;gap:8px"><button class="btn btn-blue btn-sm" type="button" data-printsel ${toPrint?"":"disabled"}>Print unprinted labels (${toPrint})</button>
-          <input class="search" id="oSearch" type="search" placeholder="Search name, phone or order" value="${esc(A.q)}" aria-label="Search orders"></div>
-        </div>
-        ${rows.length?`<div class="oc-grid">${rows.map(orderCard).join("")}</div>`:`<div class="empty">No orders match.</div>`}
-      </section>
-  </div>`;
-}
-
-function openOrder(id){
-  const o=DB.orders.find(x=>x.id===id);if(!o)return;A.openOrder=id;
-  if(SBH.on&&!o._ft&&((o.proof&&!o.proof.img)||(o.complaint&&o.complaint.photoCount>0&&!(o.complaint.photos||[]).length))){o._ft=1;SBH.adminFiles(o).then(()=>{if(A.openOrder===id)openOrder(id)})}
-  const d=$("#drawer");
-  d.innerHTML=`<div class="drawer-card" role="dialog" aria-modal="true" aria-label="Order ${esc(o.code)}">
-    <div class="sheet-top"><div><h3>${esc(o.code)}</h3><span class="note">Placed ${fmtDT(o.createdAt)}${o.example?" · Example":""}</span></div><button class="x" type="button" data-close aria-label="Close">✕</button></div>
-    <div class="dsec"><h4>Status</h4><div class="seg">${STATUSES.map(([k])=>`<button type="button" data-set-status="${k}" aria-pressed="${o.status===k}">${stLabel(k,o.mode)}</button>`).join("")}</div></div>
-    ${o.status==="awaiting"?`<div class="dsec"><h4>Payment</h4><p class="hint" style="margin:0 0 8px">Waiting for the customer. Cancels automatically in <span class="cd" data-exp="${o.expiresAt||0}">${fmtLeft((o.expiresAt||0)-Date.now())}</span>.</p><button class="btn btn-blue btn-sm" type="button" data-pay-manual>Mark as paid (cash or other)</button></div>`:""}
-    ${o.proof?`<div class="dsec"><h4>Payment proof</h4><dl class="dl"><dt>Name</dt><dd>${esc(o.proof.name)}</dd><dt>Sent</dt><dd>${fmtDT(o.proof.at)}</dd><dt>Amount due</dt><dd>${money(o.total)}</dd></dl><a href="${esc(imgOk(o.proof.img))}" target="_blank" rel="noopener" style="display:block;margin-top:10px"><img class="proofimg" src="${esc(imgOk(o.proof.img))}" alt="Payment proof from ${esc(o.proof.name)}"></a>
-      ${o.status==="review"?`<div class="stack" style="margin-top:12px;gap:10px"><label class="af">Reason if rejecting (optional)<input class="in" id="rejReason" maxlength="80" placeholder="e.g. amount doesn't match"></label><div class="mo-row" style="gap:8px"><button class="btn btn-blue btn-sm" type="button" data-pay-ok>Confirm payment</button><button class="danger" type="button" data-pay-no>Reject</button></div></div>`:""}</div>`:""}
-    <div class="dsec"><h4>Messages to customer</h4><p class="hint" style="margin:0 0 8px">Customer prefers: ${o.notify==="whatsapp"?"WhatsApp":o.notify==="email"?"Email":"WhatsApp and email"}</p>
-      ${(o.msgs||[]).length?`<div class="ditems">${o.msgs.slice().reverse().map(m=>`<div style="display:grid;gap:2px"><span class="note"><b>${CHANNELS[m.channel]}</b> · ${fmtDT(m.at)} · ${m.by==="system"?"automatic":"staff"}</span><span style="font-size:14px">${esc(m.text)}</span>${m.channel==="whatsapp"?`<a href="${esc(waLink(o,m.text))}" target="_blank" rel="noopener" class="note">Send again on WhatsApp</a>`:`<a href="${esc(mailLink(o,m.text))}" class="note">Send again by email</a>`}</div>`).join("")}</div>`:`<p class="hint" style="margin:0">No messages yet. They're logged when you change the status.</p>`}</div>
-    ${o.complaint?`<div class="dsec"><h4>Complaint</h4><p class="hint" style="margin:0 0 8px">${esc(o.complaint.reason)} · ${CP_STATUS[o.complaint.status]}</p><button class="btn btn-blue btn-sm" type="button" data-cpgo>View complaint</button></div>`:""}
-    ${o.cancelReason?`<div class="dsec"><h4>Cancelled</h4><p class="hint" style="margin:0">${esc(o.cancelReason)}</p></div>`:""}
-    <div class="dsec"><h4>Shipping label</h4>${o.mode==="delivery"?`<div class="grid2"><label class="af">Courier<input class="in" data-ship="courier" maxlength="30" value="${esc(o.courier||"")}" placeholder="e.g. JNE"></label><label class="af">Airway bill / tracking no.<input class="in" data-ship="awb" maxlength="40" value="${esc(o.awb||"")}" placeholder="e.g. JP1234567890"></label></div>`:`<p class="hint" style="margin:0 0 8px">Pickup order: the label shows the pickup time.</p>`}<button class="btn btn-blue btn-sm" type="button" data-printone="${o.id}" style="margin-top:10px">Print label</button></div>
-    <div class="dsec"><h4>Customer</h4><dl class="dl"><dt>Name</dt><dd>${esc(o.customer.name)}</dd><dt>WhatsApp</dt><dd>${esc(o.customer.phone)}</dd><dt>Email</dt><dd>${esc(o.customer.email)}</dd>${o.customer.address?`<dt>Address</dt><dd>${esc(o.customer.address)}</dd>`:""}</dl></div>
-    <div class="dsec"><h4>When</h4><dl class="dl"><dt>${o.mode==="delivery"?"Delivery":"Pickup"}</dt><dd>${fmtDay(o.day)}, ${esc(o.time)}</dd>${o.note?`<dt>Note</dt><dd>${esc(o.note)}</dd>`:""}</dl></div>
-    <div class="dsec"><h4>Box of ${o.size}</h4><div class="ditems">${Object.entries(o.items).map(([id,n])=>{const p=prod(id);return `<div>${miniPlate(p)}<span>${n} × ${esc(p?p.name:"Removed flavor")}</span><span class="num">${p&&p.surcharge>0?"+"+money(p.surcharge*n):""}</span></div>`}).join("")}</div></div>
-    <div class="dsec"><h4>Payment</h4><div class="summary" style="margin:0">
-      <div><span>Box of ${o.size}</span><span class="num">${money(o.base)}</span></div>
-      ${o.discount>0?`<div class="sl"><span>${esc(o.sale||"Flash sale")}</span><span class="num">−${money(o.discount)}</span></div>`:""}
-      ${o.couponDisc>0?`<div class="sl"><span>Coupon ${esc(o.coupon)}</span><span class="num">−${money(o.couponDisc)}</span></div>`:""}
-      ${o.surcharge>0?`<div><span>Premium flavors</span><span class="num">+${money(o.surcharge)}</span></div>`:""}
-      ${o.addons.map(id=>{const a=DB.addons.find(x=>x.id===id);return `<div><span>${esc(a?a.name:"Extra")}</span><span class="num">${a?"+"+money(a.price):""}</span></div>`}).join("")}
-      <div><span>${o.mode==="delivery"?"Delivery":"Pickup"}</span><span class="num">${o.fee?money(o.fee):"Free"}</span></div>
-      <div class="t"><span>Total</span><span class="num">${money(o.total)}</span></div></div></div>
-  </div>`;
-  d.hidden=false;
-}
-function closeDrawer(){$("#drawer").hidden=true;A.openOrder=null}
-
-/* --- order cards --- */
-const canLabel=o=>PAID_ST.includes(o.status);
-function ordRows(){
-  const q=A.q.trim().toLowerCase(),day=A.od==="all"?null:A.od==="today"?ymd(today0()):A.od;
-  return DB.orders.filter(o=>(!day||ymd(new Date(o.createdAt))===day)&&(!q||[o.code,o.customer.name,o.customer.email,o.customer.phone].join(" ").toLowerCase().includes(q))).sort((a,b)=>ordRank(a)-ordRank(b)||b.createdAt-a.createdAt);
-}
-const ordRank=o=>o.complaint&&(o.complaint.status==="open"||o.complaint.status==="review")?0:o.status==="review"?1:2;
-const shownRows=()=>ordRows().filter(o=>A.filter==="all"||o.status===A.filter);
-function orderCard(o){
-  const del=o.mode==="delivery",c=o.customer,paid=canLabel(o);
-  const flow=["awaiting","new","baking","ready","completed"];
-  const keys=flow.includes(o.status)?flow:[o.status,...flow];
-  const items=Object.entries(o.items).map(([id,n])=>{const p=prod(id);return `<div>${esc(p?p.name:"Removed flavor")} ×${n}</div>`}).join("");
-  const addons=o.addons.map(id=>{const a=DB.addons.find(x=>x.id===id);return a?`<div class="note" style="margin:0">+ ${esc(a.name)}</div>`:""}).join("");
-  const payLine=o.proof?`Payment proof from <b>${esc(o.proof.name)}</b> · ${fmtAgo(o.proof.at)}`:(o.status==="awaiting"?`Payment: <b>not paid yet</b> · cancels in <span class="cd" data-exp="${o.expiresAt||0}">${fmtLeft((o.expiresAt||0)-Date.now())}</span>`:"");
-  const canEdit=o.status!=="cancelled"&&o.status!=="completed";
-  const lbl=paid?(o.labelAt?`<div class="oc-lbl ok">✓ Label printed ${fmtAgo(o.labelAt)}</div>`:`<div class="oc-lbl warn">⚠ Label not printed yet</div>`):(o.status==="cancelled"?"":`<div class="oc-lbl off">Label can be printed after payment is confirmed</div>`);
-  return `<article class="oc-card" aria-label="Order ${esc(o.code)}">
-    <div class="oc-h"><span>#${esc(o.code)} · ${esc(c.name)}${o.example?`<span class="ex">Example</span>`:""}${o.complaint?`<span class="ex oc-cp">Complaint</span>`:""}</span><b class="num">${money(o.total)}</b></div>
-    ${o.status==="review"?`<div class="oc-alert pay">💰 Payment submitted – needs your confirmation</div>`:""}
-    ${o.complaint&&(o.complaint.status==="open"||o.complaint.status==="review")?`<div class="oc-alert cmp">ORDER COMPLAINED - need your attention</div>`:""}
-    ${o.proof?`<div><button class="oc-b" type="button" data-oproof="${o.id}">View payment proof</button></div>`:""}
-    <div class="oc-info"><span class="mode" style="margin:0">${del?"Delivery":"Pickup"}</span> ${esc(fmtDay(o.day))} · ${esc(o.time)}<br>${esc(c.phone)} · ${esc(c.email)}${del&&c.address?`<br>${esc(c.address)}`:""}${o.note?`<br><i>Note: ${esc(o.note)}</i>`:""}</div>
-    <div class="oc-items"><div class="note" style="margin:0">Box of ${o.size} · placed ${fmtAgo(o.createdAt)}</div>${items}${addons}</div>
-    ${payLine?`<div class="oc-info">${payLine}</div>`:""}
-    ${o.cancelReason?`<div class="oc-info">Cancel reason: ${esc(o.cancelReason)}</div>`:""}
-    <div class="oc-sts" role="group" aria-label="Order status">${keys.map(k=>`<button class="oc-b" type="button" data-ostatus="${o.id}:${k}" aria-pressed="${o.status===k}">${k==="new"?"✓ ":""}${stLabel(k,o.mode)}</button>`).join("")}</div>
-    <div class="oc-sts">${canEdit?`<button class="oc-b" type="button" data-osub="${o.id}">✎ Edit / substitute</button>`:""}${o.status!=="cancelled"&&o.status!=="completed"?`<button class="oc-b" type="button" data-ocancel="${o.id}">✕ Cancel order</button>`:""}<button class="oc-b" type="button" data-order="${o.id}">Details</button></div>
-    ${lbl}
-    ${paid&&del?`<div class="grid2"><label class="af" style="font-size:12px">Courier<input class="in" data-oship="courier" data-oid="${o.id}" maxlength="30" value="${esc(o.courier||"")}" placeholder="e.g. JNE"></label><label class="af" style="font-size:12px">Airway bill<input class="in" data-oship="awb" data-oid="${o.id}" maxlength="40" value="${esc(o.awb||"")}" placeholder="Tracking no."></label></div>`:""}
-    <div class="oc-sts"><button class="oc-b oc-print" type="button" data-printcard="${o.id}" ${paid?"":"disabled"}>🖨 Print 4×6 label</button><button class="oc-b" type="button" data-dlcard="${o.id}" ${paid?"":"disabled"}>Save file</button></div>
-    <div class="oc-sts"><a class="btn btn-blue btn-sm" href="${esc(waLink(o,msgText(o,o.status)))}" target="_blank" rel="noopener">WhatsApp</a><a class="btn btn-blue btn-sm" href="${esc(mailLink(o,msgText(o,o.status)))}">Email</a></div>
-  </article>`;
-}
-function showProof(id){
-  const o=DB.orders.find(x=>x.id===id);if(!o||!o.proof)return;
-  if(SBH.on&&!o.proof.img&&!o._ft){o._ft=1;SBH.adminFiles(o).then(()=>showProof(id));return}
-  openModal(`<div class="sheet-top"><h3 id="modalTitle">Payment proof · ${esc(o.code)}</h3><button class="x" type="button" data-mclose aria-label="Close">✕</button></div>
-  <dl class="dl"><dt>Name</dt><dd>${esc(o.proof.name)}</dd><dt>Sent</dt><dd>${fmtDT(o.proof.at)}</dd><dt>Amount due</dt><dd>${money(o.total)}</dd></dl>
-  <a href="${esc(imgOk(o.proof.img))}" target="_blank" rel="noopener" style="display:block;margin-top:10px"><img class="proofimg" src="${esc(imgOk(o.proof.img))}" alt="Payment proof from ${esc(o.proof.name)}"></a>
-  <div style="margin-top:14px"><button class="btn btn-ghost-blue btn-sm" type="button" data-mclose>Close</button></div>`,"proof");
-}
-let OS=null;
-function openSubst(id){const o=DB.orders.find(x=>x.id===id);if(!o)return;OS={id,rows:Object.entries(o.items).map(([pid,n])=>({pid,n}))};renderSubst()}
-function renderSubst(){
-  const o=DB.orders.find(x=>x.id===OS.id);if(!o)return;
-  const opts=cur=>(prod(cur)?"":`<option value="${cur}" selected>Removed flavor</option>`)+DB.products.filter(p=>p.status!=="hidden"||p.id===cur).map(p=>`<option value="${p.id}" ${p.id===cur?"selected":""}>${esc(p.name)}${p.track?` (${p.stock} left)`:""}</option>`).join("");
-  openModal(`<div class="sheet-top"><h3 id="modalTitle">Edit / substitute · ${esc(o.code)}</h3><button class="x" type="button" data-mclose aria-label="Close">✕</button></div>
-  <p class="hint" style="margin:0 0 12px">Swap a flavor, for example when one runs out. The box size and quantities stay the same. Premium flavor prices and stock are updated.</p>
-  <div class="stack" style="gap:10px">${OS.rows.map((r,i)=>`<label class="af" style="font-size:13px">${r.n} × <select class="in" data-osubsel="${i}">${opts(r.pid)}</select></label>`).join("")}</div>
-  <div class="mo-row" style="margin-top:16px;gap:10px;justify-content:flex-end"><button class="ghost" type="button" data-mclose>Cancel</button><button class="btn btn-blue btn-sm" type="button" data-osubsave>Save changes</button></div>`,"osub");
-}
-$("#modal").addEventListener("change",e=>{if(A.modal==="osub"&&OS&&e.target.dataset.osubsel!==undefined)OS.rows[+e.target.dataset.osubsel].pid=e.target.value});
-$("#modal").addEventListener("click",e=>{
-  if(A.modal!=="osub"||!OS||!e.target.closest("[data-osubsave]"))return;
-  const o=DB.orders.find(x=>x.id===OS.id);if(!o)return;
-  releaseHold(o);
-  const m={};OS.rows.forEach(r=>m[r.pid]=(m[r.pid]||0)+r.n);o.items=m;
-  const sur=Object.entries(m).reduce((a,[pid,n])=>{const p=prod(pid);return a+(p&&p.surcharge>0?p.surcharge*n:0)},0);
-  o.total=Math.round((o.total-(o.surcharge||0)+sur)*100)/100;o.surcharge=sur;
-  takeHold(o);saveDB();closeModal();OS=null;toast(`${o.code} updated`);renderAdmin();if(A.openOrder===o.id)openOrder(o.id);
-});
-
-
-/* --- customer messages: templates, log, confirm dialog --- */
-const CHANNELS={whatsapp:"WhatsApp",email:"Email"};
 function msgText(o,st){
   const nm=(o.customer.name.split(" ")[0]||"there"),shop=DB.page.name||"Delidome",when=`${fmtDay(o.day)}, ${o.time}`;
   const t={
@@ -1441,696 +1003,8 @@ function msgText(o,st){
   };
   return t[st]||`Hi ${nm}, your order ${o.code} is now: ${stLabel(st,o.mode)}.`;
 }
-function waLink(o,text){let d=String(o.customer.phone).replace(/\D/g,"");if(d.startsWith("0"))d=DB.settings.waCountry+d.slice(1);return `https://wa.me/${d}?text=${encodeURIComponent(text)}`}
-function mailLink(o,text){return `mailto:${encodeURIComponent(o.customer.email)}?subject=${encodeURIComponent((DB.page.name||"Delidome")+" order "+o.code)}&body=${encodeURIComponent(text)}`}
 function logMsg(o,channels,st,text,by){o.msgs=o.msgs||[];channels.forEach(ch=>o.msgs.push({at:Date.now(),channel:ch,status:st,text,by}))}
 const chanList=v=>v==="both"?["whatsapp","email"]:v==="none"?[]:[v];
-function applyStatus(id,st){
-  const o=DB.orders.find(x=>x.id===id);if(!o)return;const prev=o.status;o.status=st;let note="";
-  if(st==='awaiting'&&prev==='cancelled'){o.expiresAt=Date.now()+DB.settings.payWindowH*3600e3;delete o.cancelReason}
-  if(st!=='cancelled')delete o.cancelReason;
-  if(st==='new'&&!o.paidAt)o.paidAt=Date.now();
-  if(st==='completed'&&prev!=='completed')o.completedAt=Date.now();
-  if(st!=='completed')delete o.completedAt;
-  if(!SBH.on&&o.tracked&&st==="cancelled"&&o.holds){Object.entries(o.items).forEach(([pid,n])=>{const p=prod(pid);if(p&&p.track)p.stock+=n});o.holds=false;note=", stock put back"}
-  else if(!SBH.on&&o.tracked&&prev==="cancelled"&&st!=="cancelled"&&!o.holds){Object.entries(o.items).forEach(([pid,n])=>{const p=prod(pid);if(p&&p.track)p.stock=Math.max(0,p.stock-n)});o.holds=true;note=", stock taken again"}
-  saveDB();toast(`${o.code} marked ${stLabel(st,o.mode).toLowerCase()}${note}`);renderAdmin();if(A.openOrder===id)openOrder(id)}
-
-/* --- change status with confirmation --- */
-let SC=null;
-function setOrderStatus(id,st,extra){
-  const o=DB.orders.find(x=>x.id===id);if(!o)return;
-  if(o.status===st){renderAdmin();return}
-  SC={id,st,extra:extra||null,done:false};renderStatusDialog();
-}
-function renderStatusDialog(){
-  const o=DB.orders.find(x=>x.id===SC.id);if(!o)return;
-  if(SC.done){
-    const t=SC.text,ch=SC.channels;
-    $("#modalCard").innerHTML=`<div class="sheet-top"><h3 id="modalTitle">Status changed</h3><button class="x" type="button" data-mclose aria-label="Close">✕</button></div>
-    <p><b>${esc(o.code)}</b> is now <b>${esc(stLabel(SC.st,o.mode))}</b>.</p>
-    ${ch.length?`<p class="hint" style="margin:0 0 10px">Send the message to ${esc(o.customer.name)} now. Tap a button to send it from your own WhatsApp or email app.</p>
-    <div class="mo-row" style="gap:10px;justify-content:flex-start">${ch.includes("whatsapp")?`<a class="btn btn-blue btn-sm" href="${esc(waLink(o,t))}" target="_blank" rel="noopener">Send on WhatsApp</a>`:""}${ch.includes("email")?`<a class="btn btn-blue btn-sm" href="${esc(mailLink(o,t))}">Send email</a>`:""}</div>`:`<p class="hint">The customer was not notified.</p>`}
-    <div style="margin-top:16px"><button class="btn btn-ghost-blue btn-sm" type="button" data-mclose>Done</button></div>`;
-    return}
-  const pref=o.notify||"both",c=o.customer,st=SC.st;
-  const opt=(v,label,sub)=>`<label class="chk" style="align-items:flex-start"><input type="radio" name="scNotify" value="${v}" ${pref===v?"checked":""}><span>${label}${sub?`<small class="note" style="display:block">${esc(sub)}</small>`:""}</span></label>`;
-  $("#modalCard").innerHTML=`<div class="sheet-top"><h3 id="modalTitle">Change status?</h3><button class="x" type="button" data-mclose aria-label="Close">✕</button></div>
-  <p style="margin:0 0 4px"><b>${esc(o.code)}</b> · ${esc(c.name)}</p>
-  <p style="margin:0 0 14px"><span class="mo-chip st-${o.status}">${esc(stLabel(o.status,o.mode))}</span> → <span class="mo-chip st-${st}">${esc(stLabel(st,o.mode))}</span></p>
-  ${st==="cancelled"?`<p class="hint" style="margin:0 0 12px">Cancelling puts the cookies back into stock.</p>`:""}
-  <div class="af" style="gap:8px">Notify the customer by
-    <div class="stack" style="gap:8px">${opt("whatsapp","WhatsApp",c.phone)}${opt("email","Email",c.email)}${opt("both","Both")}${opt("none","Don't notify")}</div>
-    <p class="note" style="margin:0">The customer chose: ${esc(pref==="both"?"WhatsApp and email":CHANNELS[pref])}.</p></div>
-  <label class="af" style="margin-top:12px">Message<textarea class="in" id="scText" rows="4" maxlength="500">${esc(msgText(Object.assign({},o,SC.extra&&SC.extra.reason?{cancelReason:SC.extra.reason}:{}),st))}</textarea></label>
-  <div class="mo-row" style="margin-top:16px;gap:10px;justify-content:flex-end"><button class="ghost" type="button" data-mclose>Keep as ${esc(stLabel(o.status,o.mode))}</button><button class="btn btn-blue btn-sm" type="button" data-scok>Yes, change status</button></div>`;
-  if(!$("#modal").hidden){}else openModal($("#modalCard").innerHTML,"status");
-  A.modal="status";
-}
-$("#modal").addEventListener("click",e=>{
-  if(A.modal!=="status")return;
-  if(e.target.closest("[data-scok]")&&SC&&!SC.done){
-    const o=DB.orders.find(x=>x.id===SC.id);if(!o)return;
-    const chv=(document.querySelector('input[name="scNotify"]:checked')||{value:"none"}).value,text=$("#scText").value.trim(),channels=chanList(chv);
-    const ex=SC.extra;if(ex&&ex.reject){o.rejected={at:Date.now(),reason:ex.reason||""};o.expiresAt=Date.now()+DB.settings.payWindowH*3600e3}
-    if(ex&&ex.manual){}
-    applyStatus(SC.id,SC.st);
-    if(channels.length&&text)logMsg(o,channels,SC.st,text,"staff");
-    saveDB();SC.done=true;SC.text=text;SC.channels=channels;renderStatusDialog();renderAdmin();if(A.openOrder===SC.id)openOrder(SC.id);
-  }
-},true);
-
-/* --- Flash sales --- */
-function viewSales(){
-  const D=A.draft,now=Date.now();
-  const order={live:0,scheduled:1,ended:2};
-  const list=DB.sales.slice().sort((a,b)=>order[saleStatus(a,now)]-order[saleStatus(b,now)]||a.start-b.start);
-  const presets=[[30,"30 min"],[60,"1 hr"],[180,"3 hr"],[360,"6 hr"],[1440,"24 hr"]],dur=D.durH*60+D.durM;
-  return head("Flash sales","Run a timed discount on the box price. The shop shows a banner with a live countdown and the sale price on each box.")+MOCK+`
-  <div class="two">
-    <section class="panel">
-      <h2>New flash sale</h2><p class="sub">Discounts apply to the box price. Premium flavors, extras and delivery are charged at full price.</p>
-      <form id="saleForm" class="stack" style="gap:14px" novalidate>
-        <label class="af">Sale name<input class="in" data-draft="name" value="${esc(D.name)}" maxlength="40"></label>
-        <div class="stack" style="gap:14px">
-          <div class="af">Discount<div class="seg"><button type="button" data-stype="percent" aria-pressed="${D.type==="percent"}">Percent off</button><button type="button" data-stype="amount" aria-pressed="${D.type==="amount"}">Amount off</button></div></div>
-          <label class="af">${D.type==="percent"?"Percent":"Amount"}<div class="money-in"><span>${D.type==="percent"?"%":DB.settings.currency}</span><input class="in" type="number" min="1" step="${D.type==="percent"?1:.5}" data-draft="value" value="${D.value}"></div></label>
-        </div>
-        <label class="af">Applies to<select class="in" data-draft="appliesTo"><option value="all" ${D.appliesTo==="all"?"selected":""}>Every box size</option>${DB.sizes.map(s=>`<option value="${s.n}" ${D.appliesTo===String(s.n)?"selected":""}>Box of ${s.n} only</option>`).join("")}</select></label>
-        <div class="af">Starts<div class="seg"><button type="button" data-smode="now" aria-pressed="${D.startMode==="now"}">Right now</button><button type="button" data-smode="later" aria-pressed="${D.startMode==="later"}">Schedule</button></div></div>
-        ${D.startMode==="later"?`<label class="af">Start date and time<input class="in" type="datetime-local" data-draft="startAt" value="${esc(D.startAt)}"></label>`:""}
-        <div class="af">Duration
-          <div class="durs">${presets.map(([m,l])=>`<button class="fchip" type="button" data-dur="${m}" aria-pressed="${dur===m}">${l}</button>`).join("")}</div>
-          <div class="grid2" style="margin-top:6px"><div class="money-in"><input class="in" type="number" min="0" max="168" data-draft="durH" value="${D.durH}" aria-label="Hours"><span style="padding-right:10px">hours</span></div><div class="money-in"><input class="in" type="number" min="0" max="59" step="5" data-draft="durM" value="${D.durM}" aria-label="Minutes"><span style="padding-right:10px">min</span></div></div>
-        </div>
-        <div class="preview" id="salePreview"></div>
-        <p class="err" id="saleErr" hidden></p>
-        <button class="btn btn-blue" type="submit">Create flash sale</button>
-      </form>
-    </section>
-    <section class="panel">
-      <h2>All sales</h2><p class="sub">Live sales show in the shop now. Scheduled ones show a "coming up" banner in the last 24 hours before they start.</p>
-      ${list.length?`<div class="sales">${list.map(s=>{const st=saleStatus(s,now);return `<div class="sale ${st}">
-        <div><span class="spill ${st}">${st==="live"?"Live":st==="scheduled"?"Scheduled":"Ended"}</span><h3>${esc(s.name)}</h3><p>${saleOffText(s)} ${saleAppliesText(s)} · ${fmtDT(s.start)} to ${fmtDT(s.end)}</p></div>
-        <div class="cd"><small>${st==="live"?"Ends in":st==="scheduled"?"Starts in":"Ended"}</small><span data-cd="${s.id}"></span></div>
-        <div class="acts">${st==="live"?`<button class="ghost" type="button" data-sale-end="${s.id}">End now</button><button class="ghost" type="button" data-sale-extend="${s.id}">+30 min</button>`:""}${st==="scheduled"?`<button class="ghost" type="button" data-sale-start="${s.id}">Start now</button>`:""}<button class="danger" type="button" data-sale-del="${s.id}">Delete</button></div>
-      </div>`}).join("")}</div>`:`<div class="empty">No flash sales yet.</div>`}
-    </section>
-  </div>`;
-}
-function updatePreview(){
-  const el=$("#salePreview");if(!el)return;const D=A.draft;
-  const fake={type:D.type,value:+D.value||0};
-  const sizes=DB.sizes.filter(s=>D.appliesTo==="all"||String(s.n)===D.appliesTo);
-  const mins=(+D.durH||0)*60+(+D.durM||0);
-  el.innerHTML=sizes.map(s=>`<div><span>Box of ${s.n}</span><span><s>${money(s.price)}</s> → <b>${money(s.price-saleDiscount(fake,s.price))}</b></span></div>`).join("")+
-    `<div><span>Runs for</span><span>${mins?(Math.floor(mins/60)?Math.floor(mins/60)+" hr ":"")+(mins%60?mins%60+" min":""):"—"}</span></div>`;
-  document.querySelectorAll("[data-dur]").forEach(b=>b.setAttribute("aria-pressed",+b.dataset.dur===mins));
-}
-function createSale(){
-  const D=A.draft,err=$("#saleErr"),mins=(+D.durH||0)*60+(+D.durM||0),val=+D.value;
-  const fail=m=>{err.textContent=m;err.hidden=false};
-  if(!D.name.trim())return fail("Give the sale a name.");
-  if(!(val>0))return fail("Set a discount above 0.");
-  if(D.type==="percent"&&val>90)return fail("Percent off can be at most 90%.");
-  if(mins<5)return fail("Make the sale run at least 5 minutes.");
-  let start=Date.now();
-  if(D.startMode==="later"){start=new Date(D.startAt).getTime();if(!D.startAt||isNaN(start))return fail("Pick a start date and time.");if(start<Date.now()-60e3)return fail("The start time is in the past.")}
-  DB.sales.push({id:uid(),name:D.name.trim(),type:D.type,value:val,appliesTo:D.appliesTo,start,end:start+mins*60e3});
-  saveDB();toast(D.startMode==="now"?"Flash sale is live":"Flash sale scheduled");renderAdmin();
-}
-
-/* --- Flavors --- */
-const lookOptions = p => `${p.img?`<option value="photo" ${p.art==="photo"?"selected":""}>Look: Your photo</option>`:""}${Object.entries(ART).map(([k,a])=>`<option value="${k}" ${p.art===k?"selected":""}>Look: ${a.label}</option>`).join("")}<option value="none" ${p.art==="none"?"selected":""}>Look: None (no image)</option>`;
-const catOptions = sel => `<option value="">No category</option>`+DB.categories.map(c=>`<option value="${c.id}" ${sel===c.id?"selected":""}>${esc(c.name)}</option>`).join("");
-function productMatches(p){
-  if(A.pcat==="none"&&catName(p.cat))return false;
-  if(A.pcat!=="all"&&A.pcat!=="none"&&p.cat!==A.pcat)return false;
-  const q=A.pq.trim().toLowerCase();
-  return !q||[p.name,p.desc,catName(p.cat)].join(" ").toLowerCase().includes(q);
-}
-function prow(p){return `<div class="prow" data-prow="${p.id}">
-      <div class="pthumb" data-drop="${p.id}">${plateHTML(p)}
-        <label class="upl">${p.img?"Replace photo":"Upload photo"}<input type="file" accept="image/*" data-upload="${p.id}" aria-label="Upload photo for ${esc(p.name)}"></label>
-        ${p.img?`<button class="linkbtn sm" type="button" data-rmimg="${p.id}">Remove photo</button>`:""}
-      </div>
-      <div class="pfields">
-        <div class="grid3">
-          <label class="af">Name<input class="in" data-k="products:${p.id}:name" value="${esc(p.name)}" maxlength="40"></label>
-          <label class="af">Category<select class="in" data-k="products:${p.id}:cat">${catOptions(p.cat)}</select></label>
-          <label class="af">Extra price per cookie<div class="money-in"><span>+${DB.settings.currency}</span><input class="in" type="number" min="0" step="0.25" data-k="products:${p.id}:surcharge" value="${p.surcharge}"></div></label>
-        </div>
-        <label class="af">Description<input class="in" data-k="products:${p.id}:desc" value="${esc(p.desc)}" maxlength="90"></label>
-        <div class="stockrow">
-          <label class="sw"><input type="checkbox" data-k="products:${p.id}:track" ${p.track?"checked":""} aria-label="Track stock for ${esc(p.name)}"><span></span></label><span class="stlabel">Track stock</span>
-          ${p.track?`<div class="stepin"><button class="ghost" type="button" data-stk="${p.id}:-1" aria-label="One less">−</button><input class="in" type="number" min="0" step="1" data-k="products:${p.id}:stock" value="${p.stock}" aria-label="Cookies in stock for ${esc(p.name)}"><button class="ghost" type="button" data-stk="${p.id}:1" aria-label="One more">+</button></div><button class="ghost" type="button" data-stk="${p.id}:12">+12</button>${p.stock<=0?`<span class="spill out">Out of stock</span>`:p.stock<=DB.settings.lowStockAt?`<span class="spill low">Low: ${p.stock} left</span>`:`<span class="spill ok">${p.stock} in stock</span>`}`:`<span class="note">Unlimited. Turn on to count cookies.</span>`}
-        </div>
-        <div class="pfoot">
-          <div class="left">
-            <div class="seg" role="group" aria-label="Availability">${[["available","Available"],["soldout","Sold out"],["hidden","Hidden"]].map(([k,l])=>`<button type="button" data-pstatus="${p.id}:${k}" aria-pressed="${p.status===k}">${l}</button>`).join("")}</div>
-            <select class="in" style="width:auto" data-k="products:${p.id}:art" aria-label="Cookie look">${lookOptions(p)}</select>
-            <select class="in" style="width:auto" data-move="${p.id}" aria-label="Move ${esc(p.name)} in the menu"><option value="">Menu position ${DB.products.indexOf(p)+1} of ${DB.products.length}</option><option value="top">Move to top</option><option value="up">Move up one</option><option value="down">Move down one</option><option value="middle">Move to middle</option><option value="bottom">Move to bottom</option></select>
-            <button class="ghost" type="button" data-rvadmin="${p.id}">${(()=>{const r=ratingOf(p);return r.n?`Reviews · ★ ${r.avg.toFixed(1)} (${r.n})`:"Reviews · none yet"})()}</button>
-          </div>
-          <button class="danger" type="button" data-pdel="${p.id}">Delete</button>
-        </div>
-      </div>
-    </div>`}
-function productRows(){
-  const rows=DB.products.filter(productMatches);
-  return rows.length?rows.map(prow).join(""):`<div class="empty">No flavors match${A.pq?` "${esc(A.pq)}"`:""}. <button class="linkbtn" type="button" data-pclear>Clear search and filters</button></div>`;
-}
-const pCountText = () => {const n=DB.products.filter(productMatches).length;return n===DB.products.length?`${n} flavors`:`Showing ${n} of ${DB.products.length}`};
-function viewProducts(){
-  const noCat=DB.products.filter(p=>!catName(p.cat)).length;
-  const chip=(k,l,n)=>`<button class="fchip" type="button" data-pcat="${k}" aria-pressed="${A.pcat===k}">${l} <i>${n}</i></button>`;
-  return head("Flavors","Find a flavor, edit it, or add a new one. Changes show in the shop straight away.")+MOCK+`
-  <section class="panel">
-    <div class="phead"><div><h2>Menu</h2><p class="sub" id="pCount">${pCountText()}</p></div>
-      <div class="chips"><button class="ghost" type="button" data-pcatmanage>Manage categories</button><button class="btn btn-blue btn-sm" type="button" data-padd>+ Add flavor</button></div></div>
-    <div class="ptools"><input class="search" id="pSearch" type="search" placeholder="Search flavor or category" value="${esc(A.pq)}" aria-label="Search flavors and categories"></div>
-    <div class="chips" style="margin-bottom:6px">${chip("all","All",DB.products.length)}${DB.categories.map(c=>chip(c.id,esc(c.name),DB.products.filter(p=>p.cat===c.id).length)).join("")}${noCat&&DB.categories.length?chip("none","No category",noCat):""}</div>
-    <details class="helpd"><summary>How prices, stock and photos work</summary><p>Extra price is charged per cookie on top of the box price; leave it at 0 for regular flavors. Stock counts cookies: each order takes them out and a cancelled order puts them back, and at 0 the flavor shows "Out of stock" by itself. Upload or drag a photo onto any flavor; it's cropped square and resized to 400 px, and a PNG with a transparent background shows as a cut-out. Look: None shows an empty circle.</p></details>
-    <div id="plist">${productRows()}</div>
-  </section>`;
-}
-
-function moveProduct(id,where){
-  const arr=DB.products,i=arr.findIndex(p=>p.id===id);if(i<0||!where)return;
-  const [p]=arr.splice(i,1);let j=i;
-  if(where==="top")j=0;
-  else if(where==="bottom")j=arr.length;
-  else if(where==="middle")j=Math.floor(arr.length/2);
-  else if(where==="up"){let k=i-1;while(k>=0&&!productMatches(arr[k]))k--;j=k>=0?k:i}
-  else if(where==="down"){let k=i;while(k<arr.length&&!productMatches(arr[k]))k++;j=k<arr.length?k+1:i}
-  arr.splice(j,0,p);saveDB();
-  toast({top:"Moved to the top",bottom:"Moved to the bottom",middle:"Moved to the middle",up:"Moved up",down:"Moved down"}[where]);
-  renderAdmin();
-  const row=document.querySelector(`[data-prow="${id}"]`);if(row){row.scrollIntoView({block:"center",behavior:RM?"auto":"smooth"});row.classList.add("flash-row")}
-}
-
-/* --- Reviews (admin) --- */
-function rvSummary(p){const r=ratingOf(p);return r.n?`<span class="stars">${starStr(Math.round(r.avg))}</span> ${r.avg.toFixed(1)} · ${r.n} review${r.n>1?"s":""}`:"No reviews yet"}
-function renderAdminReviews(){
-  const p=prod(A.rvPid);if(!p){closeModal();return}
-  const rs=p.reviews.slice().sort((a,b)=>b.at-a.at);
-  const starsSel=(id,val)=>`<select class="in" ${id} aria-label="Stars">${[5,4,3,2,1].map(n=>`<option value="${n}" ${n===val?"selected":""}>${starStr(n)} (${n})</option>`).join("")}</select>`;
-  $("#modalCard").innerHTML=`<div class="sheet-top"><div><h3 id="modalTitle">Reviews: ${esc(p.name)}</h3><span class="note" id="rvSum">${rvSummary(p)}</span></div><button class="x" type="button" data-mclose aria-label="Close">✕</button></div>
-  <div class="rvadm">${rs.length?rs.map(r=>`<div class="rvedit" data-rid="${r.id}">
-      <div class="grid2"><label class="af">Username<input class="in" data-rv="user" value="${esc(r.user)}" maxlength="30"></label><label class="af">Stars${starsSel('data-rv="stars"',r.stars)}</label></div>
-      <label class="af">Review<textarea class="in" rows="2" data-rv="text" maxlength="280">${esc(r.text)}</textarea></label>
-      <div class="pfoot"><span class="note">${fmtShort(r.at)} · ${r.example?"Sample":r.src==="customer"?"Posted in the shop":"Added by you"}</span><button class="danger" type="button" data-rvdel="${r.id}">Delete</button></div>
-    </div>`).join(""):`<div class="empty">No reviews for this flavor yet.</div>`}</div>
-  <div class="rvadd"><h4 style="margin:0">Add a review</h4>
-    <div class="grid2"><label class="af">Username<input class="in" id="arUser" maxlength="30" placeholder="e.g. Sari W."></label><label class="af">Stars${starsSel('id="arStars"',5)}</label></div>
-    <label class="af">Review<textarea class="in" rows="2" id="arText" maxlength="280" placeholder="What the customer said"></textarea></label>
-    <p class="note">Only add reviews your customers actually gave you.</p>
-    <p class="err" id="arErr" hidden></p>
-    <div class="modal-actions"><button class="btn btn-blue btn-sm" type="button" data-rvadd>Add review</button></div></div>
-  <div class="modal-actions"><button class="btn btn-line" type="button" data-mclose>Done</button></div>`;
-}
-function openAdminReviews(id){A.rvPid=id;openModal("","reviews");renderAdminReviews()}
-function addAdminReview(){
-  const p=prod(A.rvPid),user=$("#arUser").value.trim(),text=$("#arText").value.trim(),err=$("#arErr"),fail=m=>{err.textContent=m;err.hidden=false};
-  if(!user)return fail("Add the username.");
-  if(text.length<3)return fail("Add the review text.");
-  p.reviews.push({id:uid(),user,text,stars:+$("#arStars").value,at:Date.now(),src:"owner"});
-  saveDB();toast("Review added");renderAdminReviews();renderAdmin();
-}
-
-/* --- Add flavor popup --- */
-function openModal(html,kind){$("#modalCard").innerHTML=html;A.modal=kind;$("#modal").hidden=false;document.body.style.overflow="hidden"}
-function closeModal(){const m=$("#modal");if(!m||m.hidden)return;const wasStatus=A.modal==="status";m.hidden=true;A.modal=null;if(wasStatus){SC=null;renderAdmin()}document.body.style.overflow=""}
-const npProduct = () => ({id:"np",name:"New flavor",art:A.np.art,img:A.np.img,cutout:A.np.cutout,tints:A.np.tints});
-function refreshNp(){
-  $("#npPrev").innerHTML=plateHTML(npProduct());
-  $("#npArt").innerHTML=lookOptions({img:A.np.img,art:A.np.art});
-  $("#npRemove").hidden=!A.np.img;
-  $("#npUpl").firstChild.textContent=A.np.img?"Replace photo":"Upload photo";
-}
-function openAddFlavor(){
-  const keys=Object.keys(ART),art=keys[DB.products.length%keys.length];
-  A.np={art,defArt:art,img:null,cutout:false,tints:null};
-  const defCat=!["all","none"].includes(A.pcat)?A.pcat:"";
-  openModal(`<div class="sheet-top"><h3 id="modalTitle">Add flavor</h3><button class="x" type="button" data-mclose aria-label="Close">✕</button></div>
-  <form class="form" id="npForm" novalidate style="margin-top:14px">
-    <div class="np-top" style="margin-top:0">
-      <div class="np-prev" id="npPrev"></div>
-      <div class="acts"><label class="upl" id="npUpl">Upload photo<input type="file" accept="image/*" id="npFile" aria-label="Upload a photo"></label><button class="linkbtn sm" type="button" id="npRemove" data-npremove hidden>Remove photo</button><span class="note">Optional. Cropped square and resized to 400 px.</span></div>
-    </div>
-    <div class="field"><label for="npName">Name</label><input id="npName" maxlength="40" autocomplete="off" placeholder="e.g. Salted caramel"></div>
-    <div class="field"><label for="npDesc">Description</label><input id="npDesc" maxlength="90" autocomplete="off" placeholder="Dough, mix-ins and topping"></div>
-    <div class="row2">
-      <div class="field"><label for="npCat">Category</label><select id="npCat">${catOptions(defCat)}<option value="__new">+ New category…</option></select></div>
-      <div class="field"><label for="npPrice">Extra price per cookie</label><input id="npPrice" type="number" min="0" step="0.25" value="0"></div>
-    </div>
-    <div class="field" id="npNewCatWrap" hidden><label for="npNewCat">New category name</label><input id="npNewCat" maxlength="30" autocomplete="off" placeholder="e.g. Seasonal"></div>
-    <div class="row2">
-      <div class="field"><label for="npArt">Look</label><select id="npArt"></select></div>
-      <div class="field"><label for="npStatus">Status</label><select id="npStatus"><option value="available">Available</option><option value="soldout">Sold out</option><option value="hidden">Hidden</option></select></div>
-    </div>
-    <div class="field"><label for="npPos">Position in menu</label><select id="npPos"><option value="top">Top of the menu</option><option value="middle">Middle of the menu</option><option value="bottom" selected>Bottom of the menu</option></select></div>
-    <div class="stockrow"><label class="sw"><input type="checkbox" id="npTrack" checked aria-label="Track stock"><span></span></label><span class="stlabel">Track stock</span>
-      <span id="npStockWrap" class="stepin"><input class="in" type="number" min="0" step="1" id="npStock" value="24" aria-label="Cookies in stock"><span class="note">cookies in stock</span></span></div>
-    <p class="err" id="npErr" hidden></p>
-    <div class="modal-actions"><button class="btn btn-line" type="button" data-mclose>Cancel</button><button class="btn btn-blue" type="submit">Add flavor</button></div>
-  </form>`,"add");
-  refreshNp();
-}
-function saveNewFlavor(){
-  const err=$("#npErr"),fail=m=>{err.textContent=m;err.hidden=false};
-  const name=$("#npName").value.trim();
-  if(!name){$("#npName").focus();return fail("Give the flavor a name.")}
-  if(DB.products.some(p=>p.name.trim().toLowerCase()===name.toLowerCase()))return fail(`There's already a flavor called "${name}".`);
-  let cat=$("#npCat").value,newCat=null;
-  if(cat==="__new"){
-    const nn=$("#npNewCat").value.trim();if(!nn){$("#npNewCat").focus();return fail("Type a name for the new category.")}
-    const ex=DB.categories.find(c=>c.name.toLowerCase()===nn.toLowerCase());
-    if(ex)cat=ex.id;else{newCat={id:uid(),name:nn};cat=newCat.id}
-  }
-  const p={id:uid(),art:$("#npArt").value,name,desc:$("#npDesc").value.trim()||"Describe the dough, mix-ins and topping.",cat,
-    surcharge:Math.max(0,parseFloat($("#npPrice").value)||0),status:$("#npStatus").value,track:$("#npTrack").checked,stock:Math.max(0,Math.round(parseFloat($("#npStock").value)||0))};
-  if(A.np.img){p.img=A.np.img;p.cutout=A.np.cutout;p.tints=A.np.tints}
-  if(newCat)DB.categories.push(newCat);
-  const pos=$("#npPos").value;
-  if(pos==="top")DB.products.unshift(p);else if(pos==="middle")DB.products.splice(Math.floor(DB.products.length/2),0,p);else DB.products.push(p);
-  if(!saveDB()){DB.products.splice(DB.products.indexOf(p),1);if(newCat)DB.categories.pop();return fail("Not enough storage space for that photo. Pick a smaller one or remove another photo.")}
-  closeModal();A.pcat="all";A.pq="";toast(`${name} added`);renderAdmin();
-  const row=document.querySelector(`[data-prow="${p.id}"]`);if(row){row.scrollIntoView({block:"center",behavior:RM?"auto":"smooth"});row.classList.add("flash-row")}
-}
-
-/* --- Categories popup --- */
-function renderCats(focusNew){
-  const cats=DB.categories;
-  $("#modalCard").innerHTML=`<div class="sheet-top"><h3 id="modalTitle">Categories</h3><button class="x" type="button" data-mclose aria-label="Close">✕</button></div>
-    <p class="note" style="margin-top:6px">Categories group flavors in the shop menu and make them easy to find here. Deleting one keeps its flavors, just without a category.</p>
-    <div style="margin-top:12px">${cats.length?cats.map(c=>`<div class="catrow"><input class="in" data-catname="${c.id}" value="${esc(c.name)}" maxlength="30" aria-label="Category name"><span class="note">${DB.products.filter(p=>p.cat===c.id).length} flavors</span><button class="danger" type="button" data-catdel="${c.id}">Delete</button></div>`).join(""):`<div class="empty">No categories yet.</div>`}</div>
-    <div class="catrow" style="grid-template-columns:minmax(0,1fr) auto;margin-top:10px"><input class="in" id="newCatName" maxlength="30" placeholder="New category name" aria-label="New category name"><button class="btn btn-blue btn-sm" type="button" data-catadd>Add</button></div>
-    <p class="err" id="catErr" hidden></p>
-    <div class="modal-actions"><button class="btn btn-blue" type="button" data-mclose>Done</button></div>`;
-  if(focusNew)$("#newCatName").focus();
-}
-function openCats(){openModal("","cats");renderCats(true)}
-function addCat(){
-  const el=$("#newCatName"),n=el.value.trim(),err=$("#catErr");
-  if(!n){err.textContent="Type a category name.";err.hidden=false;return}
-  if(DB.categories.some(c=>c.name.toLowerCase()===n.toLowerCase())){err.textContent=`There's already a category called "${n}".`;err.hidden=false;return}
-  DB.categories.push({id:uid(),name:n});saveDB();toast(`${n} added`);renderCats(true);renderAdmin();
-}
-
-/* --- Boxes & extras --- */
-function viewBoxes(){
-  return head("Boxes & extras","Set box sizes and prices, and the paid extras customers can add at checkout.")+MOCK+`
-  <div class="stack">
-    <section class="panel">
-      <h2>Box sizes</h2><p class="sub">Turn a size off to hide it from the shop without deleting it.</p>
-      <div class="tablewrap"><table class="t" style="min-width:460px"><thead><tr><th>Cookies</th><th>Price</th><th>On sale now</th><th>Available</th><th></th></tr></thead><tbody>
-      ${DB.sizes.slice().sort((a,b)=>a.n-b.n).map(s=>{const sale=bestSale(s.n);return `<tr>
-        <td><b>Box of ${s.n}</b></td>
-        <td style="width:150px"><div class="money-in"><span>${DB.settings.currency}</span><input class="in" type="number" min="0" step="0.5" data-k="sizes:${s.n}:price" value="${s.price}" aria-label="Price for box of ${s.n}"></div></td>
-        <td>${sale?`<span class="spill live">${money(s.price-saleDiscount(sale,s.price))}</span>`:`<span class="note">No</span>`}</td>
-        <td><label class="sw"><input type="checkbox" data-k="sizes:${s.n}:active" ${s.active?"checked":""} aria-label="Box of ${s.n} available"><span></span></label></td>
-        <td class="r"><button class="danger" type="button" data-sdel="${s.n}">Delete</button></td></tr>`}).join("")}
-      </tbody></table></div>
-      <div class="grid3" style="margin-top:14px;align-items:end">
-        <label class="af">New size (cookies)<input class="in" type="number" min="1" max="24" id="newN" placeholder="e.g. 9"></label>
-        <label class="af">Price<div class="money-in"><span>${DB.settings.currency}</span><input class="in" type="number" min="0" step="0.5" id="newP" placeholder="30"></div></label>
-        <button class="ghost" type="button" data-sadd style="height:40px">+ Add size</button>
-      </div>
-      <p class="err" id="sizeErr" hidden style="margin-top:8px"></p>
-    </section>
-    <section class="panel">
-      <div class="phead"><div><h2>Custom box</h2><p class="sub">Lets customers build a bigger box than your fixed sizes. They can only pick the minimum or a step above it (for example 14, 16, 18).</p></div>
-        <label class="sw"><input type="checkbox" data-k="settings::customOn" ${DB.settings.customOn?"checked":""} aria-label="Custom box on"><span></span></label></div>
-      <div class="grid3" style="align-items:end">
-        <label class="af">Minimum cookies<input class="in" type="number" min="1" step="1" data-k="settings::customMin" value="${DB.settings.customMin}"></label>
-        <label class="af">Step (add by)<input class="in" type="number" min="1" step="1" data-k="settings::customStep" value="${DB.settings.customStep}"></label>
-        <label class="af">Maximum cookies<input class="in" type="number" min="1" step="1" data-k="settings::customMax" value="${DB.settings.customMax}"></label>
-      </div>
-      <div class="grid3" style="margin-top:12px;align-items:end"><label class="af">Price per cookie<div class="money-in"><span>${DB.settings.currency}</span><input class="in" type="number" min="0" step="0.05" data-k="settings::customPer" value="${DB.settings.customPer}"></div></label>
-        <p class="note" style="grid-column:span 2;margin:0">Example: a box of ${DB.settings.customMin} costs ${money(r2(DB.settings.customMin*DB.settings.customPer))}. Flash sales set to "Every box" apply to it; per-cookie flavor extras are added on top.</p></div>
-    </section>
-    <section class="panel">
-      <div class="phead"><div><h2>Paid extras</h2><p class="sub">Shown in step 2 of the box builder. Each one adds its price to the order.</p></div><button class="btn btn-blue btn-sm" type="button" data-aadd>+ Add extra</button></div>
-      ${DB.addons.length?`<div class="tablewrap"><table class="t" style="min-width:620px"><thead><tr><th>Name</th><th>Description</th><th>Price</th><th>Active</th><th></th></tr></thead><tbody>
-      ${DB.addons.map(a=>`<tr>
-        <td><input class="in" data-k="addons:${a.id}:name" value="${esc(a.name)}" aria-label="Extra name"></td>
-        <td><input class="in" data-k="addons:${a.id}:desc" value="${esc(a.desc)}" aria-label="Extra description"></td>
-        <td style="width:130px"><div class="money-in"><span>+${DB.settings.currency}</span><input class="in" type="number" min="0" step="0.5" data-k="addons:${a.id}:price" value="${a.price}" aria-label="Extra price"></div></td>
-        <td><label class="sw"><input type="checkbox" data-k="addons:${a.id}:active" ${a.active?"checked":""} aria-label="${esc(a.name)} active"><span></span></label></td>
-        <td class="r"><button class="danger" type="button" data-adel="${a.id}">Delete</button></td></tr>`).join("")}
-      </tbody></table></div>`:`<div class="empty">No extras yet.</div>`}
-    </section>
-  </div>`;
-}
-
-/* --- Settings --- */
-const SND_OPTS=[["register","Ka-ching"],["chime","Chime"],["bell","Bell"],["door","Doorbell"],["pop","Cookie pop"],["alarm","Alarm"]];
-function viewSettings(){
-  const s=DB.settings,th=DB.thanks,pp=DB.proofpop,al=DB.alerts;
-  return head("Shop settings","Delivery, order cutoff, opening days and the details shown on the shop page.")+MOCK+`
-  <div class="stack">
-    <section class="panel">
-      <h2>Ordering</h2><p class="sub">Customers can order up to 7 days ahead.</p>
-      <div class="grid3">
-        <label class="af">Currency symbol<input class="in" data-k="settings::currency" value="${esc(s.currency)}" maxlength="4"></label>
-        <label class="af">Delivery fee<div class="money-in"><span>${esc(s.currency)}</span><input class="in" type="number" min="0" step="0.5" data-k="settings::deliveryFee" value="${s.deliveryFee}"></div></label>
-        <label class="af">Delivery radius<div class="money-in"><input class="in" type="number" min="1" data-k="settings::deliveryKm" value="${s.deliveryKm}"><span style="padding-right:10px">km</span></div></label>
-      </div>
-      <div class="grid2" style="margin-top:12px">
-        <label class="af">Order cutoff for next day<select class="in" data-k="settings::cutoffHour">${Array.from({length:24},(_,h)=>`<option value="${h}" ${h===s.cutoffHour?"selected":""}>${fmtHour(h)}</option>`).join("")}</select></label>
-        <div class="af">Closed days<div class="chips">${DOW.map((d,i)=>`<button class="fchip" type="button" data-closed="${i}" aria-pressed="${s.closedWeekdays.includes(i)}">${d}</button>`).join("")}</div></div>
-      </div>
-      <div class="grid2" style="margin-top:12px"><label class="af">Shop time zone<select class="in" data-k="settings::tz">${(TZS.includes(s.tz||"Asia/Jakarta")?TZS:[s.tz,...TZS]).map(z=>`<option value="${esc(z)}" ${z===(s.tz||"Asia/Jakarta")?"selected":""}>${esc(z.replace(/_/g," "))}</option>`).join("")}</select><small class="note">Used for the order cutoff and the days customers can pick.</small></label></div>
-      <div class="grid2" style="margin-top:12px"><label class="af">Low stock warning at<div class="money-in"><input class="in" type="number" min="0" step="1" data-k="settings::lowStockAt" value="${s.lowStockAt}"><span style="padding-right:10px">cookies</span></div></label></div>
-      <label class="af" style="margin-top:12px">Pickup and delivery time slots (one per line)<textarea class="in" rows="4" data-lines="times">${esc(s.times.join("\n"))}</textarea></label>
-    </section>
-    <section class="panel">
-      <div class="phead"><div><h2>Owner alerts</h2><p class="sub">A popup and a sound while the Admin page is open: when a new order is placed, when a customer sends a payment proof, and when a customer files a complaint. Browsers only play sound after you have clicked on the page once.</p></div><button class="btn btn-blue btn-sm" type="button" data-altest>Test alert</button></div>
-      <div class="stack" style="gap:6px">
-        <label class="chk"><input type="checkbox" data-alc="on" ${al.on?"checked":""}> Alerts on</label>
-        <label class="chk"><input type="checkbox" data-alc="sound" ${al.sound?"checked":""}> Play a sound</label>
-        <label class="chk"><input type="checkbox" data-alc="stay" ${al.stay?"checked":""}> Keep popups until I dismiss them (otherwise they close after 10 seconds)</label>
-        <label class="chk"><input type="checkbox" data-alc="repeat" ${al.repeat?"checked":""}> Repeat the sound every 20 seconds until I dismiss</label>
-        <label class="af" style="margin-top:6px">Volume<input class="in" type="range" min="10" max="100" step="5" data-alr value="${al.vol}"></label>
-        <div style="margin-top:8px">${[["order","New order placed"],["proof","Payment proof submitted"],["complaint","Customer complaint"]].map(([k,l])=>`<div class="alrow"><span class="sw"><input type="checkbox" data-alc="ev.${k}.on" ${al.ev[k].on?"checked":""} aria-label="Alert for ${l}"><span></span></span><b style="font-size:14px">${l}</b><select class="in" data-alsel="ev.${k}.snd" aria-label="Sound for ${l}" style="min-width:140px">${SND_OPTS.map(([v,n])=>`<option value="${v}" ${al.ev[k].snd===v?"selected":""}>${n}</option>`).join("")}${al.custom?`<option value="custom" ${al.ev[k].snd==="custom"?"selected":""}>Your sound</option>`:""}</select><button class="ghost" type="button" data-alplay="${k}">▶ Play</button></div>`).join("")}</div>
-        <div class="af" style="margin-top:10px">Your own sound (MP3, WAV or OGG, under 400 KB)<div class="colin" style="flex-wrap:wrap"><label class="ghost mqbtn">${al.custom?"Replace sound":"Upload sound"}<input type="file" accept="audio/*" hidden data-alsnd></label>${al.custom?`<span class="note" style="margin:0">${esc(al.customName||"Your sound")}</span><button class="danger" type="button" data-alsndrm>Remove</button>`:""}</div></div>
-      </div>
-    </section>
-    <section class="panel">
-      <h2>Customer messages</h2><p class="sub">When you change an order's status you confirm it and choose how to notify the customer. WhatsApp links need the country code for numbers that start with 0.</p>
-      <div class="grid2"><label class="af">Country code for WhatsApp<div class="money-in"><span>+</span><input class="in" data-k="settings::waCountry" value="${esc(s.waCountry)}" maxlength="4" inputmode="numeric"></div></label></div>
-    </section>
-    <section class="panel">
-      <h2>Complaints</h2><p class="sub">How long after "Delivered / Picked up" a customer can report a problem. They also see a countdown in My orders.</p>
-      <div class="grid2"><label class="af">Complaint window<div class="money-in"><input class="in" type="number" min="1" step="1" data-k="settings::complaintWindowH" value="${s.complaintWindowH}"><span style="padding-right:10px">hours</span></div></label></div>
-    </section>
-    <section class="panel">
-      <h2>Payment</h2><p class="sub">Shown to customers when they pay. Orders that aren't paid in time are cancelled automatically and their cookies go back into stock.</p>
-      <div class="grid2" style="align-items:start"><label class="af">Payment window<div class="money-in"><input class="in" type="number" min="1" step="1" data-k="settings::payWindowH" value="${s.payWindowH}"><span style="padding-right:10px">hours</span></div></label></div>
-      <h3 style="margin:18px 0 4px;font-size:16px">Payment methods</h3><p class="sub" style="margin-top:0">Add as many as you need (bank, e-wallet, QRIS). Customers see the ones that are switched on. If you add a picture such as a QR code, customers can tap it to save it.</p>
-      <div class="stack" style="gap:12px">${DB.payMethods.map(m=>`<div class="pmcard">
-        <div class="pmtop"><span class="sw" title="Show to customers"><input type="checkbox" data-pmon="${m.id}" ${m.on?"checked":""} aria-label="Show ${esc(m.name||"method")} to customers"><span></span></span><input class="in" data-pm="${m.id}|name" maxlength="40" value="${esc(m.name)}" placeholder="Method name, e.g. Bank transfer" aria-label="Method name"><button class="danger" type="button" data-pmdel="${m.id}">Delete</button></div>
-        <textarea class="in" rows="3" data-pm="${m.id}|details" maxlength="400" placeholder="Account number, name, instructions" aria-label="Payment details">${esc(m.details)}</textarea>
-        <div class="colin" style="flex-wrap:wrap"><label class="ghost mqbtn">${m.img?"Replace image":"Add image (QR code, logo)"}<input type="file" accept="image/*" hidden data-pmimg="${m.id}"></label>${m.img?`<img class="lpthumb" style="max-height:56px;max-width:90px" src="${esc(m.img)}" alt="Image for ${esc(m.name)}"><button class="danger" type="button" data-pmimgrm="${m.id}">Remove image</button>`:""}</div></div>`).join("")}
-      <div><button class="btn btn-blue btn-sm" type="button" data-pmadd>+ Add payment method</button></div></div>
-    </section>
-    <section class="panel">
-      <h2>Shop details</h2><p class="sub">Shown in the "Come say hello" section.</p>
-      <label class="af">Address<input class="in" data-k="settings::address" value="${esc(s.address)}"></label>
-      <label class="af" style="margin-top:12px">Opening hours (one per line, as Day | Hours)<textarea class="in" rows="4" data-lines="hours">${esc(s.hours.map(h=>h.join(" | ")).join("\n"))}</textarea></label>
-    </section>
-    <section class="panel">
-      <div class="phead"><div><h2>Order placed page</h2><p class="sub">The celebration customers see after placing an order. You can use {name}, {size}, {mode}, {when}, {hours}, {code} and {total} in the sentences.</p></div><button class="btn btn-blue btn-sm" type="button" data-thpreview>Preview</button></div>
-      <div class="stack" style="gap:14px">
-        <div class="af">Logo (shown instead of the check mark)<div class="colin" style="flex-wrap:wrap"><label class="ghost mqbtn">${th.logo?"Replace logo":"Upload Delidome logo"}<input type="file" accept="image/*" hidden data-thlogo></label>${th.logo?`<img class="lpthumb" style="max-height:44px;max-width:140px" src="${esc(th.logo)}" alt="Logo"><button class="danger" type="button" data-thlogorm>Remove</button>`:""}</div></div>
-        <div class="af">Falling cookie pictures (up to 8, a built-in cookie is used if you add none)<div class="thck">${th.cookies.map((c,i)=>`<span class="th"><img src="${esc(c)}" alt="Cookie ${i+1}"><button type="button" data-thckrm="${i}" aria-label="Remove cookie picture ${i+1}">×</button></span>`).join("")}${th.cookies.length<8?`<label class="ghost mqbtn">Add cookie pictures<input type="file" accept="image/*" multiple hidden data-thck></label>`:""}</div><p class="note" style="margin:0">PNG with a transparent background looks best.</p></div>
-        <div class="grid2"><label class="af" style="flex-direction:row;display:flex;align-items:center;gap:10px;font-size:14px;color:var(--ink)"><span class="sw"><input type="checkbox" data-thc="fx" ${th.fx?"checked":""}><span></span></span> Falling cookies effect</label>
-        <label class="af">How many cookies fall<input class="in" type="range" min="6" max="60" step="2" data-thr="amount" value="${th.amount}"></label></div>
-        <div class="grid2"><label class="af">Heading (new order)<input class="in" data-th="title" maxlength="40" value="${esc(th.title)}"></label><label class="af">Heading (order changed)<input class="in" data-th="titleUpd" maxlength="40" value="${esc(th.titleUpd)}"></label></div>
-        <label class="af">Message<textarea class="in" rows="2" data-th="text" maxlength="240">${esc(th.text)}</textarea></label>
-        <label class="af">Pay reminder line<textarea class="in" rows="2" data-th="urgent" maxlength="200">${esc(th.urgent)}</textarea></label>
-        <div class="grid3"><label class="af">Countdown label<input class="in" data-th="cdLabel" maxlength="30" value="${esc(th.cdLabel)}"></label><label class="af">Pay button<input class="in" data-th="payBtn" maxlength="44" value="${esc(th.payBtn)}"></label><label class="af">Track button<input class="in" data-th="trackBtn" maxlength="30" value="${esc(th.trackBtn)}"></label></div>
-        <label class="af">"Build another box" button<input class="in" data-th="buildBtn" maxlength="30" value="${esc(th.buildBtn)}"></label>
-        <div class="grid3"><label class="af">Background<input type="color" data-thcol="bg" value="${th.bg}" style="width:100%;height:42px"></label><label class="af">Accent (heading, button)<input type="color" data-thcol="accent" value="${th.accent}" style="width:100%;height:42px"></label><label class="af">Countdown color<input type="color" data-thcol="cdColor" value="${th.cdColor}" style="width:100%;height:42px"></label></div>
-        <div><button class="danger" type="button" data-threset>Reset this page</button></div>
-      </div>
-    </section>
-    <section class="panel">
-      <div class="phead"><div><h2>Payment proof sent popup</h2><p class="sub">The thank-you popup customers get after they press "I've paid, send proof". You can use {name}, {code}, {total}, {size}, {mode}, {when} and {hours} in the sentences.</p></div><button class="btn btn-blue btn-sm" type="button" data-pppreview>Preview</button></div>
-      <div class="stack" style="gap:14px">
-        <label class="af" style="flex-direction:row;display:flex;align-items:center;gap:10px;font-size:14px;color:var(--ink)"><span class="sw"><input type="checkbox" data-ppc="on" ${pp.on?"checked":""}><span></span></span> Show this popup</label>
-        <div class="grid2"><label class="af">Top emoji (leave empty for none)<input class="in" data-pp="emoji" maxlength="4" value="${esc(pp.emoji)}"></label>
-        <div class="af">Picture (your logo or any image)<div class="colin" style="flex-wrap:wrap"><label class="ghost mqbtn">${pp.img?"Replace picture":"Upload picture"}<input type="file" accept="image/*" hidden data-ppimg></label>${pp.img?`<img class="lpthumb" style="max-height:44px;max-width:120px" src="${esc(pp.img)}" alt="Popup picture"><button class="danger" type="button" data-ppimgrm>Remove</button>`:""}</div></div></div>
-        <div class="af">Falling cookie pictures for this popup (up to 8; if empty it uses the Order placed page cookies)<div class="thck">${pp.cookies.map((c,i)=>`<span class="th"><img src="${esc(c)}" alt="Cookie ${i+1}"><button type="button" data-ppckrm="${i}" aria-label="Remove cookie picture ${i+1}">×</button></span>`).join("")}${pp.cookies.length<8?`<label class="ghost mqbtn">Add cookie pictures<input type="file" accept="image/*" multiple hidden data-ppck></label>`:""}</div></div>
-        <div class="grid2"><label class="af" style="flex-direction:row;display:flex;align-items:center;gap:10px;font-size:14px;color:var(--ink)"><span class="sw"><input type="checkbox" data-ppc="fx" ${pp.fx?"checked":""}><span></span></span> Falling cookies effect</label>
-        <label class="af">How many cookies fall<input class="in" type="range" min="6" max="60" step="2" data-ppr="amount" value="${pp.amount}"></label></div>
-        <label class="af">Heading<input class="in" data-pp="title" maxlength="60" value="${esc(pp.title)}"></label>
-        <label class="af">Message<textarea class="in" rows="3" data-pp="text" maxlength="300">${esc(pp.text)}</textarea></label>
-        <label class="af">Button<input class="in" data-pp="btn" maxlength="30" value="${esc(pp.btn)}"></label>
-        <div class="grid3"><label class="af">Background<input type="color" data-ppcol="bg" value="${pp.bg}" style="width:100%;height:42px"></label><label class="af">Accent (heading, button)<input type="color" data-ppcol="accent" value="${pp.accent}" style="width:100%;height:42px"></label><label class="af">Text color<input type="color" data-ppcol="ink" value="${pp.ink}" style="width:100%;height:42px"></label></div>
-        <div><button class="danger" type="button" data-ppreset>Reset this popup</button></div>
-      </div>
-    </section>
-    ${SBH.on?"":`<section class="panel">
-      <h2>Demo data</h2><p class="sub">Put back the example flavors, sales and orders. This clears anything you changed.</p>
-      <button class="danger" type="button" data-reset>Reset demo data</button>
-    </section>`}
-  </div>`;
-}
-
-/* --- admin wiring --- */
-function setK(el){
-  const [coll,id,field]=el.dataset.k.split(":");
-  let v=el.type==="checkbox"?el.checked:el.type==="number"?Math.max(0,parseFloat(el.value)||0):el.value;
-  if(field==="cutoffHour")v=+v;
-  if(field==="payWindowH"||field==="complaintWindowH")v=Math.max(1,v);
-  if(field==="stock"||field==="lowStockAt"||field==="payWindowH"||field==="complaintWindowH"||/^custom(Min|Step|Max)$/.test(field))v=Math.round(v);
-  if(coll==="settings"){DB.settings[field]=v;const t=DB.settings;if(/^custom/.test(field)){t.customMin=Math.max(1,t.customMin);t.customStep=Math.max(1,t.customStep);if(t.customMax<t.customMin)t.customMax=t.customMin}}
-  else{const item=coll==="sizes"?DB.sizes.find(x=>String(x.n)===id):DB[coll].find(x=>x.id===id);if(item)item[field]=v}
-  return {coll,field};
-}
-const am=$("#amain");
-am.addEventListener("input",e=>{const el=e.target;if(!el.dataset.cpf||!A.cp)return;cpSetF(el)});
-am.addEventListener("change",e=>{const el=e.target;if(!el.dataset.cpf||!A.cp)return;cpSetF(el);if(el.dataset.cprr)renderAdmin()});
-function cpSetF(el){const k=el.dataset.cpf;A.cp[k]=el.type==="checkbox"?el.checked:el.type==="number"?(+el.value||0):el.value}
-am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;const d=b.dataset;
-  if(d.cpnew!==undefined){A.cp=CP_BLANK();renderAdmin();scrollTo(0,0)}
-  else if(d.cpedit){const c=DB.coupons.find(x=>x.id===d.cpedit);if(c){A.cp=anClone(c);renderAdmin();scrollTo(0,0)}}
-  else if(d.cpcancel!==undefined){A.cp=null;renderAdmin()}
-  else if(d.cptog){const c=DB.coupons.find(x=>x.id===d.cptog);if(c){c.on=!c.on;saveDB();toast(c.on?"Coupon is on":"Coupon is off");renderAdmin()}}
-  else if(d.cpdel){armed(b,()=>{DB.coupons=DB.coupons.filter(x=>x.id!==d.cpdel);saveDB();toast("Coupon deleted");renderAdmin()})}
-  else if(d.cpsave!==undefined){const F=A.cp,er=$("#cpErr"),fail=t=>{er.textContent=t;er.hidden=false};
-    F.code=cpNorm(F.code);if(!/^[A-Z0-9_-]{3,20}$/.test(F.code))return fail("Use 3 to 20 letters or numbers for the code.");
-    if(DB.coupons.some(c=>c.code===F.code&&c.id!==F.id))return fail("You already have a coupon with that code.");
-    if(F.type==="percent"&&!(F.value>0&&F.value<=100))return fail("Percent must be between 1 and 100.");
-    if(F.type==="amount"&&!(F.value>0))return fail("Set an amount above 0.");
-    if(F.startsAt&&F.endsAt&&new Date(F.endsAt)<=new Date(F.startsAt))return fail("The end must be after the start.");
-    const c={...F,id:F.id||"cp"+uid(),maxUses:Math.max(0,Math.round(F.maxUses||0)),minSpend:Math.max(0,F.minSpend||0),value:F.type==="freedelivery"?0:F.value};
-    const i=DB.coupons.findIndex(x=>x.id===c.id);if(i>=0)DB.coupons[i]=c;else DB.coupons.unshift(c);
-    saveDB();A.cp=null;toast("Coupon saved");renderAdmin()}
-});
-
-am.addEventListener("input",e=>{const el=e.target;if(!el.dataset.hr)return;hrSet(el)});
-function hrSet(el){const h=hrDraft(),k=el.dataset.hr;h[k]=el.type==="checkbox"?el.checked:el.dataset.hrnum?+el.value:el.value;
-  if(k==="src"&&!el.value)h.src="";hrDraw();if(el.dataset.hrrr)renderAdmin();else if(el.dataset.hrnum){const l=el.closest("label");if(l&&l.firstChild)l.firstChild.textContent=`Darken the picture: ${h.overlay}%`}}
-am.addEventListener("change",async e=>{const el=e.target;
-  if(el.dataset.hr){hrSet(el);return}
-  if(el.dataset.hrck!==undefined){const f=el.files[0];if(!f)return;try{hrDraft().cookies[+el.dataset.hrck]=await lpResize(f,360);renderAdmin();toast("Added to the preview. Press Save to publish.")}catch(err){toast(err.message)}return}
-  if(el.dataset.hrmedia!==undefined){const f=el.files[0];if(!f)return;const h=hrDraft();
-    try{if(h.mediaType==="video"){if(f.size>3*1024*1024){toast("That video is over 3 MB. Paste a link to an .mp4 instead.");el.value="";return}h.src=await readData(f)}else h.src=await lpResize(f,1600);renderAdmin();toast("Added to the preview. Press Save to publish.")}catch(err){toast(err.message)}}});
-am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;const d=b.dataset;
-  if(d.gotab){A.tab=d.gotab;renderAdmin();scrollTo(0,0)}
-  else if(d.hrckrm!==undefined){hrDraft().cookies[+d.hrckrm]="";renderAdmin()}
-  else if(d.hrmediarm!==undefined){hrDraft().src="";renderAdmin()}
-  else if(d.hrsave!==undefined){const prev=DB.page.hero;DB.page.hero=anClone(A.hr);if(saveDB()){toast("Top banner published to the shop");A.hr=null;renderAdmin()}else{DB.page.hero=prev;toast("Not enough storage space. Try smaller pictures.")}}
-  else if(d.hrdisc!==undefined){A.hr=null;renderAdmin();toast("Changes discarded")}
-  else if(d.hrreset!==undefined){armed(b,()=>{A.hr=anClone(defaultPage().hero);renderAdmin();toast("Reset in the preview. Press Save to publish.")})}
-});
-
-am.addEventListener("input",e=>{const el=e.target;if(!el.dataset.an)return;anSet(el)});
-am.addEventListener("change",async e=>{const el=e.target;
-  if(el.dataset.an){anSet(el);return}
-  if(el.dataset.animg!==undefined){const f=el.files[0];if(!f)return;try{anDraft()[A.anK].img=await lpResize(f,200);renderAdmin();toast("Image added to the preview. Press Save to publish.")}catch(err){toast(err.message)}}});
-function anSet(el){const AN=anDraft(),path=el.dataset.an.split(".");let o=AN;for(let i=0;i<path.length-1;i++)o=o[path[i]];
-  const k=path[path.length-1];o[k]=el.type==="checkbox"?el.checked:el.value;
-  if(el.type==="checkbox"&&(k==="on"||k==="custom")){}
-  anDrawPrev();if(el.type==="checkbox"||el.tagName==="SELECT")anPrevOnly()}
-function anPrevOnly(){const n=document.querySelector("#amain .note[hidden], #amain .note:not([hidden])");}
-am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;const d=b.dataset;
-  if(d.ank){A.anK=d.ank;renderAdmin()}
-  else if(d.anrm!==undefined){anDraft()[A.anK].img="";renderAdmin()}
-  else if(d.ansave!==undefined){const prev=DB.announcer;DB.announcer=anClone(A.an);if(saveDB()){toast("Announcer published to the shop");A.an=null;renderAdmin()}else{DB.announcer=prev;toast("Not enough storage space. Try a smaller image.")}}
-  else if(d.andisc!==undefined){A.an=null;renderAdmin();toast("Changes discarded")}
-  else if(d.anreset!==undefined){armed(b,()=>{A.an=defaultAnnouncer();renderAdmin();toast("Reset in the preview. Press Save to publish.")})}
-});
-
-am.addEventListener("input",e=>{const el=e.target;if(el.dataset.nf){A.nf[el.dataset.nf]=el.dataset.nf==="code"?el.value.toUpperCase().replace(/\s+/g,""):el.value;if(el.dataset.nf==="code")el.value=A.nf.code;const er=$("#nfErr");if(er)er.hidden=true}});
-am.addEventListener("change",e=>{const el=e.target;if(el.dataset.nf==="pid"||el.dataset.nf==="until")A.nf[el.dataset.nf]=el.value});
-am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;const d=b.dataset;
-  if(d.nftype){A.nf.type=d.nftype;renderAdmin()}
-  else if(d.nfsend!==undefined){const f=A.nf,er=$("#nfErr");
-    if(f.title.trim().length<3){er.textContent="Please write a title (at least 3 characters).";er.hidden=false;return}
-    DB.broadcasts.unshift({id:uid(),type:f.type,title:f.title.trim(),text:f.text.trim(),pid:f.pid,code:f.code.trim(),until:f.until,at:Date.now()});
-    if(DB.broadcasts.length>100)DB.broadcasts.length=100;
-    if(!saveDB()){DB.broadcasts.shift();er.textContent="Not enough storage space.";er.hidden=false;return}
-    A.nf={type:f.type,title:"",text:"",pid:"",code:"",until:""};toast("Sent to all customers");renderAdmin()}
-  else if(d.nfdel){armed(b,()=>{DB.broadcasts=DB.broadcasts.filter(x=>x.id!==d.nfdel);saveDB();toast("Notification deleted");renderAdmin()})}
-});
-am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
-  if(b.dataset.bakeprint!==undefined)printBake(A.bakeDay);else if(b.dataset.bakedl!==undefined)downloadBake(A.bakeDay)});
-am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;const d=b.dataset;
-  if(d.dd){A.dd=d.dd;renderAdmin()}
-  else if(d.vr){A.vr=d.vr;renderAdmin()}
-  else if(d.dashgo){A.tab=d.dashgo;if(d.dfilter)A.filter=d.dfilter;renderAdmin();window.scrollTo(0,0)}
-  else if(d.dashsound!==undefined){DB.alerts.sound=!DB.alerts.sound;saveDB();renderAdmin()}
-  else if(d.dproof)showProof(d.dproof);
-  else if(d.dconfirm)setOrderStatus(d.dconfirm,"new");
-});
-am.addEventListener("change",e=>{const el=e.target;if(el.dataset.dddate!==undefined){A.dd=el.value||"today";renderAdmin()}});
-function alPath(path,val){const p=path.split("."),k=p.pop();let o=DB.alerts;p.forEach(x=>o=o[x]);o[k]=val}
-am.addEventListener("input",e=>{const el=e.target;if(el.dataset.alr!==undefined){DB.alerts.vol=+el.value;saveSoon()}});
-am.addEventListener("change",async e=>{const el=e.target;
-  if(el.dataset.alc){alPath(el.dataset.alc,el.checked);if(el.checked)alAckAll();saveDB();toast("Saved");return}
-  if(el.dataset.alsel){alPath(el.dataset.alsel,el.value);saveDB();alPlay(el.value);toast("Saved");return}
-  if(el.dataset.alsnd!==undefined){const f=el.files[0];if(!f)return;
-    if(!/^audio\//.test(f.type)){toast("That isn't an audio file.");renderAdmin();return}
-    if(f.size>400e3){toast("That sound is over 400 KB. Use a shorter one.");renderAdmin();return}
-    try{const d=await readData(f),prev=[DB.alerts.custom,DB.alerts.customName];DB.alerts.custom=d;DB.alerts.customName=f.name;if(!saveDB()){DB.alerts.custom=prev[0];DB.alerts.customName=prev[1];toast("Not enough storage space.")}else{toast("Sound added");alPlay("custom")}}catch(err){toast(err.message)}renderAdmin()}
-});
-am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;const d=b.dataset;
-  if(d.altest!==undefined){alPush({type:"order",id:"",at:Date.now(),key:"test"+Date.now(),test:true})}
-  else if(d.alplay){alPlay(DB.alerts.ev[d.alplay].snd)}
-  else if(d.alsndrm!==undefined){const al=DB.alerts;al.custom="";al.customName="";Object.values(al.ev).forEach(v=>{if(v.snd==="custom")v.snd="chime"});saveDB();renderAdmin()}
-});
-am.addEventListener("input",e=>{const el=e.target;if(el.dataset.pm){const [id,f]=el.dataset.pm.split("|"),m=DB.payMethods.find(x=>x.id===id);if(m){m[f]=el.value;saveSoon()}}});
-am.addEventListener("change",async e=>{const el=e.target;
-  if(el.dataset.pmon){const m=DB.payMethods.find(x=>x.id===el.dataset.pmon);if(m){m.on=el.checked;saveDB();toast("Saved")}return}
-  if(el.dataset.pmimg){const m=DB.payMethods.find(x=>x.id===el.dataset.pmimg),f=el.files[0];if(!m||!f)return;try{const prev=m.img;m.img=await lpResize(f,900);if(!saveDB()){m.img=prev;toast("Not enough storage space. Try a smaller image.")}else toast("Image added")}catch(err){toast(err.message)}renderAdmin()}
-});
-am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;const d=b.dataset;
-  if(d.pmadd!==undefined){DB.payMethods.push({id:uid(),name:"",details:"",img:"",on:true});saveDB();renderAdmin()}
-  else if(d.pmdel){armed(b,()=>{DB.payMethods=DB.payMethods.filter(x=>x.id!==d.pmdel);saveDB();toast("Method deleted");renderAdmin()})}
-  else if(d.pmimgrm){const m=DB.payMethods.find(x=>x.id===d.pmimgrm);if(m){m.img="";saveDB();renderAdmin()}}
-});
-am.addEventListener("input",e=>{const el=e.target,P=DB.proofpop;
-  if(el.dataset.pp){P[el.dataset.pp]=el.value;saveSoon()}
-  else if(el.dataset.ppcol){P[el.dataset.ppcol]=el.value;saveSoon()}
-  else if(el.dataset.ppr){P[el.dataset.ppr]=+el.value;saveSoon()}
-});
-am.addEventListener("change",async e=>{const el=e.target,P=DB.proofpop;
-  if(el.dataset.ppc){P[el.dataset.ppc]=el.checked;saveDB();toast("Saved");return}
-  if(el.dataset.ppimg!==undefined){const f=el.files[0];if(!f)return;try{const prev=P.img;P.img=await lpResize(f,400);if(!saveDB()){P.img=prev;toast("Not enough storage space. Try a smaller picture.")}else toast("Picture added")}catch(err){toast(err.message)}renderAdmin();return}
-  if(el.dataset.ppck!==undefined){const fs=[...el.files].slice(0,8-P.cookies.length);try{for(const f of fs){const d=await lpResize(f,160);P.cookies.push(d);if(!saveDB()){P.cookies.pop();toast("Not enough storage space. Remove a picture first.");break}}if(fs.length)toast("Cookie pictures added")}catch(err){toast(err.message)}renderAdmin()}
-});
-am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;const d=b.dataset;
-  if(d.pppreview!==undefined)ppShow(thSample(),true);
-  else if(d.ppimgrm!==undefined){DB.proofpop.img="";saveDB();renderAdmin()}
-  else if(d.ppckrm!==undefined){DB.proofpop.cookies.splice(+d.ppckrm,1);saveDB();renderAdmin()}
-  else if(d.ppreset!==undefined){armed(b,()=>{DB.proofpop=defaultProofPop();saveDB();toast("Popup reset");renderAdmin()})}
-});
-/* --- order placed page editor --- */
-function thSample(){return {id:"",code:"DD-PREV",customer:{name:"Sari Wulan"},mode:"delivery",size:6,day:ymd(addDays(today0(),1)),time:DB.settings.times[0]||"10 to 11am",total:30.5,expiresAt:Date.now()+DB.settings.payWindowH*3600e3}}
-am.addEventListener("input",e=>{const el=e.target,T=DB.thanks;
-  if(el.dataset.th){T[el.dataset.th]=el.value;saveSoon()}
-  else if(el.dataset.thcol){T[el.dataset.thcol]=el.value;saveSoon()}
-  else if(el.dataset.thr){T[el.dataset.thr]=+el.value;saveSoon()}
-});
-am.addEventListener("change",async e=>{const el=e.target,T=DB.thanks;
-  if(el.dataset.thc){T[el.dataset.thc]=el.checked;saveDB();toast("Saved");return}
-  if(el.dataset.thlogo!==undefined){const f=el.files[0];if(!f)return;try{const prev=T.logo;T.logo=await lpResize(f,300);if(!saveDB()){T.logo=prev;toast("Not enough storage space. Try a smaller logo.")}else toast("Logo added")}catch(err){toast(err.message)}renderAdmin();return}
-  if(el.dataset.thck!==undefined){const fs=[...el.files].slice(0,8-T.cookies.length);try{for(const f of fs){const d=await lpResize(f,160);T.cookies.push(d);if(!saveDB()){T.cookies.pop();toast("Not enough storage space. Remove a picture first.");break}}if(fs.length)toast("Cookie pictures added")}catch(err){toast(err.message)}renderAdmin()}
-});
-am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;const d=b.dataset;
-  if(d.thpreview!==undefined){renderDone(thSample(),false,true)}
-  else if(d.thlogorm!==undefined){DB.thanks.logo="";saveDB();renderAdmin()}
-  else if(d.thckrm!==undefined){DB.thanks.cookies.splice(+d.thckrm,1);saveDB();renderAdmin()}
-  else if(d.threset!==undefined){armed(b,()=>{DB.thanks=defaultThanks();saveDB();toast("Page reset");renderAdmin()})}
-});
-am.addEventListener("click",e=>{
-  if(e.target.closest("select,input,textarea"))return;
-  const b=e.target.closest("button,tr[data-order]");if(!b)return;const d=b.dataset;
-  if(d.order){openOrder(d.order);return}
-  if(d.ostatus){const [i,st]=d.ostatus.split(":");setOrderStatus(i,st);return}
-  if(d.od){A.od=d.od;renderAdmin();return}
-  if(d.osub){openSubst(d.osub);return}
-  if(d.oproof){showProof(d.oproof);return}
-  if(d.ocancel){setOrderStatus(d.ocancel,"cancelled");return}
-  if(d.printcard){const o=DB.orders.find(x=>x.id===d.printcard);if(o)printLabels([o],DB.label);return}
-  if(d.dlcard){const o=DB.orders.find(x=>x.id===d.dlcard);if(o)downloadLabels([o],DB.label);return}
-  if(d.printsel!==undefined){printLabels(shownRows().filter(o=>canLabel(o)&&!o.labelAt),DB.label);return}
-  if(d.goto){A.tab=d.goto;renderAdmin();window.scrollTo(0,0);return}
-  if(d.stk){const [id,delta]=d.stk.split(":"),p=prod(id);if(p){p.stock=Math.max(0,(p.stock||0)+(+delta));saveDB();toast(`${p.name}: ${p.stock} in stock`);renderAdmin()}return}
-  if(d.filter){A.filter=d.filter;renderAdmin()}
-  else if(d.bake){A.bakeDay=d.bake;renderAdmin()}
-  else if(d.stype){A.draft.type=d.stype;if(d.stype==="amount"&&A.draft.value>20)A.draft.value=5;renderAdmin()}
-  else if(d.smode){A.draft.startMode=d.smode;if(d.smode==="later"&&!A.draft.startAt){const t=new Date(Date.now()+3600e3);t.setMinutes(0,0,0);A.draft.startAt=new Date(t.getTime()-t.getTimezoneOffset()*60e3).toISOString().slice(0,16)}renderAdmin()}
-  else if(d.dur){A.draft.durH=Math.floor(+d.dur/60);A.draft.durM=+d.dur%60;document.querySelector('[data-draft="durH"]').value=A.draft.durH;document.querySelector('[data-draft="durM"]').value=A.draft.durM;updatePreview()}
-  else if(d.saleEnd){const s=DB.sales.find(x=>x.id===d.saleEnd);s.end=Date.now();saveDB();toast("Sale ended");renderAdmin()}
-  else if(d.saleExtend){const s=DB.sales.find(x=>x.id===d.saleExtend);s.end+=30*60e3;saveDB();toast("Added 30 minutes");renderAdmin()}
-  else if(d.saleStart){const s=DB.sales.find(x=>x.id===d.saleStart),len=s.end-s.start;s.start=Date.now();s.end=s.start+len;saveDB();toast("Flash sale is live");renderAdmin()}
-  else if(d.saleDel){armed(b,()=>{DB.sales=DB.sales.filter(x=>x.id!==d.saleDel);saveDB();toast("Sale deleted");renderAdmin()})}
-  else if(d.pstatus){const [id,st]=d.pstatus.split(":");prod(id).status=st;saveDB();toast("Saved");renderAdmin()}
-  else if(d.pdel!==undefined){armed(b,()=>{DB.products=DB.products.filter(p=>p.id!==d.pdel);saveDB();toast("Flavor deleted");renderAdmin()})}
-  else if(d.rvadmin){openAdminReviews(d.rvadmin)}
-  else if(d.padd!==undefined){openAddFlavor()}
-  else if(d.pcatmanage!==undefined){openCats()}
-  else if(d.pcat){A.pcat=d.pcat;renderAdmin()}
-  else if(d.pclear!==undefined){A.pq="";A.pcat="all";renderAdmin()}
-  else if(d.sadd!==undefined){const n=Math.round(+$("#newN").value),p=+$("#newP").value,err=$("#sizeErr");
-    if(!(n>=1&&n<=24)){err.textContent="Box size must be between 1 and 24 cookies.";err.hidden=false;return}
-    if(DB.sizes.some(s=>s.n===n)){err.textContent=`There's already a box of ${n}.`;err.hidden=false;return}
-    if(!(p>0)){err.textContent="Set a price above 0.";err.hidden=false;return}
-    DB.sizes.push({n,price:p,active:true});saveDB();toast(`Box of ${n} added`);renderAdmin()}
-  else if(d.sdel){armed(b,()=>{if(DB.sizes.length<=1){toast("Keep at least one box size");return}DB.sizes=DB.sizes.filter(s=>String(s.n)!==d.sdel);saveDB();toast("Size deleted");renderAdmin()})}
-  else if(d.aadd!==undefined){DB.addons.push({id:uid(),name:"New extra",desc:"",price:1,active:false});saveDB();toast("Extra added, turned off");renderAdmin()}
-  else if(d.adel){armed(b,()=>{DB.addons=DB.addons.filter(a=>a.id!==d.adel);saveDB();toast("Extra deleted");renderAdmin()})}
-  else if(d.closed){const i=+d.closed,c=DB.settings.closedWeekdays;DB.settings.closedWeekdays=c.includes(i)?c.filter(x=>x!==i):[...c,i];saveDB();toast("Saved");renderAdmin()}
-  else if(d.rmimg){const p=prod(d.rmimg);delete p.img;delete p.cutout;delete p.tints;if(p.art==="photo")p.art="none";saveDB();toast("Photo removed. Look set to None.");renderAdmin()}
-  else if(d.reset!==undefined){armed(b,()=>{DB=seedDB();saveDB();S=fresh();A.bakeDay=null;toast("Demo data restored");renderAdmin()})}
-});
-am.addEventListener("input",e=>{
-  const el=e.target;
-  if(el.dataset.oship){const o=DB.orders.find(x=>x.id===el.dataset.oid);if(o){o[el.dataset.oship]=el.value;saveSoon()}return}
-  if(el.id==="pSearch"){A.pq=el.value;$("#plist").innerHTML=productRows();$("#pCount").textContent=pCountText();return}
-  if(el.id==="oSearch"){A.q=el.value;const pos=el.selectionStart;renderAdmin();const n=$("#oSearch");n.focus();n.setSelectionRange(pos,pos);return}
-  if(el.dataset.draft){A.draft[el.dataset.draft]=el.type==="number"?(parseFloat(el.value)||0):el.value;$("#saleErr")&&($("#saleErr").hidden=true);updatePreview();return}
-  if(el.dataset.k&&el.type!=="number"&&el.type!=="checkbox"&&el.tagName!=="SELECT"){setK(el);saveSoon()}
-});
-am.addEventListener("change",e=>{
-  const el=e.target;
-  if(el.dataset.oddate!==undefined){A.od=el.value||"all";renderAdmin();return}
-  if(el.dataset.statusFor){setOrderStatus(el.dataset.statusFor,el.value);return}
-  if(el.dataset.move){moveProduct(el.dataset.move,el.value);return}
-  if(el.dataset.upload){uploadPhoto(el.dataset.upload,el.files[0],el.closest(".upl"));return}
-  if(el.dataset.draft&&el.tagName==="SELECT"){A.draft[el.dataset.draft]=el.value;updatePreview();return}
-  if(el.dataset.lines){
-    const lines=el.value.split("\n").map(x=>x.trim()).filter(Boolean);
-    if(el.dataset.lines==="times")DB.settings.times=lines.length?lines:DB.settings.times;
-    else DB.settings.hours=lines.map(l=>{const [a,...b]=l.split("|");return [a.trim(),b.join("|").trim()]});
-    saveDB();toast("Saved");return;
-  }
-  if(el.dataset.k&&(el.type==="number"||el.type==="checkbox"||el.tagName==="SELECT")){const {coll,field}=setK(el);saveDB();toast("Saved");
-    if(field==="art"||field==="active"||field==="currency"||field==="track"||field==="stock"||field==="lowStockAt"||field==="cat"||coll==="sizes"||/^custom/.test(field))renderAdmin()}
-});
-/* --- photo upload: auto square-crop + resize to 400px --- */
-const hex=(r,g,b)=>"#"+[r,g,b].map(v=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,"0")).join("");
-async function processImage(file){
-  if(!file||!/^image\//.test(file.type))throw new Error("That file isn't an image. Use JPG, PNG or WebP.");
-  if(file.size>20e6)throw new Error("That image is over 20 MB. Try a smaller one.");
-  const url=URL.createObjectURL(file);
-  try{
-    const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>rej(new Error("Couldn't read that image. Try a JPG or PNG."));i.src=url});
-    const W=img.naturalWidth,H=img.naturalHeight,side=Math.min(W,H),sx=(W-side)/2,sy=(H-side)/2,OUT=400;
-    // probe: transparency + average color
-    const pc=document.createElement("canvas");pc.width=pc.height=40;const px=pc.getContext("2d",{willReadFrequently:true});px.drawImage(img,sx,sy,side,side,0,0,40,40);
-    const d=px.getImageData(0,0,40,40).data;let clear=0,r=0,g=0,b=0,n=0;
-    for(let i=0;i<d.length;i+=4){if(d[i+3]<200)clear++;else{r+=d[i];g+=d[i+1];b+=d[i+2];n++}}
-    const cutout=clear>40*40*.08;n=n||1;r/=n;g/=n;b/=n;
-    const tints=[hex(r,g,b),hex(r*.65,g*.65,b*.65),hex(r+(255-r)*.5,g+(255-g)*.5,b+(255-b)*.5)];
-    // step down in halves for a sharper resize from large photos
-    let src=img,sw=side,sxx=sx,syy=sy;
-    while(sw>OUT*2){const c=document.createElement("canvas");c.width=c.height=Math.round(sw/2);const x=c.getContext("2d");x.imageSmoothingQuality="high";x.drawImage(src,sxx,syy,sw,sw,0,0,c.width,c.height);src=c;sw=c.width;sxx=0;syy=0}
-    const c=document.createElement("canvas");c.width=c.height=OUT;const x=c.getContext("2d");x.imageSmoothingQuality="high";x.drawImage(src,sxx,syy,sw,sw,0,0,OUT,OUT);
-    let out;
-    if(cutout){out=c.toDataURL("image/png");const w=c.toDataURL("image/webp",.85);if(w.startsWith("data:image/webp")&&w.length<out.length)out=w}
-    else{out=c.toDataURL("image/jpeg",.82)}
-    return {img:out,cutout,tints,W,H,kb:Math.round(out.length*.75/1024)};
-  }finally{URL.revokeObjectURL(url)}
-}
-async function uploadPhoto(id,file,lbl){
-  const p=prod(id);if(!p||!file)return;
-  lbl&&lbl.classList.add("busy");
-  try{
-    const r=await processImage(file),prev={img:p.img,cutout:p.cutout,tints:p.tints,art:p.art};
-    Object.assign(p,{img:r.img,cutout:r.cutout,tints:r.tints,art:"photo"});
-    if(!saveDB()){Object.assign(p,prev);if(!prev.img)delete p.img;toast("Not enough storage space. Remove another photo or use a smaller one.");}
-    else toast(`Photo added: ${r.W}×${r.H} resized to 400×400 (${r.kb} KB)${r.cutout?", cut-out":""}`);
-  }catch(err){toast(err.message)}
-  renderAdmin();
-}
-
-/* --- marquee banner --- */
 const MQ_FONTS={display:["Unbounded","var(--display)"],body:["Instrument Sans","var(--body)"],serif:["Serif",'Georgia,"Times New Roman",serif'],mono:["Monospace",'ui-monospace,Menlo,Consolas,monospace'],hand:["Handwritten",'"Segoe Script","Brush Script MT","Comic Sans MS",cursive'],impact:["Poster",'Impact,"Arial Narrow Bold","Haettenschweiler",sans-serif']};
 const MQ_SIZE={S:14,M:18,L:28},MQ_SPEED={slow:40,medium:70,fast:110};
 let mqFace=null,mqFaceKey="";
@@ -2169,101 +1043,6 @@ function mqBuild(el){
   el.style.setProperty("--mdur",Math.max(6,w/(MQ_SPEED[m.speed]||70))+"s");
 }
 function mqFit(){document.querySelectorAll(".marq").forEach(el=>{if(el._m&&!el.hidden)mqBuild(el)})}
-let mqT;addEventListener("resize",()=>{clearTimeout(mqT);mqT=setTimeout(mqFit,200)});
-if(document.fonts&&document.fonts.ready)document.fonts.ready.then(mqFit);
-document.addEventListener("click",e=>{});
-
-function mqLum(h){const c=[1,3,5].map(i=>{const v=parseInt(h.slice(i,i+2),16)/255;return v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4)});return .2126*c[0]+.7152*c[1]+.0722*c[2]}
-function mqContrast(a,b){const x=mqLum(a),y=mqLum(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05)}
-const HEX6=/^#[0-9a-f]{6}$/i;
-function viewMarquee(){
-  const m=DB.marquee,ok=mqContrast(m.bg,m.color)>=3;
-  const fontOpts=Object.entries(MQ_FONTS).map(([k,v])=>`<option value="${k}" ${m.font===k?"selected":""}>${v[0]}</option>`).join("")+(m.fontData?`<option value="custom" ${m.font==="custom"?"selected":""}>${esc(m.fontName||"Your font")} (uploaded)</option>`:"");
-  return head("Marquee banner","The running text above “Build your box”. Add 1 to 5 photos and they pop up at random between the sentences.")+MOCK+`
-  <div class="stack">
-    <section class="panel">
-      <div class="phead"><div><h2>Preview</h2><p class="sub">Updates as you type. Reload the shop to see the photos reshuffle.</p></div>
-        <label class="sw"><input type="checkbox" data-mq="on" ${m.on?"checked":""} aria-label="Show marquee in shop"><span></span></label></div>
-      <div class="marq prev" id="mqPrev"></div>
-      <p class="note" id="mqWarn" style="margin-top:8px;color:var(--red)" ${ok?"hidden":""}>Text and background look too similar. Pick colors that contrast more.</p>
-    </section>
-    <section class="panel mqgrid">
-      <div><h2>Text</h2><p class="sub">One sentence per line, up to 12.</p>
-        <label class="af"><span class="vh" style="position:absolute;left:-9999px">Marquee sentences</span><textarea class="in" rows="5" data-mq="texts" maxlength="1200" aria-label="Marquee sentences">${esc(m.texts.join("\n"))}</textarea></label></div>
-      <div><h2>Photos <span class="note" id="mqCount">${m.images.length} of 5</span></h2><p class="sub">Shown at random between sentences. They are resized small automatically. Transparent PNGs keep their see-through background.</p>
-        <div class="mqimgs">${m.images.map((src,i)=>`<div class="th"><img src="${esc(imgOk(src))}" alt="Marquee photo ${i+1}"><button type="button" data-mqrm="${i}" aria-label="Remove photo ${i+1}">×</button></div>`).join("")}
-          ${m.images.length<5?`<label class="ghost mqbtn">+ Add photo<input type="file" accept="image/*" multiple hidden data-mqimg></label>`:`<span class="note">Maximum reached</span>`}</div></div>
-    </section>
-    <section class="panel">
-      <h2>Look</h2>
-      <div class="grid3" style="margin-top:12px;align-items:end">
-        <label class="af">Text color<div class="colin"><input type="color" data-mqc="color" value="${m.color}" aria-label="Text color picker"><input class="in" data-mqc="color" value="${m.color}" maxlength="7" aria-label="Text color hex"></div></label>
-        <label class="af">Background color<div class="colin"><input type="color" data-mqc="bg" value="${m.bg}" aria-label="Background color picker"><input class="in" data-mqc="bg" value="${m.bg}" maxlength="7" aria-label="Background color hex"></div></label>
-        <label class="af">Font<select class="in" data-mq="font">${fontOpts}</select></label>
-      </div>
-      <div class="grid3" style="margin-top:12px;align-items:end">
-        <label class="af">Text size<select class="in" data-mq="size"><option value="S" ${m.size==="S"?"selected":""}>Small</option><option value="M" ${m.size==="M"?"selected":""}>Medium</option><option value="L" ${m.size==="L"?"selected":""}>Large</option></select></label>
-        <label class="af">Speed<select class="in" data-mq="speed"><option value="slow" ${m.speed==="slow"?"selected":""}>Slow</option><option value="medium" ${m.speed==="medium"?"selected":""}>Medium</option><option value="fast" ${m.speed==="fast"?"selected":""}>Fast</option></select></label>
-        <div class="af">Your own font<div class="colin"><label class="ghost mqbtn">${m.fontData?"Replace font":"Upload font"}<input type="file" accept=".ttf,.otf,.woff,.woff2,font/*" hidden data-mqfont></label>${m.fontData?`<button class="danger" type="button" data-mqfontrm>Remove</button>`:""}</div></div>
-      </div>
-      <p class="note" style="margin-top:10px">${m.fontData?`Uploaded font: <b>${esc(m.fontName)}</b>. Choose it in the Font list.`:"Upload a .ttf, .otf, .woff or .woff2 file (up to 1 MB), then pick it in the Font list."} Only upload fonts you have the license to use on the web.</p>
-      <div class="colin" style="margin-top:12px"><button class="ghost" type="button" data-mqreset>Reset banner to default</button></div>
-    </section>
-  </div>`;
-}
-function afterViewMarquee(){renderMarquee($("#mqPrev"),DB.marquee)}
-let mqSaveT;
-function mqSave(msg){clearTimeout(mqSaveT);mqSaveT=setTimeout(()=>{if(saveDB())toast(msg||"Saved");else toast("Not enough storage space. Remove a photo or font.")},350)}
-function mqPreview(){renderMarquee($("#mqPrev"),DB.marquee);const w=$("#mqWarn");if(w)w.hidden=mqContrast(DB.marquee.bg,DB.marquee.color)>=3}
-async function mqSmall(file){
-  if(!/^image\//.test(file.type))throw new Error("That file isn't an image. Use JPG, PNG or WebP.");
-  if(file.size>20e6)throw new Error("That image is over 20 MB. Try a smaller one.");
-  const url=URL.createObjectURL(file);
-  try{
-    const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>rej(new Error("Couldn't read that image."));i.src=url});
-    const MAX=240,k=Math.min(1,MAX/Math.max(img.naturalWidth,img.naturalHeight)),w=Math.max(1,Math.round(img.naturalWidth*k)),h=Math.max(1,Math.round(img.naturalHeight*k));
-    const c=document.createElement("canvas");c.width=w;c.height=h;const x=c.getContext("2d",{willReadFrequently:true});x.imageSmoothingQuality="high";x.drawImage(img,0,0,w,h);
-    const d=x.getImageData(0,0,w,h).data;let clear=0;for(let i=3;i<d.length;i+=4)if(d[i]<200)clear++;
-    if(clear>w*h*.02){let o=c.toDataURL("image/webp",.85);if(!o.startsWith("data:image/webp"))o=c.toDataURL("image/png");return o}
-    return c.toDataURL("image/jpeg",.85);
-  }finally{URL.revokeObjectURL(url)}
-}
-am.addEventListener("input",e=>{
-  const el=e.target,m=DB.marquee;
-  if(el.dataset.mq==="texts"){m.texts=el.value.split("\n").map(x=>x.trim().slice(0,90)).filter(Boolean).slice(0,12);mqPreview();mqSave()}
-  else if(el.dataset.mqc){const k=el.dataset.mqc,v=el.value.trim();if(!HEX6.test(v.startsWith("#")?v:"#"+v))return;const h=(v.startsWith("#")?v:"#"+v).toLowerCase();m[k]=h;
-    am.querySelectorAll(`[data-mqc="${k}"]`).forEach(o=>{if(o!==el&&o.value.toLowerCase()!==h)o.value=h});mqPreview();mqSave()}
-});
-am.addEventListener("change",async e=>{
-  const el=e.target,m=DB.marquee;
-  if(el.dataset.mq&&el.dataset.mq!=="texts"){
-    const k=el.dataset.mq;m[k]=el.type==="checkbox"?el.checked:el.value;saveDB();toast("Saved");mqPreview();return}
-  if(el.dataset.mqimg!==undefined){
-    const files=[...el.files].slice(0,5-m.images.length);if(!files.length)return;
-    for(const f of files){try{const prev=m.images.slice();m.images.push(await mqSmall(f));if(!saveDB()){m.images=prev;toast("Not enough storage space. Remove another photo first.");break}}catch(err){toast(err.message);break}}
-    if([...el.files].length>files.length)toast("Only 5 photos fit. Extra ones were skipped.");
-    renderAdmin();return}
-  if(el.dataset.mqfont!==undefined){
-    const f=el.files[0];if(!f)return;
-    if(f.size>1024*1024){toast("That font is over 1 MB. Use a smaller file or a .woff2 version.");el.value="";return}
-    if(!/\.(ttf|otf|woff2?)$/i.test(f.name)){toast("Use a .ttf, .otf, .woff or .woff2 file.");el.value="";return}
-    try{
-      const data=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(new Error("Couldn't read that file."));r.readAsDataURL(f)});
-      const test=new FontFace("DD Test",`url(${data})`);await test.load();
-      const prev={fontData:m.fontData,fontName:m.fontName,font:m.font};
-      Object.assign(m,{fontData:data,fontName:f.name.replace(/\.[^.]+$/,"").slice(0,40),font:"custom"});
-      if(!saveDB()){Object.assign(m,prev);toast("Not enough storage space for that font.")}else toast("Font added and selected");
-    }catch(err){toast("That file isn't a usable font.")}
-    renderAdmin();return}
-});
-am.addEventListener("click",e=>{
-  const b=e.target.closest("button");if(!b)return;const d=b.dataset,m=DB.marquee;
-  if(d.mqrm!==undefined){m.images.splice(+d.mqrm,1);saveDB();toast("Photo removed");renderAdmin()}
-  else if(d.mqfontrm!==undefined){m.fontData=null;m.fontName="";if(m.font==="custom")m.font="display";saveDB();toast("Font removed");renderAdmin()}
-  else if(d.mqreset!==undefined){armed(b,()=>{DB.marquee=defaultMarquee();saveDB();toast("Banner reset");renderAdmin()})}
-});
-
-/* --- landing page editor --- */
 const LP_DEFAULT_SVG=`<svg viewBox="0 0 30 24" aria-hidden="true"><path d="M3 21a12 12 0 0 1 24 0Z" fill="currentColor"/><circle cx="15" cy="5" r="2.6" fill="currentColor"/><rect x="1" y="20.5" width="28" height="3" rx="1.5" fill="currentColor"/></svg>`;
 function defaultPage(){return {name:"delidome",logo:"",brand:"#000096",bg:"#ffffff",ink:"#0B0B45",headFont:"display",bodyFont:"body",fonts:[],
   hero:{eyebrow:"Baked fresh every morning",title:"Warm cookies, boxed your way.",lede:"Pick a box, fill it with the flavors you love, and choose when you want it. Pickup or local delivery.",btn1:"Build a box",btn2:"See the flavors",bg:"",color:"#ffffff",mediaType:"none",src:"",overlay:35,floats:true,cookies:["","","","","",""]},
@@ -2297,7 +1076,6 @@ function videoHTML(src,{bg=false}={}){
   if(m)return `<div class="vf"><iframe src="https://player.vimeo.com/video/${m[1]}" title="Video" loading="lazy" allow="fullscreen; picture-in-picture" allowfullscreen></iframe></div>`;
   return `<p><a href="${esc(src)}" target="_blank" rel="noopener">Watch the video</a></p>`;
 }
-
 const HERO_SPOTS=[[3,6],[85,4],[-4,46],[90,40],[2,84],[86,82]];
 function heroFloats(dome,h){
   if(!dome)return;dome.querySelectorAll(".float").forEach(n=>n.remove());
@@ -2360,564 +1138,22 @@ function renderLanding(){
   $("#lpTop").innerHTML=pg.blocks.filter(b=>b.pos==="top").map(blk).join("");
   $("#lpBottom").innerHTML=pg.blocks.filter(b=>b.pos!=="top").map(blk).join("");
 }
-
-const lpGet=path=>path.split(".").reduce((o,k)=>o==null?o:o[k],DB.page);
-function lpSet(path,v){const ks=path.split(".");let o=DB.page;for(let i=0;i<ks.length-1;i++)o=o[ks[i]];o[ks[ks.length-1]]=v}
-const HEX_OK=/^#[0-9a-f]{6}$/i;
-const lpIn=(label,path,o={})=>`<label class="af">${label}${o.rows?`<textarea class="in" rows="${o.rows}" data-lp="${path}" maxlength="${o.max||600}" placeholder="${esc(o.ph||"")}">${esc(lpGet(path)||"")}</textarea>`:`<input class="in" data-lp="${path}" maxlength="${o.max||120}" value="${esc(lpGet(path)||"")}" placeholder="${esc(o.ph||"")}">`}</label>`;
-function lpCol(label,path,fallback,optional){
-  const raw=lpGet(path)||"",v=HEX_OK.test(raw)?raw:fallback;
-  return `<div class="af">${label}<div class="colin"><input type="color" data-lpc="${path}" value="${v}" aria-label="${esc(label)} picker"><input class="in" data-lpc="${path}" ${optional?'data-lpopt="1"':""} value="${esc(raw)}" placeholder="${optional?"default":""}" maxlength="7" aria-label="${esc(label)} hex">${optional&&raw?`<button class="ghost" type="button" data-lpclear="${path}">Reset</button>`:""}</div></div>`;
-}
-function lpFontSel(label,path){
-  const pg=DB.page,cur=lpGet(path);
-  const opts=Object.entries(MQ_FONTS).map(([k,v])=>`<option value="${k}" ${cur===k?"selected":""}>${v[0]}</option>`).join("")+pg.fonts.map(f=>`<option value="f:${f.id}" ${cur==="f:"+f.id?"selected":""}>${esc(f.name)} (uploaded)</option>`).join("");
-  return `<label class="af">${label}<select class="in" data-lp="${path}">${opts}</select></label>`;
-}
-function lpMedia(base,obj,{video=true,imageLabel="Image"}={}){
-  const t=obj.mediaType||"none",src=obj.src||"",isData=/^data:/i.test(src);
-  let body="";
-  if(t==="image"){
-    body=`${src?`<img class="lpthumb" src="${esc(safeMedia(src))}" alt="Current image">`:""}
-    <div class="colin"><label class="ghost mqbtn">${src?"Replace image":"Upload image"}<input type="file" accept="image/*" hidden data-lpimg="${base}.src"></label>${src?`<button class="danger" type="button" data-lpclear="${base}.src">Remove</button>`:""}</div>
-    <label class="af">Or paste an image link (https)<input class="in" data-lp="${base}.src" value="${isData?"":esc(src)}" placeholder="${isData?"Uploaded file":"https://..."}"></label>`;
-  }else if(t==="video"){
-    const vh=src?videoHTML(src,{bg:base==="hero"}):"";
-    body=`${vh&&/<video/.test(vh)?vh.replace("<video",'<video class="lpthumb" style="max-width:280px"').replace(" autoplay","").replace(" muted loop"," muted controls"):src?`<p class="note">Video linked.</p>`:""}
-    <div class="colin"><label class="ghost mqbtn">${src?"Replace video":"Upload short video"}<input type="file" accept="video/mp4,video/webm" hidden data-lpvid="${base}.src"></label>${src?`<button class="danger" type="button" data-lpclear="${base}.src">Remove</button>`:""}</div>
-    <label class="af">Or paste a video link<input class="in" data-lp="${base}.src" value="${isData?"":esc(src)}" placeholder="${isData?"Uploaded file":base==="hero"?"https://.../video.mp4":"YouTube, Vimeo or .mp4 link"}"></label>
-    <p class="note">Uploads are limited to 3 MB. For longer videos, paste a link${base==="hero"?" to an .mp4 file":" (YouTube, Vimeo or .mp4)"}.</p>`;
-  }
-  return `<div class="stack" style="gap:10px"><label class="af">Media<select class="in" data-lp="${base}.mediaType" data-rr="1"><option value="none" ${t==="none"?"selected":""}>None</option><option value="image" ${t==="image"?"selected":""}>${imageLabel}</option>${video?`<option value="video" ${t==="video"?"selected":""}>Video</option>`:""}</select></label>${body}</div>`;
-}
-const LPOPEN={};
-function lpRender(){const y=scrollY;renderAdmin();scrollTo(0,y)}
-function viewLanding(){
-  const pg=DB.page,h=pg.hero;
-  const sec=(title,body,open,key)=>{key=key||title.replace(/ \(\d+\)$/,"");const o=LPOPEN[key]===undefined?open:LPOPEN[key];return `<details class="panel lpsec" data-sec="${esc(key)}" ${o?"open":""}><summary>${title}</summary><div class="lpbody">${body}</div></details>`};
-  return head("Landing page","Edit the words, photos, videos, fonts and colors of your shop's front page. Changes show in the shop straight away.")+MOCK+`
-  <div class="stack">
-  ${sec("Brand, colors and fonts",`
-    <div class="grid2">${lpIn("Brand name","name",{max:30})}
-      <div class="af">Logo image (optional)<div class="colin"><label class="ghost mqbtn">${pg.logo?"Replace logo":"Upload logo"}<input type="file" accept="image/*" hidden data-lpimg="logo"></label>${pg.logo?`<img class="lpthumb" style="max-height:36px;max-width:90px" src="${esc(safeMedia(pg.logo))}" alt="Logo"><button class="danger" type="button" data-lpclear="logo">Remove</button>`:""}</div></div></div>
-    <div class="grid3">${lpCol("Brand color (buttons, accents)","brand","#000096")}${lpCol("Page background","bg","#ffffff")}${lpCol("Text color","ink","#0B0B45")}</div>
-    <div class="grid2">${lpFontSel("Heading font","headFont")}${lpFontSel("Body font","bodyFont")}</div>
-    <div class="af">Your own fonts<div class="colin" style="flex-wrap:wrap">${pg.fonts.map(f=>`<span class="fchip">${esc(f.name)} <button class="danger" type="button" data-lpfontrm="${f.id}" style="padding:2px 8px">×</button></span>`).join("")}${pg.fonts.length<3?`<label class="ghost mqbtn">+ Upload font<input type="file" accept=".ttf,.otf,.woff,.woff2,font/*" hidden data-lpfont></label>`:""}</div>
-      <p class="note">Up to 3 fonts (.ttf, .otf, .woff, .woff2, 1 MB each). They appear in the font lists above. Only upload fonts you're licensed to use on the web.</p></div>`,true)}
-  ${sec("Top banner (hero)",`
-    <p class="note" style="margin:0">The banner's words, buttons, colors, picture and floating cookies now live in the <button class="ghost" type="button" data-gotab="hero" style="padding:4px 12px">Top banner</button> tab, where you can preview before saving.</p>
-    <div class="af">Info line under the banner<p class="note" style="margin:0">Each item is a line of text. Tick to show it. <b>{sizes}</b> becomes your box sizes (like "4, 6 or 12"), <b>{cutoff}</b> your order cutoff time, <b>{closed}</b> your closed days.</p></div>
-    ${pg.strip.items.map((it,i)=>`<div class="colin"><span class="sw"><input type="checkbox" data-lp="strip.items.${i}.on" ${it.on?"checked":""} aria-label="Show item ${i+1}"><span></span></span><input class="in" data-lp="strip.items.${i}.t" maxlength="80" value="${esc(it.t)}" aria-label="Info item ${i+1}"><button class="danger" type="button" data-lpsdel="${i}" aria-label="Delete item ${i+1}">×</button></div>`).join("")}
-    ${pg.strip.items.length<6?`<button class="ghost" type="button" data-lpsadd style="justify-self:start">+ Add item</button>`:""}`,true)}
-  ${sec(`Extra sections (${pg.blocks.length})`,`
-    <p class="sub" style="margin:0">Add image, video or text sections above or below the box builder. Use the Marquee banner tab for the running text strip.</p>
-    ${pg.blocks.map((b,i)=>`<div class="lpblock"><div class="mo-row"><b>Section ${i+1}</b><div class="colin"><button class="ghost" type="button" data-lpbup="${i}" ${i===0?"disabled":""} aria-label="Move up">↑</button><button class="ghost" type="button" data-lpbdown="${i}" ${i===pg.blocks.length-1?"disabled":""} aria-label="Move down">↓</button><button class="danger" type="button" data-lpbdel="${i}">Delete</button></div></div>
-      <div class="grid2"><label class="af">Where<select class="in" data-lp="blocks.${i}.pos"><option value="top" ${b.pos==="top"?"selected":""}>Above "Build your box"</option><option value="bottom" ${b.pos!=="top"?"selected":""}>Below the box builder</option></select></label>
-      <label class="af">Layout<select class="in" data-lp="blocks.${i}.layout" data-rr="1"><option value="right" ${b.layout==="right"?"selected":""}>Text left, media right</option><option value="left" ${b.layout==="left"?"selected":""}>Media left, text right</option><option value="full" ${b.layout==="full"?"selected":""}>Media on top, text centered</option><option value="text" ${b.layout==="text"?"selected":""}>Text only</option></select></label></div>
-      ${lpIn("Heading",`blocks.${i}.heading`,{max:90})}${lpIn("Text",`blocks.${i}.text`,{rows:3,max:600})}
-      ${b.layout!=="text"?lpMedia(`blocks.${i}`,b):""}
-      <div class="grid2">${lpIn("Button label (optional)",`blocks.${i}.btnLabel`,{max:30})}${lpIn("Button link (#build, #menu or https://...)",`blocks.${i}.btnLink`,{max:200,ph:"#build"})}</div>
-      <div class="grid2">${lpCol("Section background",`blocks.${i}.bg`,"#ffffff",true)}${lpCol("Section text color",`blocks.${i}.color`,"#0B0B45",true)}</div></div>`).join("")}
-    ${pg.blocks.length<8?`<button class="btn btn-blue btn-sm" type="button" data-lpbadd style="justify-self:start">+ Add section</button>`:`<p class="note">Maximum of 8 sections.</p>`}`,pg.blocks.length>0)}
-  ${sec("Build your box heading",`${lpIn("Heading","build.title",{max:60})}${lpIn("Intro text","build.intro",{rows:3,max:300})}`)}
-  ${sec("Come say hello and FAQ",`
-    <div class="grid2">${lpIn("Heading","visit.title",{max:60})}${lpIn("FAQ heading","visit.faqTitle",{max:60})}</div>
-    ${lpIn("Text","visit.text",{rows:2,max:300})}${lpCol("Section background","visit.bg","#EEF0FF",true)}
-    <p class="note">Opening hours and the address are edited in Shop settings. In an answer, <b>{cutoff}</b> becomes your order cutoff time.</p>
-    ${pg.faq.map((f,i)=>`<div class="lpblock">${lpIn("Question",`faq.${i}.q`,{max:120})}${lpIn("Answer",`faq.${i}.a`,{rows:3,max:500})}<button class="danger" type="button" data-lpfdel="${i}" style="justify-self:start">Delete question</button></div>`).join("")}
-    ${pg.faq.length<8?`<button class="btn btn-blue btn-sm" type="button" data-lpfadd style="justify-self:start">+ Add question</button>`:""}`)}
-  ${sec("Footer",`${lpIn("Footer text","footer.text",{max:120})}<div class="grid2">${lpCol("Footer background","footer.bg",pg.brand,true)}${lpCol("Footer text color","footer.color","#ffffff")}</div>`)}
-  <div><button class="ghost" type="button" data-lpreset>Reset landing page to default</button></div>
-  </div>`;
-}
-let lpT;function lpSave(){clearTimeout(lpT);lpT=setTimeout(()=>{if(saveDB())toast("Saved");else toast("Not enough storage space. Remove a photo, video or font.")},400)}
-async function lpResize(file,MAX){
-  if(!/^image\//.test(file.type))throw new Error("That file isn't an image. Use JPG, PNG or WebP.");
-  if(file.size>25e6)throw new Error("That image is over 25 MB. Try a smaller one.");
-  const url=URL.createObjectURL(file);
-  try{
-    const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>rej(new Error("Couldn't read that image."));i.src=url});
-    const k=Math.min(1,MAX/Math.max(img.naturalWidth,img.naturalHeight)),w=Math.max(1,Math.round(img.naturalWidth*k)),h=Math.max(1,Math.round(img.naturalHeight*k));
-    const c=document.createElement("canvas");c.width=w;c.height=h;const x=c.getContext("2d",{willReadFrequently:true});x.imageSmoothingQuality="high";x.drawImage(img,0,0,w,h);
-    const px=x.getImageData(0,0,w,h).data;let clear=0;for(let i=3;i<px.length;i+=16)if(px[i]<200)clear++;
-    if(clear>(w*h/4)*.02){let o=c.toDataURL("image/webp",.85);if(!o.startsWith("data:image/webp"))o=c.toDataURL("image/png");return o}
-    return c.toDataURL("image/jpeg",.82);
-  }finally{URL.revokeObjectURL(url)}
-}
-const readData=f=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(new Error("Couldn't read that file."));r.readAsDataURL(f)});
-function lpTry(path,val,okMsg){const prev=lpGet(path);lpSet(path,val);if(!saveDB()){lpSet(path,prev);toast("Not enough storage space. Remove another photo, video or font first.");return false}if(okMsg)toast(okMsg);return true}
-am.addEventListener("input",e=>{
-  const el=e.target;
-  if(el.dataset.lp&&el.type!=="range"&&el.tagName!=="SELECT"&&el.type!=="checkbox"){lpSet(el.dataset.lp,el.value);lpSave()}
-  else if(el.dataset.lpc){const path=el.dataset.lpc,raw=el.value.trim();
-    if(raw===""&&el.dataset.lpopt){lpSet(path,"");lpSave();return}
-    const v=raw.startsWith("#")?raw:"#"+raw;if(!HEX_OK.test(v))return;const hx=v.toLowerCase();lpSet(path,hx);
-    am.querySelectorAll(`[data-lpc="${path}"]`).forEach(o=>{if(o!==el&&o.value.toLowerCase()!==hx)o.value=hx});lpSave()}
-});
-am.addEventListener("change",async e=>{
-  const el=e.target;
-  if(el.dataset.lp&&(el.tagName==="SELECT"||el.type==="range"||el.type==="checkbox")){
-    const v=el.type==="checkbox"?el.checked:el.dataset.num?+el.value:el.value;lpSet(el.dataset.lp,v);saveDB();toast("Saved");if(el.dataset.rr||el.dataset.lp.endsWith("mediaType"))lpRender();return}
-  if(el.dataset.lp&&el.dataset.lp.endsWith(".src")){lpRender();return}
-  if(el.dataset.lpimg){const f=el.files[0];if(!f)return;try{const d=await lpResize(f,el.dataset.lpimg==="logo"?240:1600);lpTry(el.dataset.lpimg,d,"Image added")}catch(err){toast(err.message)}lpRender();return}
-  if(el.dataset.lpvid){const f=el.files[0];if(!f)return;
-    if(f.size>3*1024*1024){toast("That video is over 3 MB. Paste a link to it instead (YouTube, Vimeo or an .mp4 file).");el.value="";return}
-    try{lpTry(el.dataset.lpvid,await readData(f),"Video added")}catch(err){toast(err.message)}lpRender();return}
-  if(el.dataset.lpfont!==undefined){const f=el.files[0];if(!f)return;const pg=DB.page;
-    if(pg.fonts.length>=3){toast("You can keep up to 3 fonts. Remove one first.");return}
-    if(f.size>1024*1024){toast("That font is over 1 MB. Use a smaller file or a .woff2 version.");el.value="";return}
-    if(!/\.(ttf|otf|woff2?)$/i.test(f.name)){toast("Use a .ttf, .otf, .woff or .woff2 file.");el.value="";return}
-    try{const data=await readData(f);await new FontFace("DD-Test",`url(${data})`).load();
-      const rec={id:uid(),name:f.name.replace(/\.[^.]+$/,"").slice(0,40),data};pg.fonts.push(rec);
-      if(!saveDB()){pg.fonts.pop();toast("Not enough storage space for that font.")}else toast("Font added. Pick it in the font lists.")}
-    catch(err){toast("That file isn't a usable font.")}
-    lpRender();return}
-});
-am.addEventListener("click",e=>{
-  const b=e.target.closest("button");if(!b)return;const d=b.dataset,pg=DB.page;
-  if(d.lpclear){lpSet(d.lpclear,"");saveDB();toast("Cleared");lpRender()}
-  else if(d.lpfontrm){pg.fonts=pg.fonts.filter(f=>f.id!==d.lpfontrm);["headFont","bodyFont"].forEach(k=>{if(pg[k]==="f:"+d.lpfontrm)pg[k]=k==="headFont"?"display":"body"});saveDB();toast("Font removed");lpRender()}
-  else if(d.lpbadd!==undefined){pg.blocks.push({id:uid(),pos:"bottom",layout:"right",heading:"New section",text:"Write something here.",mediaType:"none",src:"",btnLabel:"",btnLink:"",bg:"",color:""});saveDB();toast("Section added");lpRender()}
-  else if(d.lpbdel!==undefined){armed(b,()=>{pg.blocks.splice(+d.lpbdel,1);saveDB();toast("Section deleted");lpRender()})}
-  else if(d.lpbup!==undefined||d.lpbdown!==undefined){const i=+(d.lpbup??d.lpbdown),j=d.lpbup!==undefined?i-1:i+1;if(j<0||j>=pg.blocks.length)return;[pg.blocks[i],pg.blocks[j]]=[pg.blocks[j],pg.blocks[i]];saveDB();lpRender()}
-  else if(d.lpsadd!==undefined){pg.strip.items.push({t:"New item",on:true});saveDB();lpRender()}
-  else if(d.lpsdel!==undefined){pg.strip.items.splice(+d.lpsdel,1);saveDB();lpRender()}
-  else if(d.lpfadd!==undefined){pg.faq.push({q:"New question",a:"Your answer."});saveDB();lpRender()}
-  else if(d.lpfdel!==undefined){armed(b,()=>{pg.faq.splice(+d.lpfdel,1);saveDB();toast("Question deleted");lpRender()})}
-  else if(d.lpreset!==undefined){armed(b,()=>{DB.page=defaultPage();saveDB();toast("Landing page reset");lpRender()})}
-});
-am.addEventListener("toggle",e=>{const d=e.target;if(d.dataset&&d.dataset.sec)LPOPEN[d.dataset.sec]=d.open},true);
-
-/* --- Complaints (admin) --- */
-A.cpFilter="all";A.cpOpen=null;
-function viewComplaints(){
-  const all=DB.orders.filter(o=>o.complaint).sort((a,b)=>b.complaint.at-a.complaint.at);
-  const cnt=k=>k==="all"?all.length:all.filter(o=>o.complaint.status===k).length;
-  const rows=all.filter(o=>A.cpFilter==="all"||o.complaint.status===A.cpFilter);
-  const scopeTxt=c=>c.scope==="order"?"Whole order":c.items.map(id=>{const p=prod(id);return p?p.name:"Removed flavor"}).join(", ");
-  return head("Complaints","Problems customers report within "+DB.settings.complaintWindowH+" hours of delivery or pickup. Customers are asked to keep an uncut unboxing video as proof.")+MOCK+`
-  <div class="stack"><section class="panel">
-    <div class="chips" style="margin-bottom:12px">${[["all","All"],...Object.entries(CP_STATUS)].map(([k,l])=>`<button class="fchip" type="button" data-cpf="${k}" aria-pressed="${A.cpFilter===k}">${l} <i>${cnt(k)}</i></button>`).join("")}</div>
-    ${rows.length?`<div class="tablewrap"><table class="t"><thead><tr><th>Order</th><th>Customer</th><th>Problem</th><th>Items</th><th>Status</th></tr></thead><tbody>
-    ${rows.map(o=>{const c=o.complaint;return `<tr data-cpopen="${o.id}" style="cursor:pointer"><td><span class="code-c">${esc(o.code)}</span><span class="meta">${fmtAgo(c.at)}</span></td><td>${esc(o.customer.name)}<span class="meta">${esc(o.customer.phone)}</span></td><td><b>${esc(c.reason)}</b><span class="meta">${esc(c.text.slice(0,50))}${c.text.length>50?"…":""}</span></td><td>${esc(scopeTxt(c))}</td><td><span class="mo-chip st-${c.status==="resolved"?"completed":c.status==="rejected"?"cancelled":c.status==="review"?"baking":"awaiting"}">${CP_STATUS[c.status]}</span></td></tr>`}).join("")}
-    </tbody></table></div>`:`<div class="empty">No complaints${A.cpFilter==="all"?" yet":" in this view"}.</div>`}
-  </section></div>`;
-}
-function openComplaint(id){
-  const o=DB.orders.find(x=>x.id===id);if(!o||!o.complaint)return;
-  if(SBH.on&&o.complaint.photoCount>0&&!(o.complaint.photos||[]).length&&!o._ft){o._ft=1;SBH.adminFiles(o).then(()=>openComplaint(id));return}A.cpOpen=id;const c=o.complaint;
-  const names=c.scope==="order"?"Whole order":c.items.map(i=>{const p=prod(i);return p?p.name:"Removed flavor"}).join(", ");
-  const wa=String(o.customer.phone).replace(/\D/g,"");
-  $("#drawer").innerHTML=`<div class="drawer-card" role="dialog" aria-modal="true" aria-label="Complaint for ${esc(o.code)}">
-    <div class="sheet-top"><div><h3>${esc(o.code)} complaint</h3><span class="note">Sent ${fmtDT(c.at)}</span></div><button class="x" type="button" data-close aria-label="Close">✕</button></div>
-    <div class="dsec"><h4>Problem</h4><dl class="dl"><dt>Type</dt><dd>${esc(c.reason)}</dd><dt>About</dt><dd>${esc(names)}</dd><dt>Delivered</dt><dd>${o.completedAt?fmtDT(o.completedAt):"n/a"}</dd></dl><p style="white-space:pre-line;margin:10px 0 0">${esc(c.text)}</p>
-      ${c.photos.length?`<div class="cphotos" style="margin-top:10px">${c.photos.map(src=>`<a href="${esc(imgOk(src))}" target="_blank" rel="noopener"><img src="${esc(imgOk(src))}" alt="Customer photo"></a>`).join("")}</div>`:""}
-      <p class="hint" style="margin:10px 0 0">The customer confirmed they have an uncut unboxing video. Ask for it on WhatsApp before you decide.</p></div>
-    <div class="dsec"><h4>Customer</h4><dl class="dl"><dt>Name</dt><dd>${esc(o.customer.name)}</dd><dt>WhatsApp</dt><dd>${esc(o.customer.phone)} ${wa?`<a href="https://wa.me/${wa}" target="_blank" rel="noopener">Open WhatsApp</a>`:""}</dd><dt>Email</dt><dd>${esc(o.customer.email)}</dd><dt>${o.mode==="delivery"?"Delivery":"Pickup"}</dt><dd>${fmtDay(o.day)}, ${esc(o.time)}</dd></dl></div>
-    <div class="dsec"><h4>Your response</h4><div class="stack" style="gap:10px">
-      <label class="af">Status<select class="in" id="cpStatus">${Object.entries(CP_STATUS).map(([k,l])=>`<option value="${k}" ${c.status===k?"selected":""}>${l}</option>`).join("")}</select></label>
-      <label class="af">Reply (the customer sees this in My orders)<textarea class="in" id="cpReply" rows="4" maxlength="600" placeholder="e.g. Sorry about that. We'll send a replacement box tomorrow.">${esc(c.reply||"")}</textarea></label>
-      <button class="btn btn-blue btn-sm" type="button" data-cpsave style="justify-self:start">Save response</button></div></div>
-  </div>`;
-  $("#drawer").hidden=false;
-}
-$("#drawer").addEventListener("click",e=>{
-  if(e.target.closest("[data-cpsave]")){const o=DB.orders.find(x=>x.id===A.cpOpen);if(!o||!o.complaint)return;
-    o.complaint.status=$("#cpStatus").value;o.complaint.reply=$("#cpReply").value.trim();o.complaint.updatedAt=Date.now();saveDB();toast("Response saved");renderAdmin();openComplaint(o.id)}
-});
-am.addEventListener("click",e=>{
-  const f=e.target.closest("[data-cpf]");if(f){A.cpFilter=f.dataset.cpf;renderAdmin();return}
-  const r=e.target.closest("tr[data-cpopen]");if(r)openComplaint(r.dataset.cpopen);
-});
-
-/* --- shipping labels --- */
-/* Minimal QR encoder: byte mode, error correction M, versions 1-10 */
-function qrEncode(text){
-  const ECC=[-1,10,16,26,18,24,16,18,22,22,26],BLK=[-1,1,1,1,2,2,4,4,4,5,5];
-  const bytes=[...unescape(encodeURIComponent(text))].map(c=>c.charCodeAt(0));
-  const raw=v=>{let r=(16*v+128)*v+64;if(v>=2){const a=Math.floor(v/7)+2;r-=(25*a-10)*a-55;if(v>=7)r-=36}return r};
-  let ver=0,cap=0;
-  for(let v=1;v<=10;v++){cap=Math.floor(raw(v)/8)-ECC[v]*BLK[v];if(4+(v>=10?16:8)+8*bytes.length<=cap*8){ver=v;break}}
-  if(!ver)throw new Error("Text is too long for the QR code");
-  const bits=[];const put=(val,n)=>{for(let i=n-1;i>=0;i--)bits.push((val>>>i)&1)};
-  put(4,4);put(bytes.length,ver>=10?16:8);bytes.forEach(b=>put(b,8));
-  put(0,Math.min(4,cap*8-bits.length));while(bits.length%8)bits.push(0);
-  for(let pad=0xEC;bits.length<cap*8;pad^=0xEC^0x11)put(pad,8);
-  const data=[];for(let i=0;i<bits.length;i+=8){let b=0;for(let j=0;j<8;j++)b=b<<1|bits[i+j];data.push(b)}
-  const mul=(x,y)=>{let z=0;for(let i=7;i>=0;i--){z=(z<<1)^((z>>>7)*0x11D);z^=((y>>>i)&1)*x}return z};
-  const gen=d=>{const r=Array(d).fill(0);r[d-1]=1;let root=1;for(let i=0;i<d;i++){for(let j=0;j<d;j++){r[j]=mul(r[j],root);if(j+1<d)r[j]^=r[j+1]}root=mul(root,2)}return r};
-  const rs=(blk,g)=>{const rem=Array(g.length).fill(0);blk.forEach(b=>{const f=b^rem.shift();rem.push(0);g.forEach((c,i)=>rem[i]^=mul(c,f))});return rem};
-  const nb=BLK[ver],el=ECC[ver],rawCw=Math.floor(raw(ver)/8),nShort=nb-rawCw%nb,shortLen=Math.floor(rawCw/nb),g=gen(el);
-  const blocks=[];for(let i=0,k=0;i<nb;i++){const dl=shortLen-el+(i<nShort?0:1);const d=data.slice(k,k+dl);k+=dl;const e=rs(d,g);if(i<nShort)d.push(0);blocks.push(d.concat(e))}
-  const all=[];for(let i=0;i<blocks[0].length;i++)blocks.forEach((b,j)=>{if(i!==shortLen-el||j>=nShort)all.push(b[i])});
-  const size=ver*4+17,m=Array.from({length:size},()=>Array(size).fill(false)),fn=Array.from({length:size},()=>Array(size).fill(false));
-  const set=(x,y,v)=>{m[y][x]=v;fn[y][x]=true};
-  for(let i=0;i<size;i++){set(6,i,i%2===0);set(i,6,i%2===0)}
-  const finder=(cx,cy)=>{for(let dy=-4;dy<=4;dy++)for(let dx=-4;dx<=4;dx++){const d=Math.max(Math.abs(dx),Math.abs(dy)),x=cx+dx,y=cy+dy;if(x>=0&&x<size&&y>=0&&y<size)set(x,y,d!==2&&d!==4)}};
-  finder(3,3);finder(size-4,3);finder(3,size-4);
-  if(ver>1){const na=Math.floor(ver/7)+2,step=Math.ceil((ver*4+4)/(na*2-2))*2,pos=[6];for(let p=size-7;pos.length<na;p-=step)pos.splice(1,0,p);
-    pos.forEach((cx,i)=>pos.forEach((cy,j)=>{if((i===0&&j===0)||(i===0&&j===na-1)||(i===na-1&&j===0))return;for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++)set(cx+dx,cy+dy,Math.max(Math.abs(dx),Math.abs(dy))!==1)}))}
-  const fmt=mask=>{const dd=0<<3|mask;let r=dd;for(let i=0;i<10;i++)r=(r<<1)^((r>>>9)*0x537);const b=((dd<<10)|r)^0x5412,bit=i=>((b>>>i)&1)===1;
-    for(let i=0;i<=5;i++)set(8,i,bit(i));set(8,7,bit(6));set(8,8,bit(7));set(7,8,bit(8));for(let i=9;i<15;i++)set(14-i,8,bit(i));
-    for(let i=0;i<8;i++)set(size-1-i,8,bit(i));for(let i=8;i<15;i++)set(8,size-15+i,bit(i));set(8,size-8,true)};
-  fmt(0);
-  if(ver>=7){let r=ver;for(let i=0;i<12;i++)r=(r<<1)^((r>>>11)*0x1F25);const b=ver<<12|r;for(let i=0;i<18;i++){const c=((b>>>i)&1)===1,a=size-11+i%3,bb=Math.floor(i/3);set(a,bb,c);set(bb,a,c)}}
-  let k=0;for(let right=size-1;right>=1;right-=2){if(right===6)right=5;for(let vert=0;vert<size;vert++)for(let j=0;j<2;j++){const x=right-j,up=((right+1)&2)===0,y=up?size-1-vert:vert;if(!fn[y][x]&&k<all.length*8){m[y][x]=((all[k>>>3]>>>(7-(k&7)))&1)===1;k++}}}
-  const maskFn=[(x,y)=>(x+y)%2===0,(x,y)=>y%2===0,(x,y)=>x%3===0,(x,y)=>(x+y)%3===0,(x,y)=>(Math.floor(x/3)+Math.floor(y/2))%2===0,(x,y)=>x*y%2+x*y%3===0,(x,y)=>(x*y%2+x*y%3)%2===0,(x,y)=>((x+y)%2+x*y%3)%2===0];
-  const applyMask=mk=>{for(let y=0;y<size;y++)for(let x=0;x<size;x++)if(!fn[y][x]&&maskFn[mk](x,y))m[y][x]=!m[y][x]};
-  const penalty=()=>{let p=0;const line=a=>{let run=1;for(let i=1;i<a.length;i++){if(a[i]===a[i-1]){run++;if(run===5)p+=3;else if(run>5)p++}else run=1}
-      const s=a.map(v=>v?1:0).join("");for(const pat of ["10111010000","00001011101"]){let i=-1;while((i=s.indexOf(pat,i+1))>=0)p+=40}};
-    for(let y=0;y<size;y++)line(m[y]);for(let x=0;x<size;x++)line(m.map(r=>r[x]));
-    for(let y=0;y<size-1;y++)for(let x=0;x<size-1;x++){const c=m[y][x];if(c===m[y][x+1]&&c===m[y+1][x]&&c===m[y+1][x+1])p+=3}
-    let dark=0;m.forEach(r=>r.forEach(v=>{if(v)dark++}));p+=Math.floor(Math.abs(dark*20-size*size*10)/(size*size))*10;return p};
-  let best=0,bp=1e9;for(let mk=0;mk<8;mk++){applyMask(mk);fmt(mk);const p=penalty();if(p<bp){bp=p;best=mk}applyMask(mk)}
-  applyMask(best);fmt(best);
-  return {size,m};
-}
-function qrSvg(text){const {size,m}=qrEncode(text);let d="";for(let y=0;y<size;y++)for(let x=0;x<size;x++)if(m[y][x])d+=`M${x} ${y}h1v1h-1z`;return `<svg viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges"><path d="${d}" fill="#000"/></svg>`}
-
-
-const LBL_CSS=`.lbl{width:4in;height:6in;box-sizing:border-box;padding:.17in;background:#fff;color:#000;font-family:Arial,Helvetica,sans-serif;display:flex;flex-direction:column;gap:.06in;overflow:hidden;break-after:page;page-break-after:always;text-align:left}
-.lbl *{box-sizing:border-box}
-.lbl-h{display:flex;align-items:center;gap:8px;border-bottom:3px solid #000;padding-bottom:.05in}
-.lbl-h img{max-height:.4in;max-width:1.1in;object-fit:contain;display:block}
-.lbl-h b{font-size:19px;font-weight:900;letter-spacing:.02em;text-transform:uppercase;flex:1;line-height:1.05;min-width:0;overflow-wrap:anywhere}
-.lbl-h span{font-size:9px;text-align:right;font-weight:700;line-height:1.2}
-.lbl-from{font-size:9px;line-height:1.25}.lbl-from small{font-size:8px;font-weight:700;display:block;letter-spacing:.08em}
-.lbl-box{border:2px solid #000;padding:.055in .08in}
-.lbl-box>small{display:block;font-size:8px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:2px}
-.lbl-to{flex:1;min-height:1.2in}
-.lbl-to .nm{font-size:20px;font-weight:900;line-height:1.1;overflow-wrap:anywhere}.lbl-to .ph{font-size:13px;font-weight:700;margin-top:2px}.lbl-to .ad{font-size:12px;line-height:1.3;margin-top:3px;overflow-wrap:anywhere}.lbl-to .wh{font-size:10px;font-weight:700;margin-top:5px}
-.lbl-awb .no{font-family:"Courier New",monospace;font-size:16px;font-weight:700;letter-spacing:.08em;min-height:18px}
-.lbl-items ul{margin:0;padding:0;list-style:none;font-size:11px;line-height:1.3}.lbl-items li b{font-weight:900}
-.lbl-note{font-size:10px;font-weight:700;line-height:1.25;white-space:pre-line;overflow-wrap:anywhere}
-.lbl-warn{background:#000;color:#fff;text-align:center;padding:.06in .05in;font-weight:900;font-size:13px;line-height:1.25;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.lbl-warn span{display:block;font-size:11px}
-.lbl-f{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;margin-top:auto}
-.lbl-tot{font-size:16px;font-weight:900;display:flex;align-items:center;flex-wrap:wrap;gap:6px}
-.lbl-paid{display:inline-block;border:2px solid #000;padding:1px 8px;font-weight:900;font-size:12px}
-.lbl-qr{text-align:center;width:.95in;font-size:7px;line-height:1.1;font-weight:700;flex:none}.lbl-qr svg{width:.82in;height:.82in;display:block;margin:0 auto 2px}`;
-document.head.insertAdjacentHTML("beforeend",`<style id="lblCss">${LBL_CSS}
-#printArea{display:none}
-@media print{body.print-labels>*:not(#printArea){display:none!important}body.print-labels #printArea{display:block}body.print-labels{background:#fff!important;margin:0}}
-.lblwrap{overflow:hidden;border:1px solid var(--ice-2);border-radius:10px;background:#fff}
-.lblwrap .lbl{transform-origin:top left}
-.lbl-unsaved{color:#9A3B00;font-size:13px;font-weight:600}</style>`);
-document.body.insertAdjacentHTML("beforeend",'<div id="printArea" aria-hidden="true"></div>');
-const PAID_ST=["new","baking","ready","completed"];
-function labelHTML(o,L){
-  L=L||DB.label;const nm=(DB.page.name||"Delidome").toUpperCase(),del=o.mode==="delivery";
-  const items=Object.entries(o.items).map(([id,n])=>{const p=prod(id);return `<li>${n}× ${esc(p?p.name:"Flavor")}</li>`}).join("");
-  const ad=(o.addons||[]).map(id=>{const a=DB.addons.find(x=>x.id===id);return a?`<li>+ ${esc(a.name)}</li>`:""}).join("");
-  let qr="";if(L.qr&&L.qr.trim()){try{qr=`<div class="lbl-qr">${qrSvg(L.qr.trim())}${esc(L.qrCaption||"")}</div>`}catch(e){qr=""}}
-  const paid=PAID_ST.includes(o.status);
-  const notes=[L.notes,o.note?`GIFT NOTE: ${o.note}`:""].filter(Boolean).join("\n");
-  return `<div class="lbl">
-    <div class="lbl-h">${L.logo?`<img src="${esc(L.logo)}" alt="">`:""}<b>${esc(nm)}</b><span>${esc(o.code)}<br>${esc(fmtShort(o.createdAt))}</span></div>
-    <div class="lbl-from"><small>FROM</small>${esc(DB.page.name||"Delidome")}<br>${esc(DB.settings.address)}</div>
-    <div class="lbl-box lbl-to"><small>${del?"Ship to":"Pickup"}</small><div class="nm">${esc(o.customer.name)}</div><div class="ph">${esc(o.customer.phone)}</div>${del&&o.customer.address?`<div class="ad">${esc(o.customer.address)}</div>`:""}<div class="wh">${del?"DELIVER":"PICK UP"}: ${esc(fmtDay(o.day))} · ${esc(o.time)}</div></div>
-    ${del?`<div class="lbl-box lbl-awb"><small>Courier: ${esc(o.courier||"—")} · Airway bill</small><div class="no">${esc(o.awb||"")}</div></div>`:""}
-    <div class="lbl-box lbl-items"><small>Items</small><ul><li><b>Box of ${o.size}</b></li>${items}${ad}</ul></div>
-    ${notes?`<div class="lbl-note">${esc(notes)}</div>`:""}
-    ${L.warnOn&&(L.warn1||L.warn2)?`<div class="lbl-warn">${esc(L.warn1||"")}${L.warn2?`<span>${esc(L.warn2)}</span>`:""}</div>`:""}
-    <div class="lbl-f"><div class="lbl-tot">${money(o.total)}<span class="lbl-paid">${paid?"PAID":"UNPAID"}</span></div>${qr}</div></div>`;
-}
-function sampleOrder(){
-  const ps=DB.products.filter(p=>p.status!=="hidden").slice(0,3),items={};ps.forEach((p,i)=>items[p.id]=[2,1,3][i]||1);
-  return {code:"DD-SAMPLE",createdAt:Date.now(),customer:{name:"Sample Customer",phone:"0812 3456 7890",address:"Jl. Contoh No. 1, Depok"},mode:"delivery",courier:"JNE",awb:"JP1234567890",size:Object.values(items).reduce((a,b)=>a+b,0),items,addons:[],day:ymd(addDays(today0(),1)),time:DB.settings.times[0]||"10 to 11am",note:"",total:42.5,status:"new"};
-}
-function labelGate(orders){
-  const ok=orders.filter(o=>!o.id||canLabel(o));
-  if(ok.length<orders.length)toast(ok.length?"Skipped orders that aren't paid yet.":"Labels can be printed after payment is confirmed.");
-  return ok;
-}
-function markPrinted(orders){const r=orders.filter(o=>o.id);if(!r.length)return;r.forEach(o=>o.labelAt=Date.now());saveDB();if(A.tab==="orders")renderAdmin()}
-function printLabels(orders,L){
-  orders=labelGate(orders);
-  if(!orders.length){return}
-  markPrinted(orders);
-  $("#printArea").innerHTML=orders.map(o=>labelHTML(o,L)).join("");
-  const st=document.createElement("style");st.id="pageStyle";st.textContent="@page{size:4in 6in;margin:0}";document.head.appendChild(st);
-  document.body.classList.add("print-labels");
-  const done=()=>{document.body.classList.remove("print-labels");st.remove();$("#printArea").innerHTML="";removeEventListener("afterprint",done)};
-  addEventListener("afterprint",done);
-  try{window.print()}catch(e){done();toast("Printing isn't available here. Use Download labels instead.")}
-  setTimeout(()=>{if(document.body.classList.contains("print-labels"))done()},60000);
-}
-function downloadLabels(orders,L){
-  orders=labelGate(orders);
-  if(!orders.length){return}
-  markPrinted(orders);
-  const html=`<!doctype html><html><head><meta charset="utf-8"><title>Shipping labels</title><style>@page{size:4in 6in;margin:0}body{margin:0;background:#eee}${LBL_CSS}@media screen{.lbl{margin:12px auto;box-shadow:0 2px 10px rgba(0,0,0,.2)}}@media print{body{background:#fff}.lbl{margin:0}}</style></head><body>${orders.map(o=>labelHTML(o,L)).join("")}<script>onload=function(){setTimeout(function(){print()},400)}<\/script></body></html>`;
-  const name=`delidome-labels-${ymd(new Date())}.html`;
-  (async()=>{
-    let dl=null;try{dl=window.claude&&await window.claude.use("downloads")}catch(e){}
-    if(dl){try{await dl.save({filename:name,data:html});toast("Label file saved. Open it to print.")}catch(err){if(err&&err.code!=="declined")toast("Couldn't save the label file here.")}return}
-    const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([html],{type:"text/html"}));a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);
-    toast("Label file downloaded. Open it to print.");
-  })();
-}
-/* --- printable bake sheet --- */
-const BK_CSS=`.bk{font-family:Arial,Helvetica,sans-serif;color:#000;font-size:12px;line-height:1.35;padding:0}
-.bk h1{font-size:22px;margin:0 0 2px}.bk .bk-sub{color:#444;margin:0 0 10px}
-.bk h2{font-size:14px;margin:16px 0 6px;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid #000;padding-bottom:3px}
-.bk table{width:100%;border-collapse:collapse}.bk th,.bk td{border:1px solid #888;padding:5px 7px;text-align:left;vertical-align:top}
-.bk th{background:#eee;font-size:11px;text-transform:uppercase;letter-spacing:.05em}
-.bk td.n{text-align:right;font-weight:700;font-size:15px;width:60px}.bk td.c{width:28px;text-align:center;font-size:16px}
-.bk .bk-sum{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}.bk .bk-sum span{border:1px solid #000;border-radius:99px;padding:2px 10px;font-weight:700}
-.bk .bk-flag{font-weight:700;border:1px solid #000;padding:0 4px;margin-left:4px;font-size:10px}
-.bk tr{break-inside:avoid}`;
-function bakeSheetHTML(day){
-  const live=DB.orders.filter(o=>o.status!=="cancelled"&&o.status!=="awaiting"&&o.status!=="completed"&&o.day===day).sort((a,b)=>DB.settings.times.indexOf(a.time)-DB.settings.times.indexOf(b.time)||a.createdAt-b.createdAt);
-  const agg={};let cookies=0;const bySize={};let pick=0,del=0;
-  live.forEach(o=>{Object.entries(o.items).forEach(([id,n])=>{agg[id]=(agg[id]||0)+n;cookies+=n});bySize[o.size]=(bySize[o.size]||0)+1;o.mode==="delivery"?del++:pick++});
-  const rows=Object.entries(agg).sort((a,b)=>b[1]-a[1]);
-  return `<div class="bk"><h1>Bake sheet · ${esc(fmtDay(day))}</h1><p class="bk-sub">${esc(DB.page.name||"Delidome")} · printed ${esc(fmtDT(Date.now()))}</p>
-  <div class="bk-sum"><span>${cookies} cookies</span>${Object.entries(bySize).sort((a,b)=>a[0]-b[0]).map(([n,c])=>`<span>${c} × box of ${n}</span>`).join("")}<span>${pick} pickup</span><span>${del} delivery</span></div>
-  <h2>Cookies to bake</h2>
-  <table><thead><tr><th></th><th>Flavor</th><th style="text-align:right">Qty</th></tr></thead><tbody>${rows.map(([id,n])=>{const p=prod(id);return `<tr><td class="c">☐</td><td>${esc(p?p.name:"Removed flavor")}</td><td class="n">${n}</td></tr>`}).join("")||`<tr><td colspan="3">Nothing to bake.</td></tr>`}</tbody></table>
-  <h2>Orders (${live.length})</h2>
-  <table><thead><tr><th></th><th>Order</th><th>Time</th><th>Type</th><th>Box</th><th>Items</th></tr></thead><tbody>${live.map(o=>`<tr><td class="c">☐</td><td><b>${esc(o.code)}</b><br>${esc(o.customer.name)}${o.status==="review"?`<span class="bk-flag">CHECK PAYMENT</span>`:""}</td><td>${esc(o.time)}</td><td>${o.mode==="delivery"?"Delivery":"Pickup"}</td><td>Box of ${o.size}${o.addons.length?`<br>+ ${o.addons.map(id=>{const a=DB.addons.find(x=>x.id===id);return esc(a?a.name:"Extra")}).join(", ")}`:""}</td><td>${Object.entries(o.items).map(([id,n])=>{const p=prod(id);return `${n} × ${esc(p?p.name:"Removed flavor")}`}).join("<br>")}${o.note?`<br><i>Note: ${esc(o.note)}</i>`:""}</td></tr>`).join("")||`<tr><td colspan="6">No orders.</td></tr>`}</tbody></table></div>`;
-}
-function printBake(day){
-  if(!day){toast("No orders to bake yet");return}
-  $("#printArea").innerHTML=`<style>${BK_CSS}</style>`+bakeSheetHTML(day);
-  const st=document.createElement("style");st.id="pageStyle";st.textContent="@page{size:A4;margin:12mm}";document.head.appendChild(st);
-  document.body.classList.add("print-labels");
-  const done=()=>{document.body.classList.remove("print-labels");st.remove();$("#printArea").innerHTML="";removeEventListener("afterprint",done)};
-  addEventListener("afterprint",done);
-  try{window.print()}catch(e){done();toast("Printing isn't available here. Use Save file instead.")}
-  setTimeout(()=>{if(document.body.classList.contains("print-labels"))done()},60000);
-}
-function downloadBake(day){
-  if(!day){toast("No orders to bake yet");return}
-  const html=`<!doctype html><html><head><meta charset="utf-8"><title>Bake sheet</title><style>@page{size:A4;margin:12mm}body{margin:16px}${BK_CSS}</style></head><body>${bakeSheetHTML(day)}<script>onload=function(){setTimeout(function(){print()},400)}<\/script></body></html>`;
-  const name=`delidome-bake-sheet-${day}.html`;
-  (async()=>{
-    let dl=null;try{dl=window.claude&&await window.claude.use("downloads")}catch(e){}
-    if(dl){try{await dl.save({filename:name,data:html});toast("Bake sheet saved. Open it to print.")}catch(err){if(err&&err.code!=="declined")toast("Couldn't save the file here.")}return}
-    const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([html],{type:"text/html"}));a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);
-    toast("Bake sheet downloaded. Open it to print.");
-  })();
-}
-function fitLabel(){
-  const w=$("#lblWrap"),l=w&&w.firstElementChild;if(!w||!l)return;
-  const k=Math.min(1,(w.clientWidth-2)/384);l.style.transform=`scale(${k})`;l.style.transformOrigin=k<1?"top left":"top center";l.style.margin=k<1?"0":"0 auto";w.style.height=(576*k+2)+"px";
-}
-addEventListener("resize",()=>{if(A.tab==="labels")fitLabel()});
-function lblOrder(){return A.lblPrev==="sample"?sampleOrder():(DB.orders.find(o=>o.id===A.lblPrev)||sampleOrder())}
-function viewLabels(){
-  if(!A.lbl)A.lbl={...DB.label};const L=A.lbl;
-  const dirty=JSON.stringify(L)!==JSON.stringify(DB.label);
-  const recent=DB.orders.slice(0,12);
-  return head("Shipping labels","Set up your 4×6 in label, then print it from the Orders tab. Black and white prints best on thermal label printers.")+MOCK+`
-  <div class="two">
-    <section class="panel"><div class="stack" style="gap:16px">
-      <div class="af">Label logo<div class="colin" style="flex-wrap:wrap"><label class="ghost mqbtn">${L.logo?"Replace logo":"Choose logo"}<input type="file" accept="image/*" hidden data-lbllogo></label>${L.logo?`<img class="lpthumb" style="max-height:44px;max-width:120px;background:#fff" src="${esc(L.logo)}" alt="Label logo"><button class="danger" type="button" data-lbllogorm>Remove</button>`:""}</div><p class="note" style="margin:0">Black-and-white logos print best. Shown at the top-left of the label.</p></div>
-      <div class="af">QR code (bottom right)<input class="in" data-lbl="qr" maxlength="200" value="${esc(L.qr)}" placeholder="Link or text, e.g. https://wa.me/628123456789"><input class="in" data-lbl="qrCaption" maxlength="40" value="${esc(L.qrCaption)}" placeholder="Caption under the QR (e.g. Scan to chat with us)" style="margin-top:8px"><p class="note" style="margin:6px 0 0">Leave the link empty to hide the QR code.</p></div>
-      <label class="af">Notes printed on every label<textarea class="in" rows="3" data-lbl="notes" maxlength="200" placeholder="e.g. Thank you for ordering!">${esc(L.notes)}</textarea></label>
-      <label class="af" style="display:flex;flex-direction:row;align-items:center;gap:10px;font-size:14px;color:var(--ink)"><span class="sw"><input type="checkbox" data-lbl="warnOn" ${L.warnOn?"checked":""}><span></span></span> Show the black warning box on the label</label>
-      <div class="af">Warning box text (leave line 2 empty to print only one line)<input class="in" data-lbl="warn1" maxlength="40" value="${esc(L.warn1)}" aria-label="Warning line 1"><input class="in" data-lbl="warn2" maxlength="40" value="${esc(L.warn2)}" aria-label="Warning line 2" style="margin-top:8px"></div>
-      <button class="ghost" type="button" data-lblreset>Reset to default text</button>
-      <div class="colin" style="flex-wrap:wrap;gap:12px"><button class="btn btn-blue" type="button" data-lblsave>Save label settings</button>${dirty?`<span class="lbl-unsaved">Unsaved changes</span>`:""}</div>
-    </div></section>
-    <section class="panel"><div class="phead"><div><h2>Preview (4×6 in)</h2></div></div>
-      <label class="af" style="margin-bottom:12px">Preview with<select class="in" data-lblprev><option value="sample" ${A.lblPrev==="sample"?"selected":""}>Sample order</option>${recent.map(o=>`<option value="${o.id}" ${A.lblPrev===o.id?"selected":""}>${esc(o.code)} · ${esc(o.customer.name)}</option>`).join("")}</select></label>
-      <div class="lblwrap" id="lblWrap">${labelHTML(lblOrder(),L)}</div>
-      <div class="colin" style="margin-top:12px;flex-wrap:wrap"><button class="ghost" type="button" data-lblprint>Print this label</button><button class="ghost" type="button" data-lbldl>Download label file</button></div>
-      <p class="note">To print many at once, tick orders in the Orders tab and press "Print labels". If the print window doesn't open in this viewer, use "Download label file" and open it to print.</p>
-    </section>
-  </div>`;
-}
-function lblRefresh(){const w=$("#lblWrap");if(!w)return;w.innerHTML=labelHTML(lblOrder(),A.lbl);fitLabel();
-  const d=JSON.stringify(A.lbl)!==JSON.stringify(DB.label);let u=document.querySelector(".lbl-unsaved");
-  if(d&&!u){const b=document.querySelector("[data-lblsave]");b&&b.insertAdjacentHTML("afterend",'<span class="lbl-unsaved">Unsaved changes</span>')}else if(!d&&u)u.remove()}
-async function lblLogo(file){
-  if(!/^image\//.test(file.type))throw new Error("That file isn't an image.");
-  const url=URL.createObjectURL(file);
-  try{const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>rej(new Error("Couldn't read that image."));i.src=url});
-    const k=Math.min(1,300/Math.max(img.naturalWidth,img.naturalHeight)),w=Math.max(1,Math.round(img.naturalWidth*k)),h=Math.max(1,Math.round(img.naturalHeight*k));
-    const c=document.createElement("canvas");c.width=w;c.height=h;const x=c.getContext("2d",{willReadFrequently:true});x.fillStyle="#fff";x.fillRect(0,0,w,h);x.drawImage(img,0,0,w,h);
-    const d=x.getImageData(0,0,w,h),px=d.data;for(let i=0;i<px.length;i+=4){const g=.299*px[i]+.587*px[i+1]+.114*px[i+2],v=g<140?0:g>215?255:g;px[i]=px[i+1]=px[i+2]=v}x.putImageData(d,0,0);
-    return c.toDataURL("image/png");
-  }finally{URL.revokeObjectURL(url)}
-}
-am.addEventListener("input",e=>{const el=e.target;
-  if(el.dataset.lbl&&el.type!=="checkbox"&&A.lbl){A.lbl[el.dataset.lbl]=el.value;lblRefresh()}
-  else if(el.dataset.sel!==undefined){}
-});
-am.addEventListener("change",async e=>{const el=e.target;
-  if(el.dataset.lbl&&el.type==="checkbox"&&A.lbl){A.lbl[el.dataset.lbl]=el.checked;lblRefresh();return}
-  if(el.dataset.lblprev!==undefined){A.lblPrev=el.value;lblRefresh();return}
-  if(el.dataset.lbllogo!==undefined){const f=el.files[0];if(!f)return;try{A.lbl.logo=await lblLogo(f);renderAdmin();fitLabel()}catch(err){toast(err.message)}return}
-  if(el.dataset.sel!==undefined){el.checked?A.sel.add(el.dataset.sel):A.sel.delete(el.dataset.sel);const b=document.querySelector("[data-printsel]");if(b){b.textContent=`Print labels (${A.sel.size})`;b.disabled=!A.sel.size}return}
-  if(el.dataset.selall!==undefined){document.querySelectorAll("[data-sel]").forEach(c=>{c.checked=el.checked;el.checked?A.sel.add(c.dataset.sel):A.sel.delete(c.dataset.sel)});const b=document.querySelector("[data-printsel]");if(b){b.textContent=`Print labels (${A.sel.size})`;b.disabled=!A.sel.size}}
-});
-am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;const d=b.dataset;
-  if(d.lbllogorm!==undefined){A.lbl.logo="";renderAdmin();fitLabel()}
-  else if(d.lblreset!==undefined){const df=defaultLabel();A.lbl.notes=df.notes;A.lbl.warn1=df.warn1;A.lbl.warn2=df.warn2;A.lbl.warnOn=true;renderAdmin();fitLabel();toast("Default text restored. Save to keep it.")}
-  else if(d.lblsave!==undefined){const prev=DB.label;DB.label={...A.lbl};if(!saveDB()){DB.label=prev;toast("Not enough storage space. Try a smaller logo.")}else{toast("Label settings saved");renderAdmin();fitLabel()}}
-  else if(d.lblprint!==undefined)printLabels([lblOrder()],A.lbl);
-  else if(d.lbldl!==undefined)downloadLabels([lblOrder()],A.lbl);
-});
-$("#drawer").addEventListener("input",e=>{const el=e.target;if(el.dataset.ship&&A.openOrder){const o=DB.orders.find(x=>x.id===A.openOrder);if(o){o[el.dataset.ship]=el.value;saveSoon()}}});
-$("#drawer").addEventListener("click",e=>{const b=e.target.closest("[data-printone]");if(b){const o=DB.orders.find(x=>x.id===b.dataset.printone);if(o)printLabels([o],DB.label)}});
-am.addEventListener("dragover",e=>{const t=e.target.closest("[data-drop]");if(!t)return;e.preventDefault();t.classList.add("drag")});
-am.addEventListener("dragleave",e=>{const t=e.target.closest("[data-drop]");if(t&&!t.contains(e.relatedTarget))t.classList.remove("drag")});
-am.addEventListener("drop",e=>{const t=e.target.closest("[data-drop]");if(!t)return;e.preventDefault();t.classList.remove("drag");const f=e.dataTransfer.files[0];if(f)uploadPhoto(t.dataset.drop,f,t.querySelector(".upl"))});
-am.addEventListener("submit",e=>{if(e.target.id==="saleForm"){e.preventDefault();createSale()}});
-$("#anav").addEventListener("click",e=>{const b=e.target.closest("[data-tab]");if(b){A.tab=b.dataset.tab;closeDrawer();renderAdmin();window.scrollTo(0,0)}});
-$("#drawer").addEventListener("click",e=>{
-  if(e.target.id==="drawer"||e.target.closest("[data-close]")){closeDrawer();return}
-  const b=e.target.closest("[data-set-status]");if(b){setOrderStatus(A.openOrder,b.dataset.setStatus);return}
-  const o=DB.orders.find(x=>x.id===A.openOrder);if(!o)return;
-  if(e.target.closest("[data-cpgo]")){openComplaint(o.id);return}
-  if(e.target.closest("[data-pay-ok],[data-pay-manual]"))setOrderStatus(o.id,"new");
-  else if(e.target.closest("[data-pay-no]")){const r=($("#rejReason")||{}).value||"";setOrderStatus(o.id,"awaiting",{reject:true,reason:r.trim()})}
-});
-
-$("#modal").addEventListener("click",e=>{
-  if((e.target.id==="modal"&&A.modal==="cats")||e.target.closest("[data-mclose]")){closeModal();return}
-  const b=e.target.closest("button");if(!b)return;const d=b.dataset;
-  if(d.npremove!==undefined){A.np.img=null;A.np.cutout=false;A.np.tints=null;if(A.np.art==="photo")A.np.art=A.np.defArt;refreshNp()}
-  else if(d.catadd!==undefined)addCat();
-  else if(d.rvadd!==undefined)addAdminReview();
-  else if(d.rvdel){armed(b,()=>{const p=prod(A.rvPid);p.reviews=p.reviews.filter(r=>r.id!==d.rvdel);saveDB();toast("Review deleted");renderAdminReviews();renderAdmin()})}
-  else if(d.catdel){armed(b,()=>{const id=d.catdel;DB.products.forEach(p=>{if(p.cat===id)p.cat=""});DB.categories=DB.categories.filter(c=>c.id!==id);if(A.pcat===id)A.pcat="all";saveDB();toast("Category deleted");renderCats();renderAdmin()})}
-});
-$("#modal").addEventListener("submit",e=>{if(e.target.id==="npForm"){e.preventDefault();saveNewFlavor()}});
-$("#modal").addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.id==="newCatName"){e.preventDefault();addCat()}});
-$("#modal").addEventListener("change",async e=>{
-  const el=e.target;
-  if(el.id==="npCat"){$("#npNewCatWrap").hidden=el.value!=="__new";if(el.value==="__new")$("#npNewCat").focus();return}
-  if(el.id==="npArt"){A.np.art=el.value;$("#npPrev").innerHTML=plateHTML(npProduct());return}
-  if(el.id==="npTrack"){$("#npStockWrap").hidden=!el.checked;return}
-  if(el.id==="npFile"){
-    const f=el.files[0];if(!f)return;const lbl=el.closest(".upl");lbl.classList.add("busy");
-    try{const r=await processImage(f);Object.assign(A.np,{img:r.img,cutout:r.cutout,tints:r.tints,art:"photo"});refreshNp();$("#npErr").hidden=true}
-    catch(err){$("#npErr").textContent=err.message;$("#npErr").hidden=false}
-    lbl.classList.remove("busy");el.value="";return;
-  }
-  if(el.dataset.rv){
-    const box=el.closest("[data-rid]"),p=prod(A.rvPid),r=p&&p.reviews.find(x=>x.id===box.dataset.rid);if(!r)return;
-    const f=el.dataset.rv;let v=el.value.trim();
-    if(f==="stars")v=+el.value;
-    else if(f==="text"?v.length<3:!v){el.value=r[f];toast(f==="text"?"The review can't be empty":"Username can't be empty");return}
-    r[f]=v;saveDB();toast("Saved");$("#rvSum").innerHTML=rvSummary(p);renderAdmin();return;
-  }
-  if(el.dataset.catname){
-    const c=DB.categories.find(x=>x.id===el.dataset.catname),v=el.value.trim(),err=$("#catErr");if(!c)return;
-    if(!v){el.value=c.name;return}
-    if(DB.categories.some(x=>x.id!==c.id&&x.name.toLowerCase()===v.toLowerCase())){el.value=c.name;err.textContent=`There's already a category called "${v}".`;err.hidden=false;return}
-    err.hidden=true;c.name=v;saveDB();toast("Saved");renderAdmin();
-  }
-});
-
-/* --- clock: countdowns + sale start/end --- */
-function tickAdmin(now=Date.now()){
-  if(A.tab==="announcer"&&document.getElementById("anPrev"))anTick(now);
-  document.querySelectorAll("[data-cd]").forEach(el=>{const s=DB.sales.find(x=>x.id===el.dataset.cd);if(!s)return;const st=saleStatus(s,now);
-    el.textContent=st==="live"?fmtDur(s.end-now):st==="scheduled"?fmtDur(s.start-now):new Date(s.end).toLocaleDateString("en-US",{month:"short",day:"numeric"})});
-}
 const sig = (now=Date.now()) => DB.sales.map(s=>saleStatus(s,now)).join();
-let lastSig=sig();
-setInterval(()=>{
-  const now=Date.now(),s=sig(now);
-  if(view==="store"){if(s!==lastSig)renderStore();else updateFlash(now)}
-  else{const typing=document.activeElement&&/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);if(s!==lastSig&&!typing)renderAdmin();else tickAdmin(now)}
-  lastSig=s;alScan();
-  if(view==="admin"&&A.tab==="dashboard"&&A.dsig!==dashSig()){const typing=document.activeElement&&/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);if(!typing)renderAdmin()}
-},1000);
-
-/* --- owner alerts: popup + sound --- */
-const AACK_KEY="delidome-aack-v1",ABOOT_KEY="delidome-aboot-v1";
-let AACK=new Set();try{AACK=new Set(JSON.parse(localStorage.getItem(AACK_KEY)||"[]"))}catch(e){}
-let ABOOT=Date.now();try{const v=+localStorage.getItem(ABOOT_KEY);if(v)ABOOT=v;else localStorage.setItem(ABOOT_KEY,String(ABOOT))}catch(e){}
-let ALQ=[],AC=null,alRep=null;
-const alSaveAck=()=>{try{localStorage.setItem(AACK_KEY,JSON.stringify([...AACK].slice(-400)))}catch(e){}};
-["pointerdown","keydown","touchstart"].forEach(ev=>addEventListener(ev,()=>acx(),{passive:true}));
-function acx(){try{if(!AC)AC=new (window.AudioContext||window.webkitAudioContext)();if(AC.state==="suspended")AC.resume()}catch(e){AC=null}return AC}
-function tone(f,t,d,type,v,f2){const c=AC,o=c.createOscillator(),g=c.createGain(),T=c.currentTime+t;o.type=type;o.frequency.setValueAtTime(f,T);if(f2)o.frequency.exponentialRampToValueAtTime(f2,T+d);g.gain.setValueAtTime(0.0001,T);g.gain.linearRampToValueAtTime(v,T+.012);g.gain.exponentialRampToValueAtTime(.0001,T+d);o.connect(g);g.connect(c.destination);o.start(T);o.stop(T+d+.05)}
-const SND={
-  bell:v=>{tone(880,0,1.3,"sine",v);tone(1760,0,.9,"sine",v*.4);tone(2640,0,.5,"sine",v*.2)},
-  chime:v=>[523,659,784,1047].forEach((f,i)=>tone(f,i*.14,.7,"triangle",v)),
-  register:v=>{tone(1568,0,.12,"square",v*.35);tone(2093,.11,.6,"square",v*.35);tone(3136,.11,.4,"sine",v*.3)},
-  door:v=>{tone(659,0,.7,"sine",v);tone(523,.45,1,"sine",v)},
-  pop:v=>{tone(300,0,.18,"sine",v,900);tone(500,.2,.18,"sine",v,1200)},
-  alarm:v=>[0,.26,.52,.78].forEach((t,i)=>tone(i%2?700:950,t,.22,"square",v*.3))
-};
-function alPlay(name){
-  const a=DB.alerts,vol=Math.max(.05,Math.min(1,a.vol/100));
-  if(name==="custom"&&a.custom){try{const au=new Audio(a.custom);au.volume=vol;au.play().catch(()=>{})}catch(e){}return}
-  if(!acx())return;(SND[name]||SND.chime)(vol*.55);
-}
-function alEvents(){
-  const ev=[];
-  DB.orders.forEach(o=>{if(o.example)return;
-    if(o.createdAt>=ABOOT)ev.push({type:"order",id:o.id,at:o.createdAt});
-    if(o.proof&&o.proof.at>=ABOOT)ev.push({type:"proof",id:o.id,at:o.proof.at});
-    if(o.complaint&&o.complaint.at>=ABOOT)ev.push({type:"complaint",id:o.id,at:o.complaint.at})});
-  return ev.map(x=>({...x,key:x.type+"|"+x.id+"|"+x.at}));
-}
-function alAckAll(){alEvents().forEach(x=>AACK.add(x.key));alSaveAck();ALQ=ALQ.filter(x=>x.test);renderAlerts()}
-const AL_META={order:["🍪","New order placed"],proof:["🧾","Payment proof submitted"],complaint:["⚠️","New customer complaint"]};
-function alPush(x){
-  if(ALQ.some(q=>q.key===x.key))return;ALQ.push(x);renderAlerts();alSound([x]);
-  if(!DB.alerts.stay)setTimeout(()=>alDismiss(x.key),10000);
-}
-function alSound(list){
-  const a=DB.alerts;if(!a.sound||!list.length)return;
-  const pr={complaint:3,proof:2,order:1},top=list.reduce((m,x)=>(pr[x.type]||0)>(pr[m.type]||0)?x:m,list[0]);
-  alPlay(top.test?a.ev.order.snd:a.ev[top.type].snd);
-}
-function alScan(){
-  if(view!=="admin")return;const a=DB.alerts;
-  if(a.on){const fresh=alEvents().filter(x=>!AACK.has(x.key)&&a.ev[x.type].on&&!ALQ.some(q=>q.key===x.key));
-    if(fresh.length){fresh.sort((p,q)=>p.at-q.at).forEach(x=>{ALQ.push(x);if(!a.stay)setTimeout(()=>alDismiss(x.key),10000)});renderAlerts();alSound(fresh)}}
-  const need=a.on&&a.sound&&a.repeat&&ALQ.length>0;
-  if(need&&!alRep)alRep=setInterval(()=>{if(ALQ.length)alSound(ALQ);else{clearInterval(alRep);alRep=null}},20000);
-  if(!need&&alRep){clearInterval(alRep);alRep=null}
-}
-function alDismiss(key){const q=ALQ.find(x=>x.key===key);if(!q)return;AACK.add(key);alSaveAck();ALQ=ALQ.filter(x=>x.key!==key);renderAlerts()}
-const AL_BASE=document.title;
-function renderAlerts(){
-  const st=$("#alStack");if(!st)return;
-  const money_=o=>o?money(o.total):"";
-  const shown=ALQ.slice(-4).reverse();
-  st.innerHTML=shown.map(x=>{const o=DB.orders.find(y=>y.id===x.id),m=AL_META[x.type]||AL_META.order,nm=o?(x.type==="proof"&&o.proof?o.proof.name:o.customer.name):"Sample customer";
-    const line=x.type==="complaint"&&o&&o.complaint?o.complaint.reason:(o?money_(o):"$0.00");
-    return `<div class="al-card ${x.type}" role="alert"><div class="al-t"><i aria-hidden="true">${m[0]}</i>${m[1]}</div><div class="al-b"><b>${o?esc(o.code):"DD-TEST"}</b> · ${esc(nm)} · ${esc(line)}<small>${fmtAgo(x.at)}${x.test?" · test alert":""}</small></div><div class="al-r">${o?`<button class="btn btn-blue btn-sm" type="button" data-alview="${x.key}">View</button>`:""}<button class="ghost" type="button" data-aldis="${x.key}">Dismiss</button></div></div>`}).join("")+(ALQ.length>1?`<button class="al-more" type="button" data-aldisall>${ALQ.length>4?`+${ALQ.length-4} more · `:""}Dismiss all</button>`:"");
-  document.title=ALQ.length?`(${ALQ.length}) ${AL_BASE}`:AL_BASE;
-}
-$("#alStack").addEventListener("click",e=>{
-  const v=e.target.closest("[data-alview]"),d=e.target.closest("[data-aldis]");
-  if(e.target.closest("[data-aldisall]")){ALQ.slice().forEach(x=>{AACK.add(x.key)});alSaveAck();ALQ=[];renderAlerts();return}
-  if(d){alDismiss(d.dataset.aldis);return}
-  if(v){const x=ALQ.find(q=>q.key===v.dataset.alview);if(!x)return;alDismiss(x.key);
-    if(x.type==="complaint"){A.tab="complaints";renderAdmin();openComplaint(x.id)}else{A.tab="orders";renderAdmin();openOrder(x.id)}}
-});
-
-/* --- routing between shop and admin --- */
 let view=null;
 function route(){
-  const admin=location.hash==="#admin",next=admin?"admin":"store";
-  if(next===view)return;
-  const prev=view;view=next;
-  $("#storeView").hidden=admin;$("#adminView").hidden=!admin;document.body.classList.toggle("in-store",!admin);
-  if(admin){try{localStorage.setItem(STAFF_KEY,"1")}catch(e){}closeSheet();closeMO();
-    if(SBH.on&&!SBH.adminReady()){SBH.enterAdmin();return}
-    expireOrders();renderAdmin();window.scrollTo(0,0);alScan()}
-  else{
-    if(SBH.on&&(prev==="admin"||!SBH.loaded)){if(prev==="admin")SBH.leaveAdmin();else SBH.loadShop();return}
-    trackVisit();closeDrawer();closeModal();closeReviews();expireOrders();sanitizeCart();renderBag();renderEditBar();renderStoreStatic();renderStore();if(location.hash==="#shop")window.scrollTo(0,0)}
+  if(view===null&&SBH.on&&!SBH.loaded){view="store";SBH.loadShop();return}
+  view="store";
+  trackVisit();closeReviews();expireOrders();sanitizeCart();renderBag();renderEditBar();renderStoreStatic();renderStore();
+  if(location.hash==="#shop")window.scrollTo(0,0);
 }
 addEventListener("hashchange",route);
-{const so=$("#signOut");if(so)so.addEventListener("click",()=>SBH.signOut())}
+
 // browsers refuse to open data: pictures in a new tab, so open them as a blob instead
 document.addEventListener("click",e=>{const a=e.target.closest('a[href^="data:image/"]');if(!a)return;e.preventDefault();
   fetch(a.getAttribute("href")).then(r=>r.blob()).then(b=>window.open(URL.createObjectURL(b),"_blank","noopener")).catch(()=>toast("Couldn't open the picture"))});
-addEventListener("storage",e=>{if(SBH.on)return;if(e.key===DB_KEY){loadDB();view=null;route()}else if(e.key===VIS_KEY)loadVis()});
-
+addEventListener("storage",e=>{if(SBH.on)return;if(e.key===DB_KEY){loadDB();view=null;route()}});
 if(!hadCart&&!SBH.on)S.box=["bb","bb","dc","rv"];
 expireOrders();
 route();
+let lastSig=sig();
+setInterval(()=>{const now=Date.now(),s=sig(now);if(s!==lastSig)renderStore();else updateFlash(now);lastSig=s},1000);

@@ -24,7 +24,6 @@
     <div class="top-actions">
       <button class="bagbtn bellbtn" id="bellBtn" type="button" aria-label="Notifications" aria-haspopup="dialog" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 17V11a6 6 0 0 1 12 0v6l1.5 2h-15L6 17Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M10 21a2 2 0 0 0 4 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span class="bagn" id="bellCount" hidden></span></button>
       <button class="bagbtn" id="moBtn" type="button" aria-label="My orders" title="My orders"><svg class="bagsvg" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14l-1 12H6L5 8Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9 8V6a3 3 0 0 1 6 0v2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M9.5 13.5c.7 1 1.6 1.5 2.5 1.5s1.8-.5 2.5-1.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><span class="bagn" id="moCount" hidden></span></button>
-      <a class="adminlink" href="#admin" aria-label="Admin">Admin</a>
       <button class="pill" id="pillBtn" type="button">Your box <b id="pillCount">0/6</b></button>
     </div>
   </div>
@@ -152,7 +151,7 @@
 <footer id="siteFoot">
   <div class="wrap">
     <span class="logo"><span id="ftMark"><svg viewBox="0 0 30 24" aria-hidden="true"><path d="M3 21a12 12 0 0 1 24 0Z" fill="currentColor"/><circle cx="15" cy="5" r="2.6" fill="currentColor"/><rect x="1" y="20.5" width="28" height="3" rx="1.5" fill="currentColor"/></svg></span><span id="ftBrand">delidome</span></span>
-    <span><span id="ftText">Fresh cookie boxes, baked to order.</span> <a href="#admin">Shop admin</a></span>
+    <span><span id="ftText">Fresh cookie boxes, baked to order.</span></span>
   </div>
 </footer>
 
@@ -203,42 +202,7 @@
 </div>
 </div>
 
-<!-- ================= ADMIN ================= -->
-<div id="adminView" hidden>
-  <div class="al-stack" id="alStack" aria-live="assertive"></div>
-  <div class="admin">
-    <aside class="side">
-      <span class="logo"><svg viewBox="0 0 30 24" aria-hidden="true"><path d="M3 21a12 12 0 0 1 24 0Z" fill="#fff"/><circle cx="15" cy="5" r="2.6" fill="#fff"/><rect x="1" y="20.5" width="28" height="3" rx="1.5" fill="#fff"/></svg>delidome</span>
-      <span class="role">Shop admin</span>
-      <nav class="nav" id="anav">
-        <button type="button" data-tab="dashboard">Dashboard</button>
-        <button type="button" data-tab="orders">Orders <span class="count" id="cOrders"></span></button>
-        <button type="button" data-tab="complaints">Complaints <span class="count" id="cComplaints"></span></button>
-        <button type="button" data-tab="notify">Notifications</button>
-        <button type="button" data-tab="coupons">Coupons <span class="count" id="cCoupons"></span></button>
-        <button type="button" data-tab="sales">Flash sales <span class="count live" id="cSales"></span></button>
-        <button type="button" data-tab="products">Flavors <span class="count" id="cProducts"></span></button>
-        <button type="button" data-tab="boxes">Boxes &amp; extras</button>
-        <button type="button" data-tab="hero">Top banner</button>
-        <button type="button" data-tab="landing">Landing page</button>
-        <button type="button" data-tab="labels">Shipping labels</button>
-        <button type="button" data-tab="announcer">Announcer</button>
-        <button type="button" data-tab="marquee">Marquee banner</button>
-        <button type="button" data-tab="settings">Shop settings</button>
-      </nav>
-      <a class="btn btn-white btn-sm viewshop" href="#shop">View shop →</a>
-      <span class="role" id="syncSt" hidden></span>
-      <button type="button" class="btn btn-white btn-sm" id="signOut" hidden style="margin-top:8px">Sign out</button>
-    </aside>
-    <main class="amain" id="amain"></main>
-  </div>
-  <div class="drawer" id="drawer" hidden></div>
-  <div class="sheet" id="modal" hidden role="dialog" aria-modal="true" aria-labelledby="modalTitle"><div class="sheet-card" id="modalCard"></div></div>
-</div>
 <div class="toast" id="toast" hidden role="status"></div>
-
-
-<noscript><p style="padding:24px;font-family:sans-serif">Please turn on JavaScript to order cookies.</p></noscript>
 <script src="config.js"></script>
 <script src="backend.js"></script>
 <script src="sb.js"></script>

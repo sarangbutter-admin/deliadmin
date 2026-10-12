@@ -1,11 +1,10 @@
 /* Delidome: Supabase wiring (loaded before app.js, used by it through window.SBH).
    - Visitors: load the public shop, place / edit / cancel / track orders, pay, complain, rate, review (all through database functions)
-   - Owner: sign in, load everything, auto-save every change, poll for new orders
-   When Supabase is not configured, SBH.on is false and none of this runs (demo mode). */
+   -    When Supabase is not configured, SBH.on is false and none of this runs (demo mode). */
 (function () {
   "use strict";
   var K = window.SBK;
-  var H = window.SBH = { on: !!(K && K.on), loaded: false, admin: false };
+  var H = window.SBH = { on: !!(K && K.on), loaded: false };
   if (!H.on) return;
 
   var J = JSON.stringify;
@@ -54,7 +53,7 @@
 
   var shopBusy = false;
   H.loadShop = async function (quiet) {
-    if (shopBusy || H.admin) return;
+    if (shopBusy) return;
     shopBusy = true;
     try {
       var res = await K.rpc("shop_public", {});
@@ -88,7 +87,7 @@
   }
   var ordBusy = false, lastOrdSig = "";
   H.refreshOrders = async function () {
-    if (ordBusy || H.admin) return;
+    if (ordBusy) return;
     var r = refs(); if (!r.length) { if (DB.orders.length) { DB.orders = []; } return; }
     ordBusy = true;
     try {
@@ -149,301 +148,12 @@
 
   /* visitor polling */
   setInterval(function () {
-    if (H.admin || document.hidden || !H.loaded) return;
+    if (document.hidden || !H.loaded) return;
     var t = Date.now(), live = DB.orders.some(function (o) { return ["awaiting", "review", "new", "baking", "ready"].indexOf(o.status) >= 0; });
     if (!$q("#moSheet").hidden || live) H.refreshOrders();
     else if (Math.floor(t / 1000) % 60 === 0) H.refreshOrders();
     if (Math.floor(t / 1000) % 45 === 0) H.loadShop(true);
   }, 1000);
-  document.addEventListener("visibilitychange", function () { if (!document.hidden && !H.admin && H.loaded) { H.refreshOrders(); H.loadShop(true); } });
+  document.addEventListener("visibilitychange", function () { if (!document.hidden && H.loaded) { H.refreshOrders(); H.loadShop(true); } });
 
-  /* ================= owner: sign-in ================= */
-  var DOCS = ["settings", "page", "marquee", "announcer", "thanks", "proofpop", "payMethods", "alerts", "label"];
-  var COLLS = { sizes: function (o) { return String(o.n); }, categories: function (o) { return o.id; }, addons: function (o) { return o.id; }, sales: function (o) { return o.id; }, coupons: function (o) { return o.id; }, broadcasts: function (o) { return o.id; } };
-  var OFIELDS = ["status", "expiresAt", "cancelReason", "paidAt", "completedAt", "labelAt", "courier", "awb", "rejected", "items", "total", "surcharge", "notify"];
-
-  function loginUI(msg) {
-    var el = $q("#adLogin");
-    if (el) el.remove();
-    el = document.createElement("div"); el.id = "adLogin";
-    el.innerHTML = '<form class="adl-card" novalidate><h2>Shop owner sign in</h2><p class="adl-sub">Only the shop owner can open this page.</p>' +
-      '<label>Email<input class="in" id="adlEmail" type="email" autocomplete="username" required></label>' +
-      '<label>Password<input class="in" id="adlPass" type="password" autocomplete="current-password" required></label>' +
-      '<p class="adl-err" id="adlErr" role="alert" hidden></p>' +
-      '<button class="btn btn-blue" type="submit" id="adlGo">Sign in</button><a class="adl-back" href="#shop">← Back to the shop</a></form>';
-    document.body.appendChild(el);
-    var err = $q("#adlErr");
-    if (msg) { err.textContent = msg; err.hidden = false; }
-    $q("#adlEmail").focus();
-    el.querySelector("form").addEventListener("submit", async function (e) {
-      e.preventDefault();
-      var em = $q("#adlEmail").value.trim(), pw = $q("#adlPass").value, b = $q("#adlGo");
-      if (!em || !pw) { err.textContent = "Enter your email and password."; err.hidden = false; return; }
-      b.disabled = true; b.textContent = "Signing in…"; err.hidden = true;
-      try { await K.login(em, pw); await startAdmin(); }
-      catch (ex) { err.textContent = ex.message; err.hidden = false; b.disabled = false; b.textContent = "Sign in"; }
-    });
-  }
-
-  var starting = false;
-  H.adminReady = function () { return H.admin; };
-  H.enterAdmin = function () {
-    if (H.admin) return;
-    if (!K.signedIn()) { loginUI(); return; }
-    startAdmin().catch(function (e) { K.logout(); loginUI(e.message); });
-  };
-  H.leaveAdmin = function () {
-    var el = $q("#adLogin"); if (el) el.remove();
-    if (!H.admin) return;
-    flush().finally(function () { stopAdmin(); });
-  };
-  H.signOut = async function () {
-    try { await flush(); } catch (e) {}
-    K.logout(); stopAdmin(); location.hash = "#shop";
-  };
-  function stopAdmin() {
-    H.admin = false; clearInterval(pollT); pollT = null; dirty = false;
-    H.initDB(); shopSig = ""; H.loaded = false; ["#syncSt", "#signOut"].forEach(function (s) { var e = $q(s); if (e) e.hidden = true; });
-    if (view === "store") { H.loadShop(); }
-  }
-
-  /* ================= owner: load ================= */
-  var SN = { docs: {}, rows: {}, prods: {}, orders: {} }, SINCE = 0, pollT = null, dirty = false, flushing = false, again = false, flushT = null, failN = 0;
-
-  function snapOrder(o) {
-    var f = {}; OFIELDS.forEach(function (k) { f[k] = J(o[k] === undefined ? null : o[k]); });
-    return { f: f, ml: (o.msgs || []).length, cs: o.complaint ? o.complaint.status : null, cr: o.complaint ? (o.complaint.reply || "") : null };
-  }
-  function diffOrder(o, sn) {
-    if (!sn) return null;
-    var p = {}, any = false;
-    OFIELDS.forEach(function (k) { var v = o[k] === undefined ? null : o[k]; if (J(v) !== sn.f[k]) { p[k] = v; any = true; } });
-    var ms = o.msgs || [];
-    if (ms.length > sn.ml) {
-      var add = ms.slice(sn.ml).filter(function (m) { return m && (m.channel === "whatsapp" || m.channel === "email") && (m.by === "staff" || m.by === "system"); })
-        .map(function (m) { return { at: m.at, channel: m.channel, status: m.status, text: String(m.text || "").slice(0, 800), by: m.by }; });
-      if (add.length) { p.msgsAdd = add; any = true; }
-    }
-    if (o.complaint && (o.complaint.status !== sn.cs || (o.complaint.reply || "") !== sn.cr)) { p.complaint = { status: o.complaint.status, reply: o.complaint.reply || "" }; any = true; }
-    return any ? p : null;
-  }
-  function snapAll() {
-    SN = { docs: {}, rows: {}, prods: {}, orders: {} };
-    DOCS.forEach(function (k) { SN.docs[k] = DB[k] === undefined ? null : J(DB[k]); });
-    Object.keys(COLLS).forEach(function (c) { SN.rows[c] = {}; (DB[c] || []).forEach(function (o, i) { SN.rows[c][COLLS[c](o)] = { pos: i, j: J(o) }; }); });
-    DB.products.forEach(function (p, i) { SN.prods[p.id] = snapProd(p, i); });
-    DB.orders.forEach(function (o) { SN.orders[o.id] = snapOrder(o); });
-  }
-  function snapProd(p, i) {
-    var rest = Object.assign({}, p); delete rest.stock; delete rest.reviews;
-    return { pos: i, j: J(rest), stock: p.stock, revs: (p.reviews || []).map(function (r) { return r.id + "|" + J(r); }) };
-  }
-
-  function buildAdminDB(r) {
-    var docs = r.docs || {}, colls = r.colls || {};
-    var rows = function (c) { return (colls[c] || []).map(function (x) { return x.data; }); };
-    var seed = seedDB();
-    var raw = { v: 1, settings: Object.assign({}, seed.settings, docs.settings || {}), sizes: rows("sizes"), products: rows("products"), addons: rows("addons"), sales: rows("sales"),
-      categories: rows("categories"), coupons: rows("coupons"), broadcasts: rows("broadcasts"), orders: r.orders || [],
-      payMethods: Array.isArray(docs.payMethods) ? docs.payMethods : undefined, proofpop: docs.proofpop, page: docs.page, marquee: docs.marquee, announcer: docs.announcer,
-      thanks: docs.thanks, alerts: docs.alerts, label: docs.label };
-    return raw;
-  }
-  function cleanStarter() {
-    var d = seedDB();
-    d.orders = []; d.sales = []; d.coupons = [];
-    d.products.forEach(function (p) { p.reviews = []; });
-    return d;
-  }
-
-  async function startAdmin() {
-    if (starting) return; starting = true;
-    try {
-      var me = await K.rpc("admin_me", {}, true);
-      if (!me || !me.admin) { K.logout(); throw new Error("This account isn't the shop owner. Ask the owner to add your email to the admins list."); }
-      var r = await K.rpc("admin_load", {}, true);
-      var fresh = !(r.docs && r.docs.settings);
-      var raw = fresh ? cleanStarter() : buildAdminDB(r);
-      DB = migrate(raw);
-      VIS = (r.visits || []).slice();
-      SINCE = (r.now || Date.now()) - 3000;
-      H.admin = true; H.loaded = true;
-      snapAll();
-      if (fresh) { SN = { docs: {}, rows: { sizes: {}, categories: {}, addons: {}, sales: {}, coupons: {}, broadcasts: {} }, prods: {}, orders: {} }; }
-      try { if (!localStorage.getItem("delidome-aadmin-v1")) { ABOOT = Date.now(); localStorage.setItem(ABOOT_KEY, String(ABOOT)); localStorage.setItem("delidome-aadmin-v1", "1"); } } catch (e) {}
-      var el = $q("#adLogin"); if (el) el.remove();
-      ["#syncSt", "#signOut"].forEach(function (s) { var e = $q(s); if (e) e.hidden = false; });
-      setSync(fresh ? "saving" : "saved");
-      view = null; route();
-      if (fresh) { toast("Your shop is set up with starter flavors. Edit anything from the menu."); schedule(); }
-      clearInterval(pollT); pollT = setInterval(poll, 5000);
-    } finally { starting = false; }
-  }
-
-  /* ================= owner: save ================= */
-  function setSync(st, msg) {
-    var e = $q("#syncSt"); if (!e) return;
-    e.textContent = st === "saving" ? "Saving…" : st === "error" ? "Not saved, retrying…" : "All changes saved";
-    e.title = msg || ""; e.dataset.st = st;
-  }
-  H.save = function () { if (!H.admin) return true; dirty = true; setSync("saving"); schedule(); return true; };
-  function schedule(ms) { clearTimeout(flushT); flushT = setTimeout(flush, ms == null ? 500 : ms); }
-  addEventListener("beforeunload", function (e) { if (H.admin && (dirty || flushing)) { e.preventDefault(); e.returnValue = ""; } });
-
-  var upCache = {};
-  async function walk(o) {
-    if (Array.isArray(o)) { for (var i = 0; i < o.length; i++) o[i] = await item(o[i]); }
-    else if (o && typeof o === "object") { for (var k in o) o[k] = await item(o[k]); }
-  }
-  async function item(v) {
-    if (typeof v === "string") {
-      if (v.length > 1500 && /^data:(image|video|audio)\/[a-z0-9.+-]+;base64,/i.test(v)) {
-        var key = v.length + ":" + v.slice(-60) + v.slice(30, 90);
-        if (!upCache[key]) upCache[key] = await K.upload(v);
-        return upCache[key];
-      }
-      return v;
-    }
-    if (v && typeof v === "object") await walk(v);
-    return v;
-  }
-
-  async function flush() {
-    if (!H.admin) return;
-    if (flushing) { again = true; return; }
-    flushing = true; again = false; clearTimeout(flushT);
-    try {
-      var ops = [];
-      // 1) settings-like documents
-      for (var di = 0; di < DOCS.length; di++) {
-        var k = DOCS[di], v = DB[k];
-        if (v === undefined) continue;
-        if (J(v) === SN.docs[k]) continue;
-        await walk(v);
-        (function (k, v) { var js = J(v); ops.push({ fn: "admin_put_doc", args: { p_key: k, p_data: v }, done: function () { SN.docs[k] = js; } }); })(k, v);
-      }
-      // 2) simple collections
-      var cn = Object.keys(COLLS);
-      for (var ci = 0; ci < cn.length; ci++) {
-        var c = cn[ci], idOf = COLLS[c], sn = SN.rows[c] || (SN.rows[c] = {}), up = [], seen = {}, newSn = {};
-        var arr = DB[c] || [];
-        for (var i = 0; i < arr.length; i++) {
-          var row = arr[i], id = idOf(row);
-          if (id === undefined || id === "undefined" || id === "") continue;
-          seen[id] = 1;
-          var j0 = J(row);
-          if (!sn[id] || sn[id].pos !== i || sn[id].j !== j0) { await walk(row); j0 = J(row); up.push({ id: id, pos: i, data: row }); }
-          newSn[id] = { pos: i, j: j0 };
-        }
-        var del = Object.keys(sn).filter(function (id) { return !seen[id]; });
-        if (up.length) (function (c, up, newSn) { ops.push({ fn: "admin_put_rows", args: { p_coll: c, p_rows: up }, done: function () { up.forEach(function (u) { SN.rows[c][u.id] = newSn[u.id]; }); } }); })(c, up, newSn);
-        if (del.length) (function (c, del) { ops.push({ fn: "admin_del_rows", args: { p_coll: c, p_ids: del }, done: function () { del.forEach(function (id) { delete SN.rows[c][id]; }); } }); })(c, del);
-      }
-      // 3) flavors
-      var prow = [], pseen = {}, psn = {};
-      for (var pi = 0; pi < DB.products.length; pi++) {
-        var p = DB.products[pi], was = SN.prods[p.id];
-        pseen[p.id] = 1;
-        var rest = Object.assign({}, p); delete rest.stock; delete rest.reviews;
-        if (was && was.pos === pi && J(rest) === was.j && p.stock === was.stock && (p.reviews || []).map(function (r) { return r.id + "|" + J(r); }).join("\n") === was.revs.join("\n")) { continue; }
-        await walk(p);
-        rest = Object.assign({}, p); delete rest.stock; delete rest.reviews;
-        var out = { id: p.id, pos: pi };
-        if (!was) { out.create = Object.assign({}, p); }
-        else {
-          out.set = rest; out.replace = true;
-          if (p.stock !== was.stock) out.stockAdd = (p.stock | 0) - (was.stock | 0);
-          var nowRev = (p.reviews || []).map(function (r) { return r.id + "|" + J(r); }), oldIds = {}, newIds = {};
-          was.revs.forEach(function (s) { oldIds[s] = 1; }); nowRev.forEach(function (s) { newIds[s] = 1; });
-          var rd = was.revs.filter(function (s) { return !newIds[s]; }).map(function (s) { return s.split("|")[0]; });
-          var ra = (p.reviews || []).filter(function (r) { return !oldIds[r.id + "|" + J(r)]; });
-          if (rd.length || ra.length) { out.revDel = rd.concat(ra.map(function (r) { return r.id; })); out.revAdd = ra; }
-        }
-        prow.push(out);
-        psn[p.id] = snapProd(p, pi);
-      }
-      var pdel = Object.keys(SN.prods).filter(function (id) { return !pseen[id]; });
-      if (prow.length) ops.push({ fn: "admin_put_products", args: { p_rows: prow }, done: function () { Object.keys(psn).forEach(function (id) { SN.prods[id] = psn[id]; }); } });
-      if (pdel.length) ops.push({ fn: "admin_del_rows", args: { p_coll: "products", p_ids: pdel }, done: function () { pdel.forEach(function (id) { delete SN.prods[id]; }); } });
-
-      // 4) orders (only the fields the owner can change)
-      var patched = false;
-      DB.orders.forEach(function (o) {
-        var s = SN.orders[o.id];
-        if (!s) { SN.orders[o.id] = snapOrder(o); return; }
-        var patch = diffOrder(o, s); if (!patch) return;
-        var sent = snapOrder(o);
-        ops.push({ fn: "admin_patch_order", args: { p_id: o.id, p_patch: patch }, done: function (d) {
-          if (J(snapOrder(o)) === J(sent)) { setOrderIn(DB.orders, d); SN.orders[o.id] = snapOrder(DB.orders.find(function (x) { return x.id === o.id; })); }
-          else SN.orders[o.id] = sent;
-          patched = true;
-        } });
-      });
-
-      for (var oi = 0; oi < ops.length; oi++) { var op = ops[oi]; var res = await K.rpc(op.fn, op.args, true); op.done(res); }
-      failN = 0; dirty = false;
-      setSync("saved");
-      if (patched) { poll(); if (view === "admin" && !typingNow() && !A.modal) renderAdmin(); }
-    } catch (e) {
-      failN++; setSync("error", e.message);
-      if (failN === 1 || failN % 6 === 0) toast("Couldn't save: " + e.message);
-      if (/sign in|session|jwt|42501/i.test(e.message)) { H.admin = false; clearInterval(pollT); loginUI("Please sign in again to save your changes."); }
-      else again = true;
-    } finally {
-      flushing = false;
-      if (again && H.admin) schedule(Math.min(30000, 2000 * Math.max(1, failN)));
-    }
-  }
-
-  /* ================= owner: pull new orders ================= */
-  function typingNow() { var f = document.activeElement; return !!(f && /INPUT|TEXTAREA|SELECT/.test(f.tagName)); }
-  var polling = false;
-  async function poll() {
-    if (!H.admin || polling || document.hidden && false) return;
-    polling = true;
-    try {
-      var r = await K.rpc("admin_poll", { p_since: SINCE }, true);
-      var changed = false;
-      (r.orders || []).forEach(function (d) {
-        var o = DB.orders.find(function (x) { return x.id === d.id; });
-        if (!o) { DB.orders.unshift(d); SN.orders[d.id] = snapOrder(d); changed = true; return; }
-        if (diffOrder(o, SN.orders[o.id])) return;                       // unsaved local edit wins until it's sent
-        if (J(o) === J(d)) return;
-        setOrderIn(DB.orders, d); SN.orders[d.id] = snapOrder(DB.orders.find(function (x) { return x.id === d.id; })); changed = true;
-      });
-      DB.orders.sort(function (a, b) { return b.createdAt - a.createdAt; });
-      (r.products || []).forEach(function (pp) {
-        var p = DB.products.find(function (x) { return x.id === pp.id; }), was = SN.prods[pp.id];
-        if (!p || !was) return;
-        if (p.stock === was.stock && typeof pp.stock === "number") { if (p.stock !== pp.stock) changed = true; p.stock = pp.stock; was.stock = pp.stock; }
-        var localRevs = (p.reviews || []).map(function (x) { return x.id + "|" + J(x); }).join("\n");
-        if (localRevs === was.revs.join("\n")) {
-          var nr = pp.reviews || [], ns = nr.map(function (x) { return x.id + "|" + J(x); });
-          if (ns.join("\n") !== localRevs) { p.reviews = nr; was.revs = ns; changed = true; }
-        }
-      });
-      if ((r.visits || []).length) {
-        var have = {}; VIS.forEach(function (v) { have[v.t + "|" + v.v] = 1; });
-        r.visits.forEach(function (v) { if (!have[v.t + "|" + v.v]) { VIS.push(v); changed = true; } });
-      }
-      SINCE = (r.now || Date.now()) - 3000;
-      if (changed && view === "admin" && !typingNow() && !A.modal && ["orders", "dashboard", "complaints", "products"].indexOf(A.tab) >= 0) renderAdmin();
-      else if (changed && view === "admin") { try { renderAlerts(); } catch (e) {} }
-    } catch (e) {
-      if (/sign in|session|jwt/i.test(e.message)) { H.admin = false; clearInterval(pollT); loginUI("Your session ended. Please sign in again."); }
-    } finally { polling = false; }
-  }
-  document.addEventListener("visibilitychange", function () { if (!document.hidden && H.admin) poll(); });
-
-  // payment-proof and complaint pictures are fetched when the owner opens them
-  H.adminFiles = async function (o) {
-    var need = (o.proof && !o.proof.img) || (o.complaint && o.complaint.photoCount > 0 && !(o.complaint.photos || []).length);
-    if (!need) return;
-    try {
-      var f = await K.rpc("admin_order_files", { p_id: o.id }, true);
-      if (o.proof && f.proof) o.proof.img = f.proof;
-      if (o.complaint && f.photos) o.complaint.photos = f.photos;
-    } catch (e) { toast("Couldn't load the picture: " + e.message); }
-  };
-  H.flush = flush;
 })();

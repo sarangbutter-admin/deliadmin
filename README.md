@@ -8,14 +8,17 @@ A ready-to-deploy ordering website for a cookie shop.
 No build step. No frameworks. The site is plain files in `site/`, the backend is Supabase (Postgres + Auth + Storage), the host is Netlify.
 
 ```
-site/                 <- what Netlify publishes
-  index.html  styles.css  app.js  sb.js  backend.js  config.js  404.html  robots.txt
-supabase/migrations/  <- the whole database (run once)
-netlify.toml          <- security headers + publish folder
-tools/bundle.py       <- optional: builds one single-file preview (dist/)
+site/                 <- CUSTOMER shop (Netlify site 1). Contains no admin code or links.
+admin-site/           <- TEAM site: owner + staff sign-in and admin (Netlify site 2, separate address)
+src/                  <- the source both sites are built from (edit here, then run: node tools/build.js)
+supabase/migrations/  <- the database (run both files once, in order)
+netlify.toml          <- settings for the customer site (admin-site/netlify.toml is for the team site)
+tools/build.js        <- builds site/ and admin-site/ from src/
 ```
 
-If `site/config.js` is left empty the site runs in **demo mode**: everything is stored in the visitor's own browser and nothing is shared. Handy for trying things out, never use it for real customers.
+**Two sites, one database.** Customers use the shop address. The owner and staff use a different, unlisted address (for example `delidome-team.netlify.app`, or a hard-to-guess name). The shop does not link to it, does not contain its code, and `/#admin` on the shop just shows the shop. The team site is marked `noindex` (search engines are told to stay away).
+
+If `config.js` is left empty the site runs in **demo mode**: everything is stored in the visitor's own browser and nothing is shared. Handy for trying things out, never use it for real customers.
 
 ---
 
@@ -24,24 +27,25 @@ If `site/config.js` is left empty the site runs in **demo mode**: everything is 
 ### 1. Supabase (the database)
 
 1. Create a project at <https://supabase.com> (any region close to your customers). Save the database password somewhere safe.
-2. Open **SQL Editor → New query**, paste the whole file `supabase/migrations/20260101000000_delidome_schema.sql`, press **Run**. It is safe to run again later.
+2. Open **SQL Editor → New query**, paste the whole file `supabase/migrations/20260101000000_delidome_schema.sql`, press **Run**. Then do the same with `20260102000000_roles_customers.sql` (staff roles + customer list). Both are safe to run again later.
 3. Create your owner login: **Authentication → Users → Add user → Create new user**. Enter your email and a long password, and tick **Auto Confirm User**.
 4. Tell the database that this email is the owner. In **SQL Editor** run (use your own email):
    ```sql
-   insert into public.admins (email) values ('you@example.com');
+   insert into public.admins (email, role) values ('you@example.com', 'owner');
    ```
-   Only emails in this list can open the admin. You can add a second person the same way.
+   Only emails in this list can sign in to the team site. Later you can add staff from the **Team** tab (no SQL needed).
 5. **Turn off public sign-ups** so strangers can't create accounts: **Authentication → Sign In / Providers → "Allow new users to sign up" → OFF**. (Even if someone did sign up, they would not be an owner. This is a second lock.)
 6. Copy your keys: **Project Settings → API**. You need the **Project URL** and the **anon / publishable key**. Both are safe to publish; the database only lets visitors call the public shop functions.
 
 ### 2. Put the keys in the site
 
-Edit `site/config.js`:
+Edit `src/config.js` (then run `node tools/build.js`, which copies it into both sites):
 
 ```js
 window.DELIDOME_CONFIG = {
   supabaseUrl: "https://YOUR-PROJECT.supabase.co",
-  supabaseAnonKey: "YOUR-ANON-OR-PUBLISHABLE-KEY"
+  supabaseAnonKey: "YOUR-ANON-OR-PUBLISHABLE-KEY",
+  shopUrl: "https://YOUR-SHOP-ADDRESS"   // team site only: the "View shop" button
 };
 ```
 
@@ -60,29 +64,33 @@ git remote add origin https://github.com/YOU/delidome.git
 git push -u origin main
 ```
 
-### 4. Netlify (the host)
+### 4. Netlify (the host): two sites from the same repository
 
+**Site 1: the customer shop**
 1. **Add new site → Import an existing project → GitHub**, pick the repository.
-2. Leave the build command empty. Publish directory is already set to `site` by `netlify.toml`. Deploy.
-3. In Supabase go to **Authentication → URL Configuration** and set **Site URL** to your Netlify address (or your own domain). 
-4. Optional: add your own domain in **Netlify → Domain management** (HTTPS is automatic).
+2. Leave the build command empty. Base directory empty. Publish directory `site` (already set by `netlify.toml`).
 
-### Previews without spending credits (dev branch)
+**Site 2: the team site**
+1. **Add new site → Import an existing project → GitHub**, pick the same repository.
+2. Set **Base directory** to `admin-site`, build command empty, publish directory `.`. It reads `admin-site/netlify.toml`.
+3. Give it a name that isn't obvious and don't link to it anywhere public.
 
-This repo is set up so Netlify **only builds the `dev` branch**; `main` is never built automatically (see `ignore` in `netlify.toml`).
-
-* Work and test on `dev`. Every push to `dev` gets a preview at `https://dev--YOUR-SITE.netlify.app`.
-* In Netlify: **Site configuration → Build & deploy → Branches and deploy contexts**: set *Branch deploys* to **"Let me add individual branches"** and add only `dev`. Leave *Deploy Previews* off.
-* To go live, deliberately publish from `main`: merge `dev` into `main`, then in Netlify use **Deploys → Trigger deploy → Clear cache and deploy site** after removing the `ignore` lines (or ask Claude to). Nothing reaches the live address without you doing this.
+Both sites skip builds of `main` and only build other branches (see "Previews without spending credits"). In Supabase go to **Authentication → URL Configuration** and set **Site URL** to the shop address. Add the team address under **Redirect URLs**.
 
 ### 5. First sign-in
 
-Open `https://YOUR-SITE/#admin`, sign in with the owner email and password. The first time, the shop is filled with starter flavors, boxes and extras (no fake orders or reviews). Everything on the left menu is yours to edit. Changes save automatically (look for "All changes saved" in the sidebar) and are live for customers within seconds.
+Open the **team site** (not the shop), sign in with the owner email and password. The first time, the shop is filled with starter flavors, boxes and extras (no fake orders or reviews). Everything on the left menu is yours to edit. Add staff in **Team** and see everyone who ordered in **Customers**. Changes save automatically (look for "All changes saved" in the sidebar) and are live for customers within seconds.
 
 First things to do in the admin:
 * **Shop settings**: name, address, opening hours, delivery fee, order cut-off, **time zone**, payment window, closed days.
 * **Shop settings → Payment methods**: your bank / e-wallet details and QR pictures (customers see these after they order).
 * **Flavors, Boxes & extras**: replace the starter content.
+
+### Staff and customers
+
+* **Owner** can do everything. **Staff** can only work with orders (confirm payment, change status), complaints, shipping labels and the customer list. This is enforced inside the database, not just hidden in the screen.
+* To add staff: create their login in Supabase (**Authentication → Users → Add user**, tick Auto Confirm), then add the same email in the **Team** tab.
+* **Customers**: every order saves the name and WhatsApp number automatically, once per number (`0812…` and `+62 812…` are the same customer). You can add a customer by hand (name + WhatsApp). Deleting is owner-only; a deleted customer returns automatically on their next order.
 
 ### 6. Optional
 
@@ -98,7 +106,7 @@ First things to do in the admin:
 | --- | --- |
 | A visitor reading other people's orders, phone numbers or addresses | All tables are locked (row level security on, no access granted to the public roles). Visitors can only call specific functions. Each customer only gets their own orders, proven by a secret token that stays in their browser (stored hashed in the database). To open an order on another device they need the order code **and** the WhatsApp number (rate-limited). |
 | A visitor changing prices, stock or shop content | Every price, discount, coupon, delivery fee, stock check and delivery date is recomputed **on the server** when an order is placed. The browser's total is only a "did the price change?" check. |
-| Someone opening the admin | Needs a Supabase login whose email is in the `admins` table, checked again inside every admin function. Public sign-ups are off. |
+| Someone opening the admin | The admin lives on a separate, unlisted site that the shop doesn't link to or contain. It needs a Supabase login whose email is in the `admins` table, checked again inside every admin function (owner vs staff is enforced in the database). Public sign-ups are off. The database functions behind it can't be hidden from the internet, but they refuse everyone who isn't signed in as a team member. |
 | Leaking unpromoted coupon codes | Customers only receive coupons the owner marked "show to customers". Other codes are checked one at a time by the server (rate-limited). |
 | Fake payment proofs / photos with scripts | Only real JPG/PNG/WebP data under 1 MB is accepted. Pictures are stored apart from the order and shown only to the order's customer and the owner. |
 | Script injection (XSS) | Everything is escaped before display, and the Content-Security-Policy in `netlify.toml` allows scripts from this site only (no inline scripts), so injected code can't run anyway. |
@@ -117,7 +125,7 @@ First things to do in the admin:
 * **Messages to customers**: the admin logs every status message and gives you one-tap WhatsApp / email buttons (they open your own WhatsApp or mail app). Fully automatic sending needs a messaging service and is not included.
 * **Time zone**: the order cut-off and the days customers can choose follow *Shop settings → Shop time zone* (default Asia/Jakarta), whatever the visitor's own time zone is.
 * **Free-plan limits**: Supabase pauses free projects after a week without activity and has storage / bandwidth limits. For a real shop the Pro plan is recommended.
-* **Updating the site**: change files, `git push`, Netlify redeploys. For database changes, add a new file in `supabase/migrations/` and run it in the SQL editor.
+* **Updating the site**: edit files in `src/`, run `node tools/build.js`, commit `src/`, `site/` and `admin-site/`, `git push`, Netlify redeploys. For database changes, add a new file in `supabase/migrations/` and run it in the SQL editor.
 * **Preview without Netlify**: `cd site && python3 -m http.server 8080`, then open <http://localhost:8080>.
 * **Single-file preview**: `python3 tools/bundle.py` writes `dist/delidome-single.html`.
 
@@ -126,7 +134,7 @@ First things to do in the admin:
 | Symptom | Fix |
 | --- | --- |
 | "We couldn't load the shop" | `config.js` URL / key wrong or the SQL file wasn't run. Open the browser console for details. |
-| Admin says "isn't the shop owner" | The email isn't in `public.admins` (step 1.4), or differs in spelling. |
+| "This account isn't on the team" | The email isn't in `public.admins` (step 1.4), or differs in spelling. |
 | "Could not find the function … in the schema cache" | Re-run the SQL file, then wait a few seconds (or **Project Settings → API → Reload schema**). |
 | Pictures don't upload | Re-run the SQL file (it creates the `shop-media` bucket and its policies). |
 | Customers see an empty shop | Sign in to `/#admin` once so the starter content is created. |
