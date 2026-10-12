@@ -134,5 +134,3 @@ First things to do in the admin:
 ## Tests that were run
 
 The database file and the website were tested together against a real PostgreSQL 16 with a Supabase-compatible request layer, driving a real browser: ordering, price/stock/coupon enforcement, editing and cancelling orders, payment proof, tracking from another device, every owner status change with stock effects, complaints and replies, ratings, auto-cancel of unpaid orders, picture uploads, sign-in / sign-out, non-owner accounts, anonymous access to every table and admin function, and script-injection attempts. It has not been run against Supabase's own servers; follow the steps above and test one order end to end before announcing the shop.
-
-
