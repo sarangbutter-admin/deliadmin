@@ -138,11 +138,9 @@ wr('admin-site/404.html','<!doctype html><html lang="en"><head><meta charset="ut
 [build]
   publish = "."
   command = ""
-  # Cost control (exit 0 = skip): never build "main"; skip pushes that didn't change admin-site/
+  # Cost control (exit 0 = skip): never build "main"; skip pushes that didn't change admin-site/.
+  # (This site's production branch can be "dev", so production builds are NOT blocked here; the rule above still never builds "main".)
   ignore = "test \\"$BRANCH\\" = \\"main\\" || ( test -n \\"$CACHED_COMMIT_REF\\" && test \\"$CACHED_COMMIT_REF\\" != \\"$COMMIT_REF\\" && git diff --quiet \\"$CACHED_COMMIT_REF\\" \\"$COMMIT_REF\\" -- . )"
-
-[context.production]
-  ignore = "exit 0"
 
 `+t.slice(hdr).replace('Referrer-Policy = "strict-origin-when-cross-origin"','Referrer-Policy = "no-referrer"\n    X-Robots-Tag = "noindex, nofollow, noarchive"\n    Cache-Control = "no-store"')
     .replace(/\n\[\[headers\]\]\n  for = "\/index\.html"[\s\S]*$/,'\n');
