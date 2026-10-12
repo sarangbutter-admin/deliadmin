@@ -2772,7 +2772,7 @@ am.addEventListener("dragover",e=>{const t=e.target.closest("[data-drop]");if(!t
 am.addEventListener("dragleave",e=>{const t=e.target.closest("[data-drop]");if(t&&!t.contains(e.relatedTarget))t.classList.remove("drag")});
 am.addEventListener("drop",e=>{const t=e.target.closest("[data-drop]");if(!t)return;e.preventDefault();t.classList.remove("drag");const f=e.dataTransfer.files[0];if(f)uploadPhoto(t.dataset.drop,f,t.querySelector(".upl"))});
 am.addEventListener("submit",e=>{if(e.target.id==="saleForm"){e.preventDefault();createSale()}});
-$("#anav").addEventListener("click",e=>{const b=e.target.closest("[data-tab]");if(b){A.tab=b.dataset.tab;closeDrawer();renderAdmin();window.scrollTo(0,0)}});
+$("#anav").addEventListener("click",e=>{const b=e.target.closest("[data-tab]");if(b){A.tab=b.dataset.tab;closeDrawer();renderAdmin();if(matchMedia("(max-width:860px)").matches){const m=$("#amain");window.scrollTo(0,Math.max(0,m.getBoundingClientRect().top+window.scrollY-8))}else window.scrollTo(0,0)}});
 $("#drawer").addEventListener("click",e=>{
   if(e.target.id==="drawer"||e.target.closest("[data-close]")){closeDrawer();return}
   const b=e.target.closest("[data-set-status]");if(b){setOrderStatus(A.openOrder,b.dataset.setStatus);return}
