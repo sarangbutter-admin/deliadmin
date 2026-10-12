@@ -241,7 +241,22 @@ function plateInner(p){
   if(!hasImage(p))return "";
   return cookieSVG(artOf(p),seedOf(p.id));
 }
-function plateHTML(p){const bg=plateColorOf(p);return `<div class="plate${DARK_PLATES.includes(bg)?" dark":""}${hasImage(p)?"":" blank"}" style="background:${bg};${bg==="#EEF0FF"?"box-shadow:inset 0 0 0 2px #000096":""}">${plateInner(p)}</div>`}
+const HEX6=/^#[0-9a-f]{6}$/i;
+const lumOf=h=>{const c=[1,3,5].map(i=>{const v=parseInt(h.slice(i,i+2),16)/255;return v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4)});return .2126*c[0]+.7152*c[1]+.0722*c[2]};
+const BG_DIRS={diag:"linear-gradient(135deg,",down:"linear-gradient(180deg,",right:"linear-gradient(90deg,",radial:"radial-gradient(circle,"};
+// the circle behind a flavor: automatic colour, or the owner's own colour / gradient / picture / none
+function plateBg(p,b){
+  b=b||p.bg||{};const d=plateColorOf(p);let css,dark;
+  if(b.type==="color"&&HEX6.test(b.c1||"")){css=`background:${b.c1}`;dark=lumOf(b.c1)<.3}
+  else if(b.type==="gradient"&&HEX6.test(b.c1||"")&&HEX6.test(b.c2||"")){css=`background:${BG_DIRS[b.dir]||BG_DIRS.diag}${b.c1},${b.c2})`;dark=(lumOf(b.c1)+lumOf(b.c2))/2<.3}
+  else if(b.type==="image"&&imgOk(b.img)){css=`background:#000096 url("${imgOk(b.img)}") center/cover no-repeat`;dark=true}
+  else if(b.type==="none"){css="background:transparent";dark=false}
+  else{css=`background:${d};${d==="#EEF0FF"?"box-shadow:inset 0 0 0 2px #000096":""}`;dark=DARK_PLATES.includes(d)}
+  if(b.ring&&HEX6.test(b.ring))css+=`;box-shadow:inset 0 0 0 4px ${b.ring}`;
+  const z=+b.size;if(z>=40&&z<=100)css+=`;--ck:${Math.round(z)}%`;
+  return {css,dark};
+}
+function plateHTML(p,bgDraft){const g=plateBg(p,bgDraft);return `<div class="plate${g.dark?" dark":""}${hasImage(p)?"":" blank"}" style="${esc(g.css)}">${plateInner(p)}</div>`}
 function crumbColors(p){
   if(p.art==="photo"&&p.tints)return {dough:p.tints[0],edge:p.tints[1],chips:[p.tints[2]]};
   if(!hasImage(p))return {dough:"#000096",edge:"#2328C8",chips:["#D9DCFA"]};
@@ -1579,6 +1594,7 @@ function prow(p){return `<div class="prow" data-prow="${p.id}">
       <div class="pthumb" data-drop="${p.id}">${plateHTML(p)}
         <label class="upl">${p.img?"Replace photo":"Upload photo"}<input type="file" accept="image/*" data-upload="${p.id}" aria-label="Upload photo for ${esc(p.name)}"></label>
         ${p.img?`<button class="linkbtn sm" type="button" data-rmimg="${p.id}">Remove photo</button>`:""}
+        <button class="linkbtn sm" type="button" data-pbg="${p.id}">🎨 Background</button>
       </div>
       <div class="pfields">
         <div class="grid3">
@@ -1743,6 +1759,65 @@ function addCat(){
   if(DB.categories.some(c=>c.name.toLowerCase()===n.toLowerCase())){err.textContent=`There's already a category called "${n}".`;err.hidden=false;return}
   DB.categories.push({id:uid(),name:n});saveDB();toast(`${n} added`);renderCats(true);renderAdmin();
 }
+
+/* --- Flavor background editor (preview first, saved only on "Save") --- */
+let BG=null;
+function openBg(id){const p=prod(id);if(!p)return;const cur=p.bg||{};
+  BG={id,d:Object.assign({type:"auto",c1:"#EEF0FF",c2:"#000096",dir:"diag",img:"",size:84,ring:""},JSON.parse(JSON.stringify(cur)))};
+  if(!BG.d.size)BG.d.size=84;
+  openModal("","pbg");renderBg();}
+function bgPrev(){const p=prod(BG.id),el=$("#bgPrev");if(!p||!el)return;
+  el.innerHTML=[["Menu",""],["Small","sm"]].map(([l,c])=>`<div class="bgp ${c}"><div class="bgp-plate">${plateHTML(p,BG.d)}</div><span>${l}</span></div>`).join("")}
+function renderBg(){const p=prod(BG.id),d=BG.d,t=d.type;
+  const types=[["auto","Automatic"],["color","Colour"],["gradient","Gradient"],["image","Picture"],["none","None"]];
+  const col=(id,lbl,v)=>`<label class="af">${lbl}<span class="bgcol"><input type="color" id="${id}" value="${HEX6.test(v||"")?v:"#000096"}"><input class="in" id="${id}Hex" value="${esc(v||"")}" maxlength="7" placeholder="#000096"></span></label>`;
+  $("#modalCard").innerHTML=`<div class="sheet-top"><h3 id="modalTitle">Background · ${esc(p.name)}</h3><button class="x" type="button" data-mclose aria-label="Close">✕</button></div>
+    <p class="note" style="margin-top:6px">The circle behind this flavor's photo in the shop. Nothing changes for customers until you tap Save.</p>
+    <div class="bgprev" id="bgPrev"></div>
+    <div class="seg" role="group" aria-label="Background type" style="flex-wrap:wrap;margin-top:12px">${types.map(([k,l])=>`<button type="button" data-bgtype="${k}" aria-pressed="${t===k}">${l}</button>`).join("")}</div>
+    <div class="stack" style="gap:12px;margin-top:12px">
+      ${t==="auto"?`<p class="note" style="margin:0">Uses the shop's rotating brand colours.</p>`:""}
+      ${t==="color"?col("bgC1","Colour",d.c1):""}
+      ${t==="gradient"?`<div class="grid2">${col("bgC1","From",d.c1)}${col("bgC2","To",d.c2)}</div>
+        <label class="af">Direction<select class="in" id="bgDir">${[["diag","Diagonal ↘"],["down","Top to bottom ↓"],["right","Left to right →"],["radial","From the centre ◎"]].map(([k,l])=>`<option value="${k}" ${d.dir===k?"selected":""}>${l}</option>`).join("")}</select></label>`:""}
+      ${t==="image"?`<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><label class="upl">${d.img?"Change picture":"Choose picture"}<input type="file" accept="image/*" id="bgFile"></label>${d.img?`<span class="note" style="margin:0">Picture ready</span>`:`<span class="note" style="margin:0">Square pictures work best (pattern, texture, colour splash).</span>`}</div>`:""}
+      ${t==="none"?`<p class="note" style="margin:0">No circle. Best with cut-out photos (transparent PNG).</p>`:""}
+      <label class="af">Photo size inside the circle: <b id="bgSizeV">${d.size}%</b><input type="range" id="bgSize" min="50" max="100" step="1" value="${d.size}"></label>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><label class="sw"><input type="checkbox" id="bgRingOn" ${d.ring?"checked":""}><span></span></label><span class="stlabel">Outline ring</span>${d.ring?`<span class="bgcol"><input type="color" id="bgRing" value="${HEX6.test(d.ring)?d.ring:"#000096"}"></span>`:""}</div>
+    </div>
+    <p class="err" id="bgErr" hidden></p>
+    <div class="modal-actions"><button class="btn btn-ghost-blue" type="button" data-bgreset>Reset to automatic</button><button class="btn btn-ghost-blue" type="button" data-mclose>Cancel</button><button class="btn btn-blue" type="button" data-bgsave>Save</button></div>`;
+  bgPrev();
+}
+function bgSave(){const p=prod(BG.id);if(!p)return;const d=BG.d;
+  if(d.type==="image"&&!d.img){const e=$("#bgErr");e.textContent="Choose a picture first, or pick another type.";e.hidden=false;return}
+  const out={type:d.type,size:Math.round(+d.size)||84};
+  if(d.type==="color")out.c1=d.c1;
+  if(d.type==="gradient"){out.c1=d.c1;out.c2=d.c2;out.dir=d.dir}
+  if(d.type==="image")out.img=d.img;
+  if(d.ring)out.ring=d.ring;
+  if(out.type==="auto"&&out.size===84&&!out.ring)delete p.bg;else p.bg=out;
+  saveDB();closeModal();renderAdmin();toast("Background saved");
+}
+$("#modal").addEventListener("click",e=>{if(A.modal!=="pbg"||!BG)return;const b=e.target.closest("button");if(!b)return;const d=b.dataset;
+  if(d.bgtype){BG.d.type=d.bgtype;renderBg()}
+  else if(d.bgsave!==undefined)bgSave();
+  else if(d.bgreset!==undefined){BG.d={type:"auto",c1:BG.d.c1,c2:BG.d.c2,dir:"diag",img:BG.d.img,size:84,ring:""};renderBg()}
+});
+$("#modal").addEventListener("input",e=>{if(A.modal!=="pbg"||!BG)return;const el=e.target,id=el.id,d=BG.d;
+  if(id==="bgC1"||id==="bgC2"){d[id==="bgC1"?"c1":"c2"]=el.value;const h=$("#"+id+"Hex");if(h)h.value=el.value}
+  else if(id==="bgC1Hex"||id==="bgC2Hex"){const v=el.value.trim();if(HEX6.test(v)){d[id==="bgC1Hex"?"c1":"c2"]=v;const c=$("#"+id.slice(0,4));if(c)c.value=v}}
+  else if(id==="bgDir")d.dir=el.value;
+  else if(id==="bgSize"){d.size=+el.value;$("#bgSizeV").textContent=el.value+"%"}
+  else if(id==="bgRing")d.ring=el.value;
+  else return;
+  bgPrev();
+});
+$("#modal").addEventListener("change",async e=>{if(A.modal!=="pbg"||!BG)return;const el=e.target;
+  if(el.id==="bgDir"){BG.d.dir=el.value;bgPrev()}
+  else if(el.id==="bgRingOn"){BG.d.ring=el.checked?(BG.d.ring||"#000096"):"";renderBg()}
+  else if(el.id==="bgFile"&&el.files[0]){try{const r=await processImage(el.files[0]);BG.d.img=r.img;renderBg()}catch(x){const er=$("#bgErr");er.textContent=x.message;er.hidden=false}}
+});
 
 /* --- Boxes & extras --- */
 function viewBoxes(){
@@ -2072,6 +2147,7 @@ am.addEventListener("click",e=>{
   else if(d.aadd!==undefined){DB.addons.push({id:uid(),name:"New extra",desc:"",price:1,active:false});saveDB();toast("Extra added, turned off");renderAdmin()}
   else if(d.adel){armed(b,()=>{DB.addons=DB.addons.filter(a=>a.id!==d.adel);saveDB();toast("Extra deleted");renderAdmin()})}
   else if(d.closed){const i=+d.closed,c=DB.settings.closedWeekdays;DB.settings.closedWeekdays=c.includes(i)?c.filter(x=>x!==i):[...c,i];saveDB();toast("Saved");renderAdmin()}
+  else if(d.pbg){openBg(d.pbg);return}
   else if(d.rmimg){const p=prod(d.rmimg);delete p.img;delete p.cutout;delete p.tints;if(p.art==="photo")p.art="none";saveDB();toast("Photo removed. Look set to None.");renderAdmin()}
   else if(d.reset!==undefined){armed(b,()=>{DB=seedDB();saveDB();S=fresh();A.bakeDay=null;toast("Demo data restored");renderAdmin()})}
 });
@@ -2181,7 +2257,6 @@ document.addEventListener("click",e=>{});
 
 function mqLum(h){const c=[1,3,5].map(i=>{const v=parseInt(h.slice(i,i+2),16)/255;return v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4)});return .2126*c[0]+.7152*c[1]+.0722*c[2]}
 function mqContrast(a,b){const x=mqLum(a),y=mqLum(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05)}
-const HEX6=/^#[0-9a-f]{6}$/i;
 function viewMarquee(){
   const m=DB.marquee,ok=mqContrast(m.bg,m.color)>=3;
   const fontOpts=Object.entries(MQ_FONTS).map(([k,v])=>`<option value="${k}" ${m.font===k?"selected":""}>${v[0]}</option>`).join("")+(m.fontData?`<option value="custom" ${m.font==="custom"?"selected":""}>${esc(m.fontName||"Your font")} (uploaded)</option>`:"");

@@ -88,8 +88,8 @@ p{margin:0}
 
 /* Plate + cookie */
 .plate{display:grid;place-items:center;border-radius:50%;aspect-ratio:1;width:100%;container-type:inline-size}
-.plate svg{width:84%;height:84%;display:block;filter:drop-shadow(0 4px 6px rgba(0,0,40,.18))}
-.plate .ph{width:84%;height:84%;display:block;border-radius:50%;object-fit:cover;box-shadow:0 4px 10px rgba(0,0,40,.22);user-select:none;-webkit-user-drag:none}
+.plate svg{width:var(--ck,84%);height:var(--ck,84%);display:block;filter:drop-shadow(0 4px 6px rgba(0,0,40,.18))}
+.plate .ph{width:var(--ck,84%);height:var(--ck,84%);display:block;border-radius:50%;object-fit:cover;box-shadow:0 4px 10px rgba(0,0,40,.22);user-select:none;-webkit-user-drag:none}
 .plate .ph.cut{border-radius:0;object-fit:contain;box-shadow:none;filter:drop-shadow(0 4px 6px rgba(0,0,40,.25))}
 .plate .ini{font-family:var(--display);font-weight:800;font-size:clamp(11px,30cqw,44px);line-height:1;color:var(--blue);letter-spacing:-.02em}
 .plate.dark .ini{color:var(--white)}
@@ -609,3 +609,6 @@ textarea.in{resize:vertical;border-radius:10px}
 
 #sbLoading{position:fixed;left:50%;top:76px;transform:translateX(-50%);z-index:250;background:#fff;color:var(--ink,#0B0B45);border:1.5px solid var(--blue,#000096);border-radius:999px;padding:9px 16px;display:flex;gap:12px;align-items:center;font-size:14px;box-shadow:0 8px 24px rgba(0,0,150,.18);max-width:calc(100vw - 32px)}
 #sbLoading button{border:0;background:var(--blue,#000096);color:#fff;border-radius:999px;padding:6px 12px;font-weight:600;cursor:pointer}
+
+/* flavor background editor */
+.bgcol .in{max-width:120px}

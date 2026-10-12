@@ -236,7 +236,22 @@ function plateInner(p){
   if(!hasImage(p))return "";
   return cookieSVG(artOf(p),seedOf(p.id));
 }
-function plateHTML(p){const bg=plateColorOf(p);return `<div class="plate${DARK_PLATES.includes(bg)?" dark":""}${hasImage(p)?"":" blank"}" style="background:${bg};${bg==="#EEF0FF"?"box-shadow:inset 0 0 0 2px #000096":""}">${plateInner(p)}</div>`}
+const HEX6=/^#[0-9a-f]{6}$/i;
+const lumOf=h=>{const c=[1,3,5].map(i=>{const v=parseInt(h.slice(i,i+2),16)/255;return v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4)});return .2126*c[0]+.7152*c[1]+.0722*c[2]};
+const BG_DIRS={diag:"linear-gradient(135deg,",down:"linear-gradient(180deg,",right:"linear-gradient(90deg,",radial:"radial-gradient(circle,"};
+// the circle behind a flavor: automatic colour, or the owner's own colour / gradient / picture / none
+function plateBg(p,b){
+  b=b||p.bg||{};const d=plateColorOf(p);let css,dark;
+  if(b.type==="color"&&HEX6.test(b.c1||"")){css=`background:${b.c1}`;dark=lumOf(b.c1)<.3}
+  else if(b.type==="gradient"&&HEX6.test(b.c1||"")&&HEX6.test(b.c2||"")){css=`background:${BG_DIRS[b.dir]||BG_DIRS.diag}${b.c1},${b.c2})`;dark=(lumOf(b.c1)+lumOf(b.c2))/2<.3}
+  else if(b.type==="image"&&imgOk(b.img)){css=`background:#000096 url("${imgOk(b.img)}") center/cover no-repeat`;dark=true}
+  else if(b.type==="none"){css="background:transparent";dark=false}
+  else{css=`background:${d};${d==="#EEF0FF"?"box-shadow:inset 0 0 0 2px #000096":""}`;dark=DARK_PLATES.includes(d)}
+  if(b.ring&&HEX6.test(b.ring))css+=`;box-shadow:inset 0 0 0 4px ${b.ring}`;
+  const z=+b.size;if(z>=40&&z<=100)css+=`;--ck:${Math.round(z)}%`;
+  return {css,dark};
+}
+function plateHTML(p,bgDraft){const g=plateBg(p,bgDraft);return `<div class="plate${g.dark?" dark":""}${hasImage(p)?"":" blank"}" style="${esc(g.css)}">${plateInner(p)}</div>`}
 function crumbColors(p){
   if(p.art==="photo"&&p.tints)return {dough:p.tints[0],edge:p.tints[1],chips:[p.tints[2]]};
   if(!hasImage(p))return {dough:"#000096",edge:"#2328C8",chips:["#D9DCFA"]};
