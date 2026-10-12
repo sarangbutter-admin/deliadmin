@@ -2894,6 +2894,31 @@ $("#modal").addEventListener("change",async e=>{
   }
 });
 
+/* --- every colour picker also gets a hex code box (type #RRGGBB or pick) --- */
+function hexify(){
+  document.querySelectorAll('#adminView input[type=color]:not([data-hexed]),#modal input[type=color]:not([data-hexed])').forEach(c=>{
+    c.dataset.hexed="1";
+    const par=c.parentElement;
+    if(par&&(par.classList.contains("colin")||par.classList.contains("bgcol"))&&par.querySelector("input.in"))return; // already has one
+    const wrap=document.createElement("span");wrap.className="hexwrap";
+    c.parentNode.insertBefore(wrap,c);wrap.appendChild(c);
+    const t=document.createElement("input");
+    Object.assign(t,{className:"in hexin",maxLength:7,value:c.value.toUpperCase(),placeholder:"#000000",spellcheck:false,autocomplete:"off"});
+    t.setAttribute("aria-label","Hex colour code");t.setAttribute("inputmode","text");
+    wrap.appendChild(t);
+    const sync=()=>{if(document.activeElement!==t){t.value=c.value.toUpperCase();t.classList.remove("bad")}};
+    c.addEventListener("input",sync);c.addEventListener("change",sync);
+    t.addEventListener("input",e=>{e.stopPropagation();
+      let v=t.value.trim();if(v&&v[0]!=="#")v="#"+v;
+      if(/^#[0-9a-f]{3}$/i.test(v))v="#"+v.slice(1).split("").map(x=>x+x).join("");
+      const good=HEX6.test(v);t.classList.toggle("bad",t.value.trim()!==""&&!good&&t.value.trim().replace("#","").length>=6);
+      if(good&&c.value.toLowerCase()!==v.toLowerCase()){c.value=v.toLowerCase();c.dispatchEvent(new Event("input",{bubbles:true}));c.dispatchEvent(new Event("change",{bubbles:true}))}});
+    t.addEventListener("change",e=>{e.stopPropagation();sync()});
+    t.addEventListener("blur",()=>{if(!HEX6.test(t.value.trim().replace(/^([^#])/,"#$1"))){t.value=c.value.toUpperCase();t.classList.remove("bad")}});
+  });
+}
+new MutationObserver(()=>hexify()).observe(document.body,{childList:true,subtree:true});
+
 /* --- Customers + team --- */
 const ROLE=()=>SBH.on?(SBH.role||"owner"):"owner";
 const STAFF_TABS=["orders","complaints","labels","customers"];

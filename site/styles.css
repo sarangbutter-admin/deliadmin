@@ -612,3 +612,6 @@ textarea.in{resize:vertical;border-radius:10px}
 
 /* flavor background editor */
 .bgcol .in{max-width:120px}
+
+/* hex code box next to every colour picker */
+.hexin.bad{border-color:var(--red);background:#FFF1F3}

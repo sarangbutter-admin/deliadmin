@@ -752,3 +752,9 @@ textarea.in{resize:vertical;border-radius:10px}
 .bgcol{display:flex;gap:8px;align-items:center}
 .bgcol input[type=color]{width:46px;height:40px;border:2px solid var(--line);border-radius:10px;padding:2px;background:var(--white)}
 .bgcol .in{max-width:120px}
+
+/* hex code box next to every colour picker */
+.hexwrap{display:flex;gap:8px;align-items:center;width:100%}
+.hexwrap input[type=color]{flex:0 0 52px;width:52px!important;height:42px!important;padding:2px;border:2px solid var(--line);border-radius:10px;background:var(--white)}
+.hexwrap .hexin{flex:1 1 auto;min-width:0;max-width:140px;font-family:ui-monospace,Menlo,Consolas,monospace;letter-spacing:.04em}
+.hexin.bad{border-color:var(--red);background:#FFF1F3}
