@@ -648,3 +648,6 @@ textarea.in{resize:vertical;border-radius:10px}
 .tmpresets .lblx{font-size:13px;font-weight:600;color:var(--muted)}
 .pchip.own{background:var(--blue);color:var(--white)}.pchip.none{background:#FCE3E8;color:var(--red)}
 .rolechip.own{background:var(--blue);color:var(--white)}
+
+@keyframes apprBlink{0%,100%{opacity:1}50%{opacity:.35}}
+.oc-b.off{opacity:.4}

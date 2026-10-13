@@ -459,5 +459,12 @@
       if (o.complaint && f.photos) o.complaint.photos = f.photos;
     } catch (e) { toast("Couldn't load the picture: " + e.message); }
   };
+  // change one order right away (used for staff payment checks and owner approvals)
+  H.patchOrder = async function (id, patch) {
+    var d = await K.rpc("admin_patch_order", { p_id: id, p_patch: patch }, true);
+    setOrderIn(DB.orders, d);
+    var o = DB.orders.find(function (x) { return x.id === id; }); if (o) SN.orders[id] = snapOrder(o);
+    return d;
+  };
   H.flush = flush;
 })();
