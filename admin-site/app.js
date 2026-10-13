@@ -1456,13 +1456,17 @@ function stepWhy(o,st){
   if(st===cur)return "";
   if(st==="new"&&!o.proof)return "Confirm payment needs the customer's payment proof first.";
   if(st==="ready"&&del&&!(String(o.courier||"").trim()&&String(o.awb||"").trim()))return "Type the courier and the airway bill number first. The order moves to Out for delivery by itself.";
+  const SEQ=["awaiting","review","new","baking","ready","completed"],ci=SEQ.indexOf(cur),si=SEQ.indexOf(st);
+  if(st==="new"&&ci>=0&&ci<3&&cur!=="review")return "Confirm payment needs the customer's payment proof first.";
+  if(si>3&&ci>=0&&ci<3)return "Confirm the payment first. Orders can't skip steps.";
+  if(ci>=3&&si>ci+1)return "Orders move one step at a time. They can't skip a step.";
   if(own)return "";
   if(cur==="review"&&st==="new")return o.rejReq?"A proof rejection is already waiting for the owner.":o.payReq?"Already waiting for the owner's approval.":"";
   if(cur==="review"&&st==="awaiting")return o.payReq?"A payment confirmation is already waiting for the owner.":o.rejReq?"Already waiting for the owner's approval.":"";
   const ok=(["awaiting","review"].includes(cur)&&st==="cancelled")||(cur==="new"&&st==="baking")||(cur==="baking"&&st==="ready")||(cur==="ready"&&st==="completed");
   return ok?"":["new","baking"].includes(cur)&&st==="cancelled"?"Only an owner can cancel a paid order.":"Orders only move forward one step at a time. Going back needs an owner.";
 }
-const canEditOrder=o=>ROLE()==="owner"?!["cancelled","completed"].includes(o.status):["awaiting","review","new","baking"].includes(o.status);
+const canEditOrder=o=>ROLE()==="owner"?!["cancelled","completed"].includes(o.status):["awaiting","review"].includes(o.status);
 const canCancelOrder=o=>ROLE()==="owner"?!["cancelled","completed"].includes(o.status):["awaiting","review"].includes(o.status);
 const shownRows=()=>ordRows().filter(o=>A.filter==="all"||o.status===A.filter);
 function orderCard(o){
