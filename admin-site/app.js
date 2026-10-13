@@ -121,6 +121,9 @@ let DB;
 function defaultAnnouncer(){return {on:true,sticky:true,size:"M",cdColor:"#C8102E",cdBg:"#FFFFFF",cdFx:true,imgOn:true,imgFx:true,
   live:{text:"Flash sale: {name}. {off} {applies}.",label:"Ends in",bg:"#C8102E",ink:"#FFFFFF",img:""},
   soon:{text:"Coming up: {name}, {off} {applies}.",label:"Starts in",bg:"#EEF0FF",ink:"#000096",img:""},
+  fdlive:{text:"{name}: free delivery on {applies}.",label:"Ends in",bg:"#0A6B34",ink:"#FFFFFF",img:""},
+  fdsoon:{text:"Coming up: {name}, free delivery on {applies}.",label:"Starts in",bg:"#E6F7EC",ink:"#0A6B34",img:""},
+  mq:{bg:"#000096",ink:"#FFFFFF",font:"display",fontData:"",fontName:"",size:"M",speed:"medium",sepOn:true,sepImg:""},
   custom:{on:false,text:"Free delivery this weekend!",label:"Ends in",endsAt:"",bg:"#000096",ink:"#FFFFFF",img:""}}}
 function defaultMarquee(){return {on:true,texts:["Baked fresh every morning","Build a box your way","Pickup or local delivery","Order by 8pm for next-day cookies"],images:[],bg:"#000096",color:"#ffffff",font:"display",size:"M",speed:"medium",fontData:null,fontName:""}}
 function defaultThanks(){return {logo:"",cookies:[],fx:true,amount:28,title:"Order placed",titleUpd:"Order updated",
@@ -168,16 +171,18 @@ function saveDB(){if(SBH.on)return SBH.save();try{localStorage.setItem(DB_KEY,JS
 
 /* --- pricing --- */
 const prod = (id,db=DB) => db.products.find(p=>p.id===id);
+const isFD=s=>s.type==="freedelivery";
 function saleStatus(s,at=Date.now()){return at<s.start?"scheduled":at<s.end?"live":"ended"}
-function saleDiscount(s,base){return r2(s.type==="percent"?base*s.value/100:Math.min(s.value,base))}
+function saleDiscount(s,base){if(isFD(s))return 0;return r2(s.type==="percent"?base*s.value/100:Math.min(s.value,base))}
 function validCustom(n,db=DB){const t=db.settings;return !!t.customOn&&Number.isInteger(n)&&n>=t.customMin&&n<=t.customMax&&(n-t.customMin)%t.customStep===0&&!db.sizes.some(s=>s.n===n)}
 function snapCustom(v,db=DB){const t=db.settings;v=Math.round(+v)||t.customMin;if(v<=t.customMin)return t.customMin;let n=t.customMin+Math.ceil((v-t.customMin)/t.customStep)*t.customStep;if(n>t.customMax)n=t.customMin+Math.floor((t.customMax-t.customMin)/t.customStep)*t.customStep;return n}
 function basePrice(n,db=DB){const sz=db.sizes.find(s=>s.n===n);return sz?sz.price:validCustom(n,db)?r2(n*db.settings.customPer):0}
 function bestSale(n,at=Date.now(),db=DB){
   const price=basePrice(n,db);if(!price)return null;
-  return db.sales.filter(s=>saleStatus(s,at)==="live"&&(s.appliesTo==="all"||+s.appliesTo===n))
+  return db.sales.filter(s=>!isFD(s)&&saleStatus(s,at)==="live"&&(s.appliesTo==="all"||+s.appliesTo===n))
     .sort((a,b)=>saleDiscount(b,price)-saleDiscount(a,price))[0]||null;
 }
+const freeDelSale=(n,at=Date.now(),db=DB)=>db.sales.find(s=>isFD(s)&&saleStatus(s,at)==="live"&&(s.appliesTo==="all"||+s.appliesTo===n))||null;
 const cpNorm=v=>String(v||"").toUpperCase().replace(/[^A-Z0-9_-]/g,"").slice(0,20);
 const cpOff=c=>c.type==="percent"?`${c.value}% off`:c.type==="amount"?`${money(c.value)} off`:"Free delivery";
 const cpUses=(code,db,excl)=>db.orders.filter(o=>o.coupon===code&&o.status!=="cancelled"&&o.id!==excl);
@@ -208,10 +213,11 @@ function quote(c,db=DB,{at=Date.now(),withDelivery=true}={}){
   const addons=r2((c.addons||[]).reduce((a,id)=>{const x=db.addons.find(y=>y.id===id&&y.active);return a+(x?x.price:0)},0));
   const cp=c.coupon?couponCheck(c.coupon,c,db,{base,saleDisc:discount,phone:c.phone,excl:c.editId}):null;
   const couponDisc=cp&&cp.ok?cp.discount:0;
-  const fee=withDelivery&&c.mode==="delivery"&&!(cp&&cp.ok&&cp.freeDel)?(c.speed==="sameday"?(db.settings.samedayFee??db.settings.deliveryFee):db.settings.deliveryFee):0;
-  return {base,sale,discount,surcharge,addons,fee,coupon:cp&&cp.ok?cp.coupon:null,couponDisc,couponErr:cp&&!cp.ok?cp.err:"",total:r2(base-discount-couponDisc+surcharge+addons+fee)};
+  const fdSale=at&&c.mode==="delivery"?freeDelSale(c.size,at,db):null;
+  const fee=withDelivery&&c.mode==="delivery"&&!fdSale&&!(cp&&cp.ok&&cp.freeDel)?(c.speed==="sameday"?(db.settings.samedayFee??db.settings.deliveryFee):db.settings.deliveryFee):0;
+  return {base,sale,fdSale,discount,surcharge,addons,fee,coupon:cp&&cp.ok?cp.coupon:null,couponDisc,couponErr:cp&&!cp.ok?cp.err:"",total:r2(base-discount-couponDisc+surcharge+addons+fee)};
 }
-const saleOffText = s => s.type==="percent"?`${s.value}% off`:`${money(s.value)} off`;
+const saleOffText = s => isFD(s)?"Free delivery":s.type==="percent"?`${s.value}% off`:`${money(s.value)} off`;
 const saleAppliesText = s => s.appliesTo==="all"?"every box":`the box of ${s.appliesTo}`;
 
 /* --- cookie drawing --- */
@@ -429,7 +435,7 @@ function renderStore(){
   $("#tab1").classList.toggle("done",S.step===2&&full());
   $("#tab2").disabled=!full();
   document.querySelectorAll("[data-opt]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.opt===optOf(S)));
-  {const k=optOf(S),st=DB.settings;$("#modeHint").textContent=k==="sameday"?`Sameday shipment adds ${money(st.samedayFee??st.deliveryFee)}. Order before ${fmtHour(st.samedayCutoff)} and we ship about ${fmtLead(optLead("sameday"))} after your payment is confirmed. We deliver within ${st.deliveryKm} km of the shop.`:k==="scheduled"?`Scheduled delivery adds ${money(st.deliveryFee)}. Pick a day and time. We deliver within ${st.deliveryKm} km of the shop.`:"Free pickup at the front counter. Pick a day and time.";}
+  {const k=optOf(S),st=DB.settings;const fdp=k!=="pickup"?freeDelSale(S.size):null;$("#modeHint").textContent=(fdp?`🚚 Free delivery promo is on: ${fdp.name}. `:"")+(k==="sameday"?`Sameday shipment adds ${money(st.samedayFee??st.deliveryFee)}. Order before ${fmtHour(st.samedayCutoff)} and we ship about ${fmtLead(optLead("sameday"))} after your payment is confirmed. We deliver within ${st.deliveryKm} km of the shop.`:k==="scheduled"?`Scheduled delivery adds ${money(st.deliveryFee)}. Pick a day and time. We deliver within ${st.deliveryKm} km of the shop.`:"Free pickup at the front counter. Pick a day and time.");}
   document.querySelectorAll(".day").forEach(b=>b.setAttribute("aria-pressed",b.dataset.day===S.day));
   document.querySelectorAll("[data-time]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.time===S.time));
   document.querySelectorAll("[data-addon]").forEach(b=>b.setAttribute("aria-pressed",S.addons.includes(b.dataset.addon)));
@@ -467,31 +473,71 @@ function renderStore(){
 }
 function anRender(el,k,cfg,AN,text,ms){
   const c=cfg[k],sig=JSON.stringify([k,text,c.label,c.bg,c.ink,AN.size,AN.cdColor,AN.cdBg,AN.cdFx,AN.imgOn&&c.img?c.img.length:0,AN.imgFx]);
-  if(el._sig!==sig){el._sig=sig;
+  if(el._sig!==sig){el._sig=sig;el._ai=null;el.style.removeProperty("--mdur");el.style.removeProperty("--mbg");
     el.style.setProperty("--fl-bg",c.bg);el.style.setProperty("--fl-ink",c.ink);el.style.setProperty("--fl-cd",AN.cdColor);el.style.setProperty("--fl-cdbg",AN.cdBg);
     el.className="flash sz-"+AN.size+(AN.cdFx?" fx-cd":"")+(AN.imgOn&&c.img&&AN.imgFx?" fx-img":"")+(el.id==="flash"?" pinned":"");
     el.innerHTML=`<div class="fw">${AN.imgOn&&c.img?`<img class="fimg" src="${esc(c.img)}" alt="">`:`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 1 3 9h4l-1 6 6.5-8h-4z" fill="currentColor"/></svg>`}<span class="ftx">${esc(text)}</span>${ms===null?"":`<span class="cdn"></span>`}</div>`}
   const cd=el.querySelector(".cdn");if(cd)cd.textContent=(c.label?c.label+" ":"")+fmtDur(ms);
 }
 function anCustomMs(c,now){if(!c.endsAt)return null;const t=new Date(c.endsAt).getTime();return isNaN(t)?null:t-now}
+// everything the announcer can say right now: live sales, free delivery promos, coming-up ones (24 h ahead) and the owner's own note
+function anFill(t,s){return t.replace(/\{name\}/g,s.name).replace(/\{off\}/g,saleOffText(s)).replace(/\{applies\}/g,saleAppliesText(s))}
+function anItems(now,AN){
+  const items=[];
+  DB.sales.filter(s=>saleStatus(s,now)==="live").sort((a,b)=>a.end-b.end).forEach(s=>{const k=isFD(s)?"fdlive":"live";items.push({k,text:anFill(AN[k].text,s),end:s.end})});
+  DB.sales.filter(s=>saleStatus(s,now)==="scheduled"&&s.start-now<24*3600e3).sort((a,b)=>a.start-b.start).forEach(s=>{const k=isFD(s)?"fdsoon":"soon";items.push({k,text:anFill(AN[k].text,s),end:s.start})});
+  const cm=AN.custom.on&&AN.custom.text?anCustomMs(AN.custom,now):undefined;
+  if(AN.custom.on&&AN.custom.text&&!(cm!==null&&cm!==undefined&&cm<=0))items.push({k:"custom",text:AN.custom.text,end:cm===undefined||cm===null?null:now+cm});
+  return items;
+}
 function updateFlash(now=Date.now()){
   const AN=DB.announcer,el=$("#flash"),hdr=$(".top");
-  const live=DB.sales.filter(s=>saleStatus(s,now)==="live").sort((a,b)=>a.end-b.end);
-  const soon=DB.sales.filter(s=>saleStatus(s,now)==="scheduled"&&s.start-now<24*3600e3).sort((a,b)=>a.start-b.start);
-  const cm=AN.custom.on&&AN.custom.text?anCustomMs(AN.custom,now):undefined;
-  let k=null,text="",ms=null;
-  if(AN.on){
-    const sl=(t,s)=>t.replace(/\{name\}/g,s.name).replace(/\{off\}/g,saleOffText(s)).replace(/\{applies\}/g,saleAppliesText(s));
-    if(live[0]){k="live";text=sl(AN.live.text,live[0]);ms=live[0].end-now}
-    else if(soon[0]){k="soon";text=sl(AN.soon.text,soon[0]);ms=soon[0].start-now}
-    else if(AN.custom.on&&AN.custom.text&&!(cm!==null&&cm!==undefined&&cm<=0)){k="custom";text=AN.custom.text;ms=cm===undefined?null:cm}
-  }
-  if(!k){el.hidden=true;return}
-  const want=AN.sticky?hdr:hdr.nextSibling;
+  const items=AN.on?anItems(now,AN):[];
+  if(!items.length){el.hidden=true;return}
   if(AN.sticky){if(el.parentNode!==hdr)hdr.appendChild(el)}else if(el.parentNode===hdr)hdr.after(el);
+  el.hidden=false;
+  if(items.length>1)anMarquee(el,items,AN,now);   // two or more at once: one running line
+  else anRender(el,items[0].k,AN,AN,items[0].text,items[0].end===null?null:items[0].end-now);
   el.classList.toggle("pinned",!!AN.sticky);
-  el.hidden=false;anRender(el,k,AN,AN,text,ms);
   if(!AN.sticky)el.classList.remove("pinned");
+}
+// ----- announcer marquee (used when several announcements show at the same time) -----
+let anFace=null,anFaceKey="";
+function anEnsureFont(m){
+  if(!m.fontData){if(anFace){try{document.fonts.delete(anFace)}catch(e){}anFace=null;anFaceKey=""}return}
+  const key=m.fontName+m.fontData.length;if(key===anFaceKey)return;
+  try{if(anFace)document.fonts.delete(anFace);anFace=new FontFace("DD Announcer",`url(${m.fontData})`);document.fonts.add(anFace);anFaceKey=key;anFace.load().then(()=>{document.querySelectorAll(".anmq").forEach(e=>{if(e._ai)anMqBuild(e)})}).catch(()=>{})}catch(e){}
+}
+const anFontFam=m=>m.font==="custom"&&m.fontData?'"DD Announcer",var(--body)':(MQ_FONTS[m.font]||MQ_FONTS.display)[1];
+function anMqSeq(items,AN,n){
+  const m=AN.mq,out=[];
+  for(let r=0;r<n;r++)items.forEach(it=>{const c=AN[it.k];
+    out.push(`<span class="mt anit">${AN.imgOn&&c.img?`<img class="fimg" src="${esc(c.img)}" alt="">`:""}<span class="ftx">${esc(it.text)}</span>${it.end===null?"":`<span class="cdn" data-end="${it.end}" data-lab="${esc(c.label||"")}"></span>`}</span>`);
+    out.push(m.sepOn&&m.sepImg?`<img class="mi" src="${esc(imgOk(m.sepImg))}" alt="" draggable="false">`:`<span class="mdot" aria-hidden="true">✦</span>`)});
+  return out.join("");
+}
+function anMqBuild(el){
+  const ai=el._ai;if(!ai)return;const {items,AN}=ai;
+  el.classList.toggle("still",RM);
+  const draw=n=>{const set=anMqSeq(items,AN,n);el.innerHTML=`<div class="track"><div class="set">${set}</div><div class="set" aria-hidden="true">${set}</div></div>`};
+  draw(1);
+  const cw=el.clientWidth;if(!cw){anCd(el,Date.now());return}
+  const w1=el.querySelector(".set").scrollWidth||1,n=Math.max(1,Math.ceil(cw/w1));
+  if(n>1)draw(n);
+  const w=el.querySelector(".set").scrollWidth;
+  el.style.setProperty("--mdur",Math.max(6,w/(MQ_SPEED[AN.mq.speed]||70))+"s");
+  anCd(el,Date.now());
+}
+function anCd(el,now){el.querySelectorAll(".cdn[data-end]").forEach(c=>{const ms=+c.dataset.end-now;c.textContent=(c.dataset.lab?c.dataset.lab+" ":"")+fmtDur(Math.max(0,ms))})}
+function anMarquee(el,items,AN,now){
+  const m=AN.mq,sig="M"+JSON.stringify([items.map(i=>[i.k,i.text,i.end,AN[i.k].label,AN.imgOn&&AN[i.k].img?AN[i.k].img.length:0]),m,m.sepImg?m.sepImg.length:0,AN.cdColor,AN.cdBg,AN.cdFx,AN.imgOn,AN.imgFx]);
+  if(el._sig!==sig){el._sig=sig;anEnsureFont(m);
+    el.style.setProperty("--mbg",m.bg);el.style.setProperty("--mfg",m.ink);el.style.setProperty("--msz",(MQ_SIZE[m.size]||18)+"px");el.style.setProperty("--mfont",anFontFam(m));
+    el.style.setProperty("--fl-bg",m.bg);el.style.setProperty("--fl-ink",m.ink);el.style.setProperty("--fl-cd",AN.cdColor);el.style.setProperty("--fl-cdbg",AN.cdBg);
+    el.className="flash marq anmq"+(AN.cdFx?" fx-cd":"")+(AN.imgOn&&AN.imgFx?" fx-img":"")+(el.id==="flash"?" pinned":"");
+    el.setAttribute("aria-label",items.map(i=>i.text).join(". "));
+    el._ai={items,AN};anMqBuild(el)}
+  else anCd(el,now);
 }
 
 /* --- motion helpers --- */
@@ -837,7 +883,7 @@ function drawBell(list){
   if(BELLF!=="deals")list.forEach(x=>{const st=x.m.status,o=x.o,lab=st?stLabel(st,o.mode):"Update";
     items.push({at:x.m.at,h:`<button class="bell-it${x.m.at>SEENV?" new":""}" type="button" data-bellgo="${o.id}"><span class="bell-ic" aria-hidden="true">${ST_ICON[st]||"📦"}</span><span class="bell-tx"><small>Order · ${fmtAgo(x.m.at)}</small><b>Order #${esc(o.code)} · ${esc(lab)}</b><span>${esc(x.m.text)}</span></span><span class="bell-ch" aria-hidden="true">›</span></button>`})});
   if(BELLF!=="orders")DB.sales.filter(s=>saleStatus(s)!=="ended").forEach(s=>{const live=saleStatus(s)==="live";
-    items.push({at:live?s.start:Date.now()-3600e3,h:`<button class="bell-it" type="button" data-bellsale="1"><span class="bell-ic" aria-hidden="true">🔥</span><span class="bell-tx"><small>Flash sale · ${live?fmtAgo(s.start):"coming up"}</small><b>${live?"Flash sale now":"Flash sale soon"}: ${esc(s.name)}</b><span>${esc(saleOffText(s))} · ${live?"ends":"starts"} ${fmtDT(live?s.end:s.start)}</span></span><span class="bell-ch" aria-hidden="true">›</span></button>`})});
+    items.push({at:live?s.start:Date.now()-3600e3,h:`<button class="bell-it" type="button" data-bellsale="1"><span class="bell-ic" aria-hidden="true">${isFD(s)?"🚚":"🔥"}</span><span class="bell-tx"><small>${isFD(s)?"Free delivery":"Flash sale"} · ${live?fmtAgo(s.start):"coming up"}</small><b>${isFD(s)?(live?"Free delivery now":"Free delivery soon"):(live?"Flash sale now":"Flash sale soon")}: ${esc(s.name)}</b><span>${esc(saleOffText(s))} · ${live?"ends":"starts"} ${fmtDT(live?s.end:s.start)}</span></span><span class="bell-ch" aria-hidden="true">›</span></button>`})});
   if(BELLF!=="orders")activeBroadcasts().forEach(x=>{const p=x.pid&&prod(x.pid);
     items.push({at:x.at,h:`<button class="bell-it${x.at>SEENV?" new":""}" type="button" ${p?`data-bellprod="${p.id}"`:'data-bellnone="1"'}><span class="bell-ic" aria-hidden="true">${nfIcon(x.type)}</span><span class="bell-tx"><small>${nfName(x.type)} · ${fmtAgo(x.at)}</small><b>${esc(x.title)}</b>${x.text?`<span>${esc(x.text)}</span>`:""}${x.code?`<span class="bell-code" data-bellcode="${esc(x.code)}">🎟 ${esc(x.code)} · tap to copy</span>`:""}${p?`<span style="color:var(--blue);font-weight:600">View ${esc(p.name)}</span>`:""}</span>${p?`<span class="bell-ch" aria-hidden="true">›</span>`:"<span></span>"}</button>`})});
   items.sort((a,b)=>b.at-a.at);
@@ -1082,7 +1128,7 @@ setInterval(()=>{tickCountdowns();if(Math.round(Date.now()/1000)%10===0)sweepOrd
 
 /* ================= ADMIN ================= */
 const A={sel:new Set(),lbl:null,lblPrev:"sample",rvPid:null,tab:"dashboard",nf:{type:"news",title:"",text:"",pid:"",code:"",until:""},dd:"today",vr:"today",dsig:"",filter:"all",od:"all",q:"",pq:"",pcat:"all",modal:null,np:null,bakeDay:null,openOrder:null,
-  draft:{name:"Flash sale",type:"percent",value:20,appliesTo:"all",startMode:"now",startAt:"",durH:1,durM:0}};
+  draft:{kind:"discount",name:"Flash sale",type:"percent",value:20,appliesTo:"all",startMode:"now",startAt:"",durH:1,durM:0}};
 function toast(msg){const t=$("#toast");t.textContent=msg;t.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>t.hidden=true,Math.max(1600,msg.length*45))}
 let saveTimer;function saveSoon(){clearTimeout(saveTimer);saveTimer=setTimeout(()=>{saveDB();toast("Saved")},500)}
 function armed(btn,fn){if(btn.dataset.armed){fn();return}btn.dataset.armed="1";const t=btn.textContent;btn.textContent="Tap again to confirm";btn.classList.add("armed");
@@ -1125,20 +1171,48 @@ const anClone=o=>JSON.parse(JSON.stringify(o));
 const anDraft=()=>A.an||(A.an=anClone(DB.announcer));
 const anDirty=()=>A.an&&JSON.stringify(A.an)!==JSON.stringify(DB.announcer);
 function anSample(k,AN){
-  if(k==="live")return {text:AN.live.text.replace(/\{name\}/g,"Weekend crunch").replace(/\{off\}/g,"20% off").replace(/\{applies\}/g,"on every box"),ms:A.anEnd-Date.now()};
-  if(k==="soon")return {text:AN.soon.text.replace(/\{name\}/g,"Weekend crunch").replace(/\{off\}/g,"20% off").replace(/\{applies\}/g,"on every box"),ms:A.anEnd-Date.now()};
+  const fill=t=>t.replace(/\{name\}/g,"Weekend crunch").replace(/\{off\}/g,"20% off").replace(/\{applies\}/g,"on every box");
+  const fdf=t=>t.replace(/\{name\}/g,"Free delivery weekend").replace(/\{off\}/g,"Free delivery").replace(/\{applies\}/g,"on every box");
+  if(k==="live")return {text:fill(AN.live.text),ms:A.anEnd-Date.now()};
+  if(k==="soon")return {text:fill(AN.soon.text),ms:A.anEnd-Date.now()};
+  if(k==="fdlive")return {text:fdf(AN.fdlive.text),ms:A.anEnd-Date.now()};
+  if(k==="fdsoon")return {text:fdf(AN.fdsoon.text),ms:A.anEnd-Date.now()};
   return {text:AN.custom.text||"Your announcement here",ms:anCustomMs(AN.custom,Date.now())};
 }
-function anDrawPrev(){const el=document.getElementById("anPrev");if(!el)return;const AN=anDraft(),sm=anSample(A.anK,AN);
-  el.parentNode.classList.toggle("off",!AN.on);el._sig=null;anRender(el,A.anK,AN,AN,sm.text,sm.ms);el.classList.remove("pinned");
+// sample line-up for the marquee preview: a sale, a free delivery promo and the owner's note
+function anSampleItems(AN){const now=Date.now(),e=A.anEnd;return [{k:"live",text:anSample("live",AN).text,end:e},{k:"fdlive",text:anSample("fdlive",AN).text,end:e},{k:"custom",text:AN.custom.text||"Your announcement here",end:null}]}
+function anDrawPrev(){const el=document.getElementById("anPrev");if(!el)return;const AN=anDraft();
+  el.parentNode.classList.toggle("off",!AN.on);el._sig=null;
+  if(A.anK==="mq"){el.hidden=false;anMarquee(el,anSampleItems(AN),AN,Date.now())}
+  else{const sm=anSample(A.anK,AN);anRender(el,A.anK,AN,AN,sm.text,sm.ms)}
+  el.classList.remove("pinned");
   const st=document.getElementById("anDirty");if(st){st.hidden=!anDirty()}
   const sv=document.getElementById("anSave");if(sv)sv.disabled=!anDirty();const ds=document.getElementById("anDisc");if(ds)ds.disabled=!anDirty()}
-function anTick(now){const el=document.getElementById("anPrev"),cd=el&&el.querySelector(".cdn");if(!cd)return;const AN=anDraft(),sm=anSample(A.anK,AN);if(sm.ms===null)return;const c=AN[A.anK];cd.textContent=(c.label?c.label+" ":"")+fmtDur(sm.ms)}
+function anTick(now){const el=document.getElementById("anPrev"),cd=el&&el.querySelector(".cdn");if(!cd)return;if(A.anK==="mq"){anCd(el,now);return}const AN=anDraft(),sm=anSample(A.anK,AN);if(sm.ms===null)return;const c=AN[A.anK];cd.textContent=(c.label?c.label+" ":"")+fmtDur(sm.ms)}
+function anMqPanel(AN){
+  const m=AN.mq,col=(label,path,v)=>`<label class="af">${label}<input type="color" data-an="${path}" value="${v}" style="width:100%;height:42px"></label>`;
+  const fontOpts=Object.entries(MQ_FONTS).map(([k,v])=>`<option value="${k}" ${m.font===k?"selected":""}>${v[0]}</option>`).join("")+(m.fontData?`<option value="custom" ${m.font==="custom"?"selected":""}>${esc(m.fontName||"Your font")} (uploaded)</option>`:"");
+  return `<section class="panel"><h2>Running text</h2>
+    <p class="sub">When two or more announcements are showing at the same time (for example a flash sale, a free delivery promo and your own message), the banner turns into one running line that shows all of them. Each announcement keeps its own picture and its lively countdown. With only one announcement, the normal banner shows.</p>
+    <div class="grid3" style="margin-top:12px;align-items:end">${col("Background","mq.bg",m.bg)}${col("Text color","mq.ink",m.ink)}
+      <label class="af">Font<select class="in" data-an="mq.font">${fontOpts}</select></label></div>
+    <div class="grid3" style="margin-top:12px;align-items:end">
+      <label class="af">Text size<select class="in" data-an="mq.size">${["S","M","L"].map(z=>`<option value="${z}" ${m.size===z?"selected":""}>${({S:"Small",M:"Medium",L:"Large"})[z]}</option>`).join("")}</select></label>
+      <label class="af">Speed<select class="in" data-an="mq.speed">${["slow","medium","fast"].map(z=>`<option value="${z}" ${m.speed===z?"selected":""}>${z[0].toUpperCase()+z.slice(1)}</option>`).join("")}</select></label>
+      <div class="af">Your own font<div class="colin"><label class="ghost mqbtn">${m.fontData?"Replace font":"Upload font"}<input type="file" accept=".ttf,.otf,.woff,.woff2,font/*" hidden data-anfont></label>${m.fontData?`<button class="danger" type="button" data-anfontrm>Remove</button>`:""}</div></div></div>
+    <p class="note" style="margin-top:10px">${m.fontData?`Uploaded font: <b>${esc(m.fontName)}</b>. Choose it in the Font list.`:"Upload a .ttf, .otf, .woff or .woff2 file (up to 1 MB), then pick it in the Font list."} Only upload fonts you have the license to use on the web.</p>
+    <div style="display:flex;align-items:center;gap:10px;margin-top:14px"><label class="sw"><input type="checkbox" data-an="mq.sepOn" ${m.sepOn?"checked":""} aria-label="Show a picture between announcements"><span></span></label><span class="stlabel"><b>Picture between announcements</b><br><small style="color:var(--muted)">Shown after each sentence. Off shows a small star instead.</small></span></div>
+    <div style="margin-top:12px"><h2 style="font-size:15px;margin:0 0 6px">Picture between sentences</h2>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">${m.sepImg?`<img src="${esc(m.sepImg)}" alt="" style="height:48px;border-radius:10px;border:1px solid var(--line)">`:`<span class="note">No picture yet. A small star shows instead.</span>`}
+      <label class="ghost mqbtn">${m.sepImg?"Replace picture":"Upload picture"}<input type="file" accept="image/*" hidden data-ansep></label>${m.sepImg?`<button class="danger" type="button" data-ansepro>Remove</button>`:""}</div>
+      <p class="note" style="margin-top:8px">Each announcement can also have its own picture at its start: open its tab (Flash sale live, Free delivery live, My announcement…) and use <b>Banner image</b> there. The preview above shows a sample sale, a free delivery promo and your note.</p></div>
+  </section>`;
+}
 function viewAnnouncer(){
   const AN=anDraft(),K=A.anK,c=AN[K];
   const col=(label,path,v)=>`<label class="af">${label}<input type="color" data-an="${path}" value="${v}" style="width:100%;height:42px"></label>`;
   const sw=(label,path,v,hint)=>`<div class="stockrow" style="display:flex;align-items:center;gap:10px;margin-top:10px"><label class="sw"><input type="checkbox" data-an="${path}" ${v?"checked":""} aria-label="${label}"><span></span></label><span class="stlabel"><b>${label}</b>${hint?`<br><small style="color:var(--muted)">${hint}</small>`:""}</span></div>`;
-  const tabs=[["live","Flash sale live"],["soon","Coming up"],["custom","My announcement"]].map(([k,l])=>`<button type="button" class="${K===k?"on":""}" data-ank="${k}" style="border:1.5px solid ${K===k?"var(--blue)":"var(--line)"};background:${K===k?"var(--blue)":"#fff"};color:${K===k?"#fff":"var(--ink)"};border-radius:99px;padding:7px 14px;font-weight:600;cursor:pointer">${l}</button>`).join("");
+  const tabs=[["live","Flash sale live"],["soon","Coming up"],["fdlive","Free delivery live"],["fdsoon","Free delivery coming up"],["custom","My announcement"],["mq","Running text (2 or more)"]].map(([k,l])=>`<button type="button" class="${K===k?"on":""}" data-ank="${k}" style="border:1.5px solid ${K===k?"var(--blue)":"var(--line)"};background:${K===k?"var(--blue)":"#fff"};color:${K===k?"#fff":"var(--ink)"};border-radius:99px;padding:7px 14px;font-weight:600;cursor:pointer">${l}</button>`).join("");
   return head("Announcer","The banner pinned under the shop header. It stays visible while customers scroll. Changes appear in the preview only; nothing goes live until you press Save.")+MOCK+`
   <div class="stack">
     <section class="panel" style="position:sticky;top:8px;z-index:6">
@@ -1156,8 +1230,8 @@ function viewAnnouncer(){
       ${sw("Lively image","imgFx",AN.imgFx,"The picture wiggles and bounces.")}
       ${sw("Lively countdown","cdFx",AN.cdFx,"The timer pulses and a shine sweeps across the banner.")}
     </section>
-    <section class="panel">
-      <h2>${({live:"When a flash sale is live",soon:"When a sale is coming up (24 hours before)",custom:"Your own announcement"})[K]}</h2>
+    ${K==="mq"?anMqPanel(AN):`<section class="panel">
+      <h2>${({live:"When a flash sale is live",soon:"When a sale is coming up (24 hours before)",fdlive:"When a free delivery promo is live",fdsoon:"When a free delivery promo is coming up (24 hours before)",custom:"Your own announcement"})[K]}</h2>
       ${K==="custom"?sw("Show my announcement","custom.on",AN.custom.on,"Shows when no flash sale is live or coming up."):""}
       <label class="af" style="margin-top:10px">Message<input class="in" data-an="${K}.text" maxlength="140" value="${esc(c.text)}"></label>
       ${K!=="custom"?`<p class="note" style="margin:4px 0 0">Fill-ins: <b>{name}</b> sale name, <b>{off}</b> discount, <b>{applies}</b> what it covers.</p>`:""}
@@ -1171,7 +1245,7 @@ function viewAnnouncer(){
       <div style="margin-top:14px"><h2 style="font-size:15px;margin:0 0 6px">Banner image</h2>
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">${c.img?`<img src="${esc(c.img)}" alt="" style="height:48px;border-radius:10px;border:1px solid var(--line)">`:`<span class="note">No image yet. A lightning bolt shows instead.</span>`}
         <label class="ghost mqbtn">${c.img?"Replace image":"Upload image"}<input type="file" accept="image/*" hidden data-animg></label>${c.img?`<button class="danger" type="button" data-anrm>Remove</button>`:""}</div></div>
-    </section>
+    </section>`}
   </div>`;
 }
 
@@ -1644,13 +1718,14 @@ function viewSales(){
   return head("Flash sales","Run a timed discount on the box price. The shop shows a banner with a live countdown and the sale price on each box.")+MOCK+`
   <div class="two">
     <section class="panel">
-      <h2>New flash sale</h2><p class="sub">Discounts apply to the box price. Premium flavors, extras and delivery are charged at full price.</p>
+      <h2>New flash sale or promo</h2><p class="sub">${D.kind==="freedelivery"?"A timed free delivery promo. While it is live, delivery and sameday shipment cost nothing. It shows in the announcer like a flash sale.":"Discounts apply to the box price. Premium flavors, extras and delivery are charged at full price."}</p>
       <form id="saleForm" class="stack" style="gap:14px" novalidate>
-        <label class="af">Sale name<input class="in" data-draft="name" value="${esc(D.name)}" maxlength="40"></label>
-        <div class="stack" style="gap:14px">
+        <div class="af">What kind of promo<div class="seg"><button type="button" data-skind="discount" aria-pressed="${D.kind!=="freedelivery"}">Discount on the box</button><button type="button" data-skind="freedelivery" aria-pressed="${D.kind==="freedelivery"}">Free delivery</button></div></div>
+        <label class="af">${D.kind==="freedelivery"?"Promo name":"Sale name"}<input class="in" data-draft="name" value="${esc(D.name)}" maxlength="40"></label>
+        ${D.kind==="freedelivery"?"":`<div class="stack" style="gap:14px">
           <div class="af">Discount<div class="seg"><button type="button" data-stype="percent" aria-pressed="${D.type==="percent"}">Percent off</button><button type="button" data-stype="amount" aria-pressed="${D.type==="amount"}">Amount off</button></div></div>
           <label class="af">${D.type==="percent"?"Percent":"Amount"}<div class="money-in"><span>${D.type==="percent"?"%":DB.settings.currency}</span><input class="in" type="number" min="1" step="${D.type==="percent"?1:.5}" data-draft="value" value="${D.value}"></div></label>
-        </div>
+        </div>`}
         <label class="af">Applies to<select class="in" data-draft="appliesTo"><option value="all" ${D.appliesTo==="all"?"selected":""}>Every box size</option>${DB.sizes.map(s=>`<option value="${s.n}" ${D.appliesTo===String(s.n)?"selected":""}>Box of ${s.n} only</option>`).join("")}</select></label>
         <div class="af">Starts<div class="seg"><button type="button" data-smode="now" aria-pressed="${D.startMode==="now"}">Right now</button><button type="button" data-smode="later" aria-pressed="${D.startMode==="later"}">Schedule</button></div></div>
         ${D.startMode==="later"?`<label class="af">Start date and time<input class="in" type="datetime-local" data-draft="startAt" value="${esc(D.startAt)}"></label>`:""}
@@ -1660,13 +1735,13 @@ function viewSales(){
         </div>
         <div class="preview" id="salePreview"></div>
         <p class="err" id="saleErr" hidden></p>
-        <button class="btn btn-blue" type="submit">Create flash sale</button>
+        <button class="btn btn-blue" type="submit">${D.kind==="freedelivery"?"Create free delivery promo":"Create flash sale"}</button>
       </form>
     </section>
     <section class="panel">
-      <h2>All sales</h2><p class="sub">Live sales show in the shop now. Scheduled ones show a "coming up" banner in the last 24 hours before they start.</p>
+      <h2>All sales and promos</h2><p class="sub">Live sales show in the shop now. Scheduled ones show a "coming up" banner in the last 24 hours before they start.</p>
       ${list.length?`<div class="sales">${list.map(s=>{const st=saleStatus(s,now);return `<div class="sale ${st}">
-        <div><span class="spill ${st}">${st==="live"?"Live":st==="scheduled"?"Scheduled":"Ended"}</span><h3>${esc(s.name)}</h3><p>${saleOffText(s)} ${saleAppliesText(s)} · ${fmtDT(s.start)} to ${fmtDT(s.end)}</p></div>
+        <div><span class="spill ${st}">${st==="live"?"Live":st==="scheduled"?"Scheduled":"Ended"}</span>${isFD(s)?` <span class="spill ${st}" style="background:#0A6B34;color:#fff">🚚 Free delivery</span>`:""}<h3>${esc(s.name)}</h3><p>${saleOffText(s)} ${saleAppliesText(s)} · ${fmtDT(s.start)} to ${fmtDT(s.end)}</p></div>
         <div class="cd"><small>${st==="live"?"Ends in":st==="scheduled"?"Starts in":"Ended"}</small><span data-cd="${s.id}"></span></div>
         <div class="acts">${st==="live"?`<button class="ghost" type="button" data-sale-end="${s.id}">End now</button><button class="ghost" type="button" data-sale-extend="${s.id}">+30 min</button>`:""}${st==="scheduled"?`<button class="ghost" type="button" data-sale-start="${s.id}">Start now</button>`:""}<button class="danger" type="button" data-sale-del="${s.id}">Delete</button></div>
       </div>`}).join("")}</div>`:`<div class="empty">No flash sales yet.</div>`}
@@ -1675,6 +1750,7 @@ function viewSales(){
 }
 function updatePreview(){
   const el=$("#salePreview");if(!el)return;const D=A.draft;
+  if(D.kind==="freedelivery"){const mins0=(+D.durH||0)*60+(+D.durM||0);el.innerHTML=`<div><span>Delivery fee</span><span><s>${money(DB.settings.deliveryFee)}</s> → <b>Free</b></span></div><div><span>Runs for</span><span>${mins0?(Math.floor(mins0/60)?Math.floor(mins0/60)+" hr ":"")+(mins0%60?mins0%60+" min":""):"—"}</span></div>`;document.querySelectorAll("[data-dur]").forEach(b=>b.setAttribute("aria-pressed",+b.dataset.dur===mins0));return}
   const fake={type:D.type,value:+D.value||0};
   const sizes=DB.sizes.filter(s=>D.appliesTo==="all"||String(s.n)===D.appliesTo);
   const mins=(+D.durH||0)*60+(+D.durM||0);
@@ -1684,15 +1760,15 @@ function updatePreview(){
 }
 function createSale(){
   const D=A.draft,err=$("#saleErr"),mins=(+D.durH||0)*60+(+D.durM||0),val=+D.value;
-  const fail=m=>{err.textContent=m;err.hidden=false};
-  if(!D.name.trim())return fail("Give the sale a name.");
-  if(!(val>0))return fail("Set a discount above 0.");
-  if(D.type==="percent"&&val>90)return fail("Percent off can be at most 90%.");
-  if(mins<5)return fail("Make the sale run at least 5 minutes.");
+  const fail=m=>{err.textContent=m;err.hidden=false},fd=D.kind==="freedelivery";
+  if(!D.name.trim())return fail(fd?"Give the promo a name.":"Give the sale a name.");
+  if(!fd&&!(val>0))return fail("Set a discount above 0.");
+  if(!fd&&D.type==="percent"&&val>90)return fail("Percent off can be at most 90%.");
+  if(mins<5)return fail("Make it run at least 5 minutes.");
   let start=Date.now();
   if(D.startMode==="later"){start=new Date(D.startAt).getTime();if(!D.startAt||isNaN(start))return fail("Pick a start date and time.");if(start<Date.now()-60e3)return fail("The start time is in the past.")}
-  DB.sales.push({id:uid(),name:D.name.trim(),type:D.type,value:val,appliesTo:D.appliesTo,start,end:start+mins*60e3});
-  saveDB();toast(D.startMode==="now"?"Flash sale is live":"Flash sale scheduled");renderAdmin();
+  DB.sales.push({id:uid(),name:D.name.trim(),type:fd?"freedelivery":D.type,value:fd?0:val,appliesTo:D.appliesTo,start,end:start+mins*60e3});
+  saveDB();toast(D.startMode==="now"?(fd?"Free delivery promo is live":"Flash sale is live"):(fd?"Free delivery promo scheduled":"Flash sale scheduled"));renderAdmin();
 }
 
 /* --- Flavors --- */
@@ -2137,6 +2213,14 @@ am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
 am.addEventListener("input",e=>{const el=e.target;if(!el.dataset.an)return;anSet(el)});
 am.addEventListener("change",async e=>{const el=e.target;
   if(el.dataset.an){anSet(el);return}
+  if(el.dataset.ansep!==undefined){const f=el.files[0];if(!f)return;try{anDraft().mq.sepImg=await lpResize(f,160);renderAdmin();toast("Picture added to the preview. Press Save to publish.")}catch(err){toast(err.message)}return}
+  if(el.dataset.anfont!==undefined){const f=el.files[0];if(!f)return;
+    if(f.size>1024*1024){toast("That font is over 1 MB. Use a smaller file or a .woff2 version.");el.value="";return}
+    if(!/\.(ttf|otf|woff2?)$/i.test(f.name)){toast("Use a .ttf, .otf, .woff or .woff2 file.");el.value="";return}
+    try{const data=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(new Error("Couldn't read that file."));r.readAsDataURL(f)});
+      const test=new FontFace("DD Test",`url(${data})`);await test.load();
+      Object.assign(anDraft().mq,{fontData:data,fontName:f.name.replace(/\.[^.]+$/,"").slice(0,40),font:"custom"});renderAdmin();toast("Font added to the preview. Press Save to publish.")
+    }catch(err){toast("That file isn't a usable font.")}return}
   if(el.dataset.animg!==undefined){const f=el.files[0];if(!f)return;try{anDraft()[A.anK].img=await lpResize(f,200);renderAdmin();toast("Image added to the preview. Press Save to publish.")}catch(err){toast(err.message)}}});
 function anSet(el){const AN=anDraft(),path=el.dataset.an.split(".");let o=AN;for(let i=0;i<path.length-1;i++)o=o[path[i]];
   const k=path[path.length-1];o[k]=el.type==="checkbox"?el.checked:el.value;
@@ -2146,6 +2230,8 @@ function anPrevOnly(){const n=document.querySelector("#amain .note[hidden], #ama
 am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;const d=b.dataset;
   if(d.ank){A.anK=d.ank;renderAdmin()}
   else if(d.anrm!==undefined){anDraft()[A.anK].img="";renderAdmin()}
+  else if(d.ansepro!==undefined){anDraft().mq.sepImg="";renderAdmin()}
+  else if(d.anfontrm!==undefined){const m=anDraft().mq;m.fontData="";m.fontName="";if(m.font==="custom")m.font="display";renderAdmin()}
   else if(d.ansave!==undefined){const prev=DB.announcer;DB.announcer=anClone(A.an);if(saveDB()){toast("Announcer published to the shop");A.an=null;renderAdmin()}else{DB.announcer=prev;toast("Not enough storage space. Try a smaller image.")}}
   else if(d.andisc!==undefined){A.an=null;renderAdmin();toast("Changes discarded")}
   else if(d.anreset!==undefined){armed(b,()=>{A.an=defaultAnnouncer();renderAdmin();toast("Reset in the preview. Press Save to publish.")})}
@@ -2253,6 +2339,7 @@ am.addEventListener("click",e=>{
   if(d.stk){const [id,delta]=d.stk.split(":"),p=prod(id);if(p){p.stock=Math.max(0,(p.stock||0)+(+delta));saveDB();toast(`${p.name}: ${p.stock} in stock`);renderAdmin()}return}
   if(d.filter){A.filter=d.filter;renderAdmin()}
   else if(d.bake){A.bakeDay=d.bake;renderAdmin()}
+  else if(d.skind){A.draft.kind=d.skind;if(d.skind==="freedelivery"&&/^Flash sale/.test(A.draft.name))A.draft.name="Free delivery weekend";if(d.skind==="discount"&&/^Free delivery/.test(A.draft.name))A.draft.name="Flash sale";renderAdmin()}
   else if(d.stype){A.draft.type=d.stype;if(d.stype==="amount"&&A.draft.value>20)A.draft.value=5;renderAdmin()}
   else if(d.smode){A.draft.startMode=d.smode;if(d.smode==="later"&&!A.draft.startAt){const t=new Date(Date.now()+3600e3);t.setMinutes(0,0,0);A.draft.startAt=new Date(t.getTime()-t.getTimezoneOffset()*60e3).toISOString().slice(0,16)}renderAdmin()}
   else if(d.dur){A.draft.durH=Math.floor(+d.dur/60);A.draft.durM=+d.dur%60;document.querySelector('[data-draft="durH"]').value=A.draft.durH;document.querySelector('[data-draft="durM"]').value=A.draft.durM;updatePreview()}
@@ -2382,7 +2469,7 @@ function mqBuild(el){
   const w=el.querySelector(".set").scrollWidth;
   el.style.setProperty("--mdur",Math.max(6,w/(MQ_SPEED[m.speed]||70))+"s");
 }
-function mqFit(){document.querySelectorAll(".marq").forEach(el=>{if(el._m&&!el.hidden)mqBuild(el)})}
+function mqFit(){document.querySelectorAll(".marq").forEach(el=>{if(el._m&&!el.hidden)mqBuild(el);else if(el._ai&&!el.hidden)anMqBuild(el)})}
 let mqT;addEventListener("resize",()=>{clearTimeout(mqT);mqT=setTimeout(mqFit,200)});
 if(document.fonts&&document.fonts.ready)document.fonts.ready.then(mqFit);
 document.addEventListener("click",e=>{});

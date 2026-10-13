@@ -525,6 +525,10 @@ footer a{color:var(--white)}
 .panel h2{font-family:var(--display);font-size:16px;color:var(--ink);margin-bottom:4px}
 .panel .sub{font-size:13px;color:var(--muted);margin-bottom:14px}
 .phead .sub{margin-bottom:0}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.7fr);gap:18px;align-items:start}
+@media (max-width:1150px){.two{grid-template-columns:minmax(0,1fr)}}
+.two.wide{grid-template-columns:minmax(0,1fr)}
+@media (min-width:1500px){.two.wide{grid-template-columns:minmax(0,1fr) minmax(0,2.2fr)}}
 .chips{display:flex;gap:6px;flex-wrap:wrap}
 .fchip{border:1.5px solid var(--line);background:var(--white);border-radius:var(--r-pill);padding:6px 12px;font-weight:600;font-size:13px;color:var(--ink);display:inline-flex;gap:6px;align-items:center}
 .fchip i{font-style:normal;color:var(--muted);font-variant-numeric:tabular-nums}
@@ -658,3 +662,9 @@ textarea.in{resize:vertical;border-radius:10px}
 .apprbox.rej .blinky{color:#D0001F!important;animation-name:rejBlink}
 @keyframes rejBlink{0%,100%{opacity:1}50%{opacity:.35}}
 @media (prefers-reduced-motion:reduce){.oc-alert.appr.rej,.apprbox.rej .blinky{animation:none}}
+
+.flash.anmq{margin:0;padding:.5em 0;border-radius:0}
+.flash.anmq .anit{display:inline-flex;align-items:center;gap:.5em}
+.flash.anmq .anit .fimg{margin:0}
+.flash.anmq .anit .ftx{font-weight:700}
+.flash.anmq.pinned{position:relative}

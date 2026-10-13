@@ -118,6 +118,9 @@ let DB;
 function defaultAnnouncer(){return {on:true,sticky:true,size:"M",cdColor:"#C8102E",cdBg:"#FFFFFF",cdFx:true,imgOn:true,imgFx:true,
   live:{text:"Flash sale: {name}. {off} {applies}.",label:"Ends in",bg:"#C8102E",ink:"#FFFFFF",img:""},
   soon:{text:"Coming up: {name}, {off} {applies}.",label:"Starts in",bg:"#EEF0FF",ink:"#000096",img:""},
+  fdlive:{text:"{name}: free delivery on {applies}.",label:"Ends in",bg:"#0A6B34",ink:"#FFFFFF",img:""},
+  fdsoon:{text:"Coming up: {name}, free delivery on {applies}.",label:"Starts in",bg:"#E6F7EC",ink:"#0A6B34",img:""},
+  mq:{bg:"#000096",ink:"#FFFFFF",font:"display",fontData:"",fontName:"",size:"M",speed:"medium",sepOn:true,sepImg:""},
   custom:{on:false,text:"Free delivery this weekend!",label:"Ends in",endsAt:"",bg:"#000096",ink:"#FFFFFF",img:""}}}
 function defaultMarquee(){return {on:true,texts:["Baked fresh every morning","Build a box your way","Pickup or local delivery","Order by 8pm for next-day cookies"],images:[],bg:"#000096",color:"#ffffff",font:"display",size:"M",speed:"medium",fontData:null,fontName:""}}
 function defaultThanks(){return {logo:"",cookies:[],fx:true,amount:28,title:"Order placed",titleUpd:"Order updated",
@@ -164,16 +167,18 @@ function loadDB(){if(SBH.on){SBH.initDB();return}try{const s=JSON.parse(localSto
 function saveDB(){if(SBH.on)return SBH.save();try{localStorage.setItem(DB_KEY,JSON.stringify(DB));return true}catch(e){return false}}
 /* --- pricing --- */
 const prod = (id,db=DB) => db.products.find(p=>p.id===id);
+const isFD=s=>s.type==="freedelivery";
 function saleStatus(s,at=Date.now()){return at<s.start?"scheduled":at<s.end?"live":"ended"}
-function saleDiscount(s,base){return r2(s.type==="percent"?base*s.value/100:Math.min(s.value,base))}
+function saleDiscount(s,base){if(isFD(s))return 0;return r2(s.type==="percent"?base*s.value/100:Math.min(s.value,base))}
 function validCustom(n,db=DB){const t=db.settings;return !!t.customOn&&Number.isInteger(n)&&n>=t.customMin&&n<=t.customMax&&(n-t.customMin)%t.customStep===0&&!db.sizes.some(s=>s.n===n)}
 function snapCustom(v,db=DB){const t=db.settings;v=Math.round(+v)||t.customMin;if(v<=t.customMin)return t.customMin;let n=t.customMin+Math.ceil((v-t.customMin)/t.customStep)*t.customStep;if(n>t.customMax)n=t.customMin+Math.floor((t.customMax-t.customMin)/t.customStep)*t.customStep;return n}
 function basePrice(n,db=DB){const sz=db.sizes.find(s=>s.n===n);return sz?sz.price:validCustom(n,db)?r2(n*db.settings.customPer):0}
 function bestSale(n,at=Date.now(),db=DB){
   const price=basePrice(n,db);if(!price)return null;
-  return db.sales.filter(s=>saleStatus(s,at)==="live"&&(s.appliesTo==="all"||+s.appliesTo===n))
+  return db.sales.filter(s=>!isFD(s)&&saleStatus(s,at)==="live"&&(s.appliesTo==="all"||+s.appliesTo===n))
     .sort((a,b)=>saleDiscount(b,price)-saleDiscount(a,price))[0]||null;
 }
+const freeDelSale=(n,at=Date.now(),db=DB)=>db.sales.find(s=>isFD(s)&&saleStatus(s,at)==="live"&&(s.appliesTo==="all"||+s.appliesTo===n))||null;
 const cpNorm=v=>String(v||"").toUpperCase().replace(/[^A-Z0-9_-]/g,"").slice(0,20);
 const cpOff=c=>c.type==="percent"?`${c.value}% off`:c.type==="amount"?`${money(c.value)} off`:"Free delivery";
 const cpUses=(code,db,excl)=>db.orders.filter(o=>o.coupon===code&&o.status!=="cancelled"&&o.id!==excl);
@@ -204,10 +209,11 @@ function quote(c,db=DB,{at=Date.now(),withDelivery=true}={}){
   const addons=r2((c.addons||[]).reduce((a,id)=>{const x=db.addons.find(y=>y.id===id&&y.active);return a+(x?x.price:0)},0));
   const cp=c.coupon?couponCheck(c.coupon,c,db,{base,saleDisc:discount,phone:c.phone,excl:c.editId}):null;
   const couponDisc=cp&&cp.ok?cp.discount:0;
-  const fee=withDelivery&&c.mode==="delivery"&&!(cp&&cp.ok&&cp.freeDel)?(c.speed==="sameday"?(db.settings.samedayFee??db.settings.deliveryFee):db.settings.deliveryFee):0;
-  return {base,sale,discount,surcharge,addons,fee,coupon:cp&&cp.ok?cp.coupon:null,couponDisc,couponErr:cp&&!cp.ok?cp.err:"",total:r2(base-discount-couponDisc+surcharge+addons+fee)};
+  const fdSale=at&&c.mode==="delivery"?freeDelSale(c.size,at,db):null;
+  const fee=withDelivery&&c.mode==="delivery"&&!fdSale&&!(cp&&cp.ok&&cp.freeDel)?(c.speed==="sameday"?(db.settings.samedayFee??db.settings.deliveryFee):db.settings.deliveryFee):0;
+  return {base,sale,fdSale,discount,surcharge,addons,fee,coupon:cp&&cp.ok?cp.coupon:null,couponDisc,couponErr:cp&&!cp.ok?cp.err:"",total:r2(base-discount-couponDisc+surcharge+addons+fee)};
 }
-const saleOffText = s => s.type==="percent"?`${s.value}% off`:`${money(s.value)} off`;
+const saleOffText = s => isFD(s)?"Free delivery":s.type==="percent"?`${s.value}% off`:`${money(s.value)} off`;
 const saleAppliesText = s => s.appliesTo==="all"?"every box":`the box of ${s.appliesTo}`;
 /* --- cookie drawing --- */
 let gid=0;
@@ -420,7 +426,7 @@ function renderStore(){
   $("#tab1").classList.toggle("done",S.step===2&&full());
   $("#tab2").disabled=!full();
   document.querySelectorAll("[data-opt]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.opt===optOf(S)));
-  {const k=optOf(S),st=DB.settings;$("#modeHint").textContent=k==="sameday"?`Sameday shipment adds ${money(st.samedayFee??st.deliveryFee)}. Order before ${fmtHour(st.samedayCutoff)} and we ship about ${fmtLead(optLead("sameday"))} after your payment is confirmed. We deliver within ${st.deliveryKm} km of the shop.`:k==="scheduled"?`Scheduled delivery adds ${money(st.deliveryFee)}. Pick a day and time. We deliver within ${st.deliveryKm} km of the shop.`:"Free pickup at the front counter. Pick a day and time.";}
+  {const k=optOf(S),st=DB.settings;const fdp=k!=="pickup"?freeDelSale(S.size):null;$("#modeHint").textContent=(fdp?`🚚 Free delivery promo is on: ${fdp.name}. `:"")+(k==="sameday"?`Sameday shipment adds ${money(st.samedayFee??st.deliveryFee)}. Order before ${fmtHour(st.samedayCutoff)} and we ship about ${fmtLead(optLead("sameday"))} after your payment is confirmed. We deliver within ${st.deliveryKm} km of the shop.`:k==="scheduled"?`Scheduled delivery adds ${money(st.deliveryFee)}. Pick a day and time. We deliver within ${st.deliveryKm} km of the shop.`:"Free pickup at the front counter. Pick a day and time.");}
   document.querySelectorAll(".day").forEach(b=>b.setAttribute("aria-pressed",b.dataset.day===S.day));
   document.querySelectorAll("[data-time]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.time===S.time));
   document.querySelectorAll("[data-addon]").forEach(b=>b.setAttribute("aria-pressed",S.addons.includes(b.dataset.addon)));
@@ -458,31 +464,71 @@ function renderStore(){
 }
 function anRender(el,k,cfg,AN,text,ms){
   const c=cfg[k],sig=JSON.stringify([k,text,c.label,c.bg,c.ink,AN.size,AN.cdColor,AN.cdBg,AN.cdFx,AN.imgOn&&c.img?c.img.length:0,AN.imgFx]);
-  if(el._sig!==sig){el._sig=sig;
+  if(el._sig!==sig){el._sig=sig;el._ai=null;el.style.removeProperty("--mdur");el.style.removeProperty("--mbg");
     el.style.setProperty("--fl-bg",c.bg);el.style.setProperty("--fl-ink",c.ink);el.style.setProperty("--fl-cd",AN.cdColor);el.style.setProperty("--fl-cdbg",AN.cdBg);
     el.className="flash sz-"+AN.size+(AN.cdFx?" fx-cd":"")+(AN.imgOn&&c.img&&AN.imgFx?" fx-img":"")+(el.id==="flash"?" pinned":"");
     el.innerHTML=`<div class="fw">${AN.imgOn&&c.img?`<img class="fimg" src="${esc(c.img)}" alt="">`:`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 1 3 9h4l-1 6 6.5-8h-4z" fill="currentColor"/></svg>`}<span class="ftx">${esc(text)}</span>${ms===null?"":`<span class="cdn"></span>`}</div>`}
   const cd=el.querySelector(".cdn");if(cd)cd.textContent=(c.label?c.label+" ":"")+fmtDur(ms);
 }
 function anCustomMs(c,now){if(!c.endsAt)return null;const t=new Date(c.endsAt).getTime();return isNaN(t)?null:t-now}
+// everything the announcer can say right now: live sales, free delivery promos, coming-up ones (24 h ahead) and the owner's own note
+function anFill(t,s){return t.replace(/\{name\}/g,s.name).replace(/\{off\}/g,saleOffText(s)).replace(/\{applies\}/g,saleAppliesText(s))}
+function anItems(now,AN){
+  const items=[];
+  DB.sales.filter(s=>saleStatus(s,now)==="live").sort((a,b)=>a.end-b.end).forEach(s=>{const k=isFD(s)?"fdlive":"live";items.push({k,text:anFill(AN[k].text,s),end:s.end})});
+  DB.sales.filter(s=>saleStatus(s,now)==="scheduled"&&s.start-now<24*3600e3).sort((a,b)=>a.start-b.start).forEach(s=>{const k=isFD(s)?"fdsoon":"soon";items.push({k,text:anFill(AN[k].text,s),end:s.start})});
+  const cm=AN.custom.on&&AN.custom.text?anCustomMs(AN.custom,now):undefined;
+  if(AN.custom.on&&AN.custom.text&&!(cm!==null&&cm!==undefined&&cm<=0))items.push({k:"custom",text:AN.custom.text,end:cm===undefined||cm===null?null:now+cm});
+  return items;
+}
 function updateFlash(now=Date.now()){
   const AN=DB.announcer,el=$("#flash"),hdr=$(".top");
-  const live=DB.sales.filter(s=>saleStatus(s,now)==="live").sort((a,b)=>a.end-b.end);
-  const soon=DB.sales.filter(s=>saleStatus(s,now)==="scheduled"&&s.start-now<24*3600e3).sort((a,b)=>a.start-b.start);
-  const cm=AN.custom.on&&AN.custom.text?anCustomMs(AN.custom,now):undefined;
-  let k=null,text="",ms=null;
-  if(AN.on){
-    const sl=(t,s)=>t.replace(/\{name\}/g,s.name).replace(/\{off\}/g,saleOffText(s)).replace(/\{applies\}/g,saleAppliesText(s));
-    if(live[0]){k="live";text=sl(AN.live.text,live[0]);ms=live[0].end-now}
-    else if(soon[0]){k="soon";text=sl(AN.soon.text,soon[0]);ms=soon[0].start-now}
-    else if(AN.custom.on&&AN.custom.text&&!(cm!==null&&cm!==undefined&&cm<=0)){k="custom";text=AN.custom.text;ms=cm===undefined?null:cm}
-  }
-  if(!k){el.hidden=true;return}
-  const want=AN.sticky?hdr:hdr.nextSibling;
+  const items=AN.on?anItems(now,AN):[];
+  if(!items.length){el.hidden=true;return}
   if(AN.sticky){if(el.parentNode!==hdr)hdr.appendChild(el)}else if(el.parentNode===hdr)hdr.after(el);
+  el.hidden=false;
+  if(items.length>1)anMarquee(el,items,AN,now);   // two or more at once: one running line
+  else anRender(el,items[0].k,AN,AN,items[0].text,items[0].end===null?null:items[0].end-now);
   el.classList.toggle("pinned",!!AN.sticky);
-  el.hidden=false;anRender(el,k,AN,AN,text,ms);
   if(!AN.sticky)el.classList.remove("pinned");
+}
+// ----- announcer marquee (used when several announcements show at the same time) -----
+let anFace=null,anFaceKey="";
+function anEnsureFont(m){
+  if(!m.fontData){if(anFace){try{document.fonts.delete(anFace)}catch(e){}anFace=null;anFaceKey=""}return}
+  const key=m.fontName+m.fontData.length;if(key===anFaceKey)return;
+  try{if(anFace)document.fonts.delete(anFace);anFace=new FontFace("DD Announcer",`url(${m.fontData})`);document.fonts.add(anFace);anFaceKey=key;anFace.load().then(()=>{document.querySelectorAll(".anmq").forEach(e=>{if(e._ai)anMqBuild(e)})}).catch(()=>{})}catch(e){}
+}
+const anFontFam=m=>m.font==="custom"&&m.fontData?'"DD Announcer",var(--body)':(MQ_FONTS[m.font]||MQ_FONTS.display)[1];
+function anMqSeq(items,AN,n){
+  const m=AN.mq,out=[];
+  for(let r=0;r<n;r++)items.forEach(it=>{const c=AN[it.k];
+    out.push(`<span class="mt anit">${AN.imgOn&&c.img?`<img class="fimg" src="${esc(c.img)}" alt="">`:""}<span class="ftx">${esc(it.text)}</span>${it.end===null?"":`<span class="cdn" data-end="${it.end}" data-lab="${esc(c.label||"")}"></span>`}</span>`);
+    out.push(m.sepOn&&m.sepImg?`<img class="mi" src="${esc(imgOk(m.sepImg))}" alt="" draggable="false">`:`<span class="mdot" aria-hidden="true">✦</span>`)});
+  return out.join("");
+}
+function anMqBuild(el){
+  const ai=el._ai;if(!ai)return;const {items,AN}=ai;
+  el.classList.toggle("still",RM);
+  const draw=n=>{const set=anMqSeq(items,AN,n);el.innerHTML=`<div class="track"><div class="set">${set}</div><div class="set" aria-hidden="true">${set}</div></div>`};
+  draw(1);
+  const cw=el.clientWidth;if(!cw){anCd(el,Date.now());return}
+  const w1=el.querySelector(".set").scrollWidth||1,n=Math.max(1,Math.ceil(cw/w1));
+  if(n>1)draw(n);
+  const w=el.querySelector(".set").scrollWidth;
+  el.style.setProperty("--mdur",Math.max(6,w/(MQ_SPEED[AN.mq.speed]||70))+"s");
+  anCd(el,Date.now());
+}
+function anCd(el,now){el.querySelectorAll(".cdn[data-end]").forEach(c=>{const ms=+c.dataset.end-now;c.textContent=(c.dataset.lab?c.dataset.lab+" ":"")+fmtDur(Math.max(0,ms))})}
+function anMarquee(el,items,AN,now){
+  const m=AN.mq,sig="M"+JSON.stringify([items.map(i=>[i.k,i.text,i.end,AN[i.k].label,AN.imgOn&&AN[i.k].img?AN[i.k].img.length:0]),m,m.sepImg?m.sepImg.length:0,AN.cdColor,AN.cdBg,AN.cdFx,AN.imgOn,AN.imgFx]);
+  if(el._sig!==sig){el._sig=sig;anEnsureFont(m);
+    el.style.setProperty("--mbg",m.bg);el.style.setProperty("--mfg",m.ink);el.style.setProperty("--msz",(MQ_SIZE[m.size]||18)+"px");el.style.setProperty("--mfont",anFontFam(m));
+    el.style.setProperty("--fl-bg",m.bg);el.style.setProperty("--fl-ink",m.ink);el.style.setProperty("--fl-cd",AN.cdColor);el.style.setProperty("--fl-cdbg",AN.cdBg);
+    el.className="flash marq anmq"+(AN.cdFx?" fx-cd":"")+(AN.imgOn&&AN.imgFx?" fx-img":"")+(el.id==="flash"?" pinned":"");
+    el.setAttribute("aria-label",items.map(i=>i.text).join(". "));
+    el._ai={items,AN};anMqBuild(el)}
+  else anCd(el,now);
 }
 /* --- motion helpers --- */
 const RM = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -821,7 +867,7 @@ function drawBell(list){
   if(BELLF!=="deals")list.forEach(x=>{const st=x.m.status,o=x.o,lab=st?stLabel(st,o.mode):"Update";
     items.push({at:x.m.at,h:`<button class="bell-it${x.m.at>SEENV?" new":""}" type="button" data-bellgo="${o.id}"><span class="bell-ic" aria-hidden="true">${ST_ICON[st]||"📦"}</span><span class="bell-tx"><small>Order · ${fmtAgo(x.m.at)}</small><b>Order #${esc(o.code)} · ${esc(lab)}</b><span>${esc(x.m.text)}</span></span><span class="bell-ch" aria-hidden="true">›</span></button>`})});
   if(BELLF!=="orders")DB.sales.filter(s=>saleStatus(s)!=="ended").forEach(s=>{const live=saleStatus(s)==="live";
-    items.push({at:live?s.start:Date.now()-3600e3,h:`<button class="bell-it" type="button" data-bellsale="1"><span class="bell-ic" aria-hidden="true">🔥</span><span class="bell-tx"><small>Flash sale · ${live?fmtAgo(s.start):"coming up"}</small><b>${live?"Flash sale now":"Flash sale soon"}: ${esc(s.name)}</b><span>${esc(saleOffText(s))} · ${live?"ends":"starts"} ${fmtDT(live?s.end:s.start)}</span></span><span class="bell-ch" aria-hidden="true">›</span></button>`})});
+    items.push({at:live?s.start:Date.now()-3600e3,h:`<button class="bell-it" type="button" data-bellsale="1"><span class="bell-ic" aria-hidden="true">${isFD(s)?"🚚":"🔥"}</span><span class="bell-tx"><small>${isFD(s)?"Free delivery":"Flash sale"} · ${live?fmtAgo(s.start):"coming up"}</small><b>${isFD(s)?(live?"Free delivery now":"Free delivery soon"):(live?"Flash sale now":"Flash sale soon")}: ${esc(s.name)}</b><span>${esc(saleOffText(s))} · ${live?"ends":"starts"} ${fmtDT(live?s.end:s.start)}</span></span><span class="bell-ch" aria-hidden="true">›</span></button>`})});
   if(BELLF!=="orders")activeBroadcasts().forEach(x=>{const p=x.pid&&prod(x.pid);
     items.push({at:x.at,h:`<button class="bell-it${x.at>SEENV?" new":""}" type="button" ${p?`data-bellprod="${p.id}"`:'data-bellnone="1"'}><span class="bell-ic" aria-hidden="true">${nfIcon(x.type)}</span><span class="bell-tx"><small>${nfName(x.type)} · ${fmtAgo(x.at)}</small><b>${esc(x.title)}</b>${x.text?`<span>${esc(x.text)}</span>`:""}${x.code?`<span class="bell-code" data-bellcode="${esc(x.code)}">🎟 ${esc(x.code)} · tap to copy</span>`:""}${p?`<span style="color:var(--blue);font-weight:600">View ${esc(p.name)}</span>`:""}</span>${p?`<span class="bell-ch" aria-hidden="true">›</span>`:"<span></span>"}</button>`})});
   items.sort((a,b)=>b.at-a.at);
@@ -1133,7 +1179,7 @@ function mqBuild(el){
   const w=el.querySelector(".set").scrollWidth;
   el.style.setProperty("--mdur",Math.max(6,w/(MQ_SPEED[m.speed]||70))+"s");
 }
-function mqFit(){document.querySelectorAll(".marq").forEach(el=>{if(el._m&&!el.hidden)mqBuild(el)})}
+function mqFit(){document.querySelectorAll(".marq").forEach(el=>{if(el._m&&!el.hidden)mqBuild(el);else if(el._ai&&!el.hidden)anMqBuild(el)})}
 const LP_DEFAULT_SVG=`<svg viewBox="0 0 30 24" aria-hidden="true"><path d="M3 21a12 12 0 0 1 24 0Z" fill="currentColor"/><circle cx="15" cy="5" r="2.6" fill="currentColor"/><rect x="1" y="20.5" width="28" height="3" rx="1.5" fill="currentColor"/></svg>`;
 function defaultPage(){return {name:"delidome",logo:"",brand:"#000096",bg:"#ffffff",ink:"#0B0B45",headFont:"display",bodyFont:"body",fonts:[],
   hero:{eyebrow:"Baked fresh every morning",title:"Warm cookies, boxed your way.",lede:"Pick a box, fill it with the flavors you love, and choose when you want it. Pickup or local delivery.",btn1:"Build a box",btn2:"See the flavors",bg:"",color:"#ffffff",mediaType:"none",src:"",overlay:35,floats:true,cookies:["","","","","",""]},
