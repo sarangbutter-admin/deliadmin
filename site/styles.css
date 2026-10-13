@@ -668,3 +668,17 @@ textarea.in{resize:vertical;border-radius:10px}
 .flash.anmq .anit .fimg{margin:0}
 .flash.anmq .anit .ftx{font-weight:700}
 .flash.anmq.pinned{position:relative}
+
+/* countdowns: red, bigger than the text around them and lively (colour, size and the pulse come from Shop settings / Announcer) */
+.mo-pay .cd,.mo-sub .cd[data-exp],.bell-pay .cd,#doneCd .cd{color:var(--pcd,#C8102E)!important;font-weight:800;display:inline-block;transform-origin:left center}
+.mo-big.cd{font-size:calc(22px*var(--pcdz,1.4))}
+.mo-sub .cd[data-exp],.bell-pay .cd{font-size:calc(1em*var(--pcdz,1.4))}
+.bell-pay{border-color:var(--pcd,#C8102E)!important;background:#FFF4F5}
+.bell-pay b{color:var(--pcd,#C8102E)}
+.bell-cdrow{display:block;margin-top:2px;font-weight:700}
+body.pcd-fx .mo-pay .cd,body.pcd-fx .mo-sub .cd[data-exp],body.pcd-fx .bell-pay .cd,body.pcd-fx #doneCd .cd{animation:pcdPulse 1s ease-in-out infinite}
+body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
+@keyframes pcdPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.07)}}
+@keyframes pcdGlow{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--pcd,#C8102E) 40%,transparent)}50%{box-shadow:0 0 0 6px color-mix(in srgb,var(--pcd,#C8102E) 0%,transparent)}}
+@media (prefers-reduced-motion:reduce){body.pcd-fx .mo-pay .cd,body.pcd-fx .mo-sub .cd[data-exp],body.pcd-fx .bell-pay .cd,body.pcd-fx #doneCd .cd,body.pcd-fx .bell-pay{animation:none}}
+.flash.cds-M .cdn{font-size:1em}.flash.cds-L .cdn{font-size:1.25em;font-weight:800}.flash.cds-XL .cdn{font-size:1.6em;font-weight:800}

@@ -57,7 +57,7 @@ function rng(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15
 function seedDB(){
   const now=Date.now(), H=3600e3;
   const db={v:1,
-    settings:{currency:"$",tz:"Asia/Jakarta",deliveryFee:5,deliveryKm:10,samedayOn:false,samedayLeadH:3,samedayCutoff:15,samedayFee:8,pickupOn:true,pickupLeadH:24,schedOn:true,schedLeadH:24,cutoffHour:20,closedWeekdays:[1],lowStockAt:10,customOn:true,customMin:14,customStep:2,customMax:48,customPer:3.25,payWindowH:24,complaintWindowH:24,waCountry:"62",payBank:"Example Bank\nAccount 123 456 7890\nName: Delidome Cookies",
+    settings:{currency:"$",tz:"Asia/Jakarta",deliveryFee:5,deliveryKm:10,samedayOn:false,samedayLeadH:3,samedayCutoff:15,samedayFee:8,samedayPayMin:60,minPayMin:30,payCdColor:"#C8102E",payCdSize:"L",payCdFx:true,pickupOn:true,pickupLeadH:24,schedOn:true,schedLeadH:24,cutoffHour:20,closedWeekdays:[1],lowStockAt:10,customOn:true,customMin:14,customStep:2,customMax:48,customPer:3.25,payWindowH:24,complaintWindowH:24,waCountry:"62",payBank:"Example Bank\nAccount 123 456 7890\nName: Delidome Cookies",
       times:["10 to 11am","12 to 1pm","3 to 4pm","5 to 6pm"],
       address:"12 Example Street, Your City. Look for the blue dome sign.",
       hours:[["Tue to Fri","10am to 6pm"],["Saturday","9am to 5pm"],["Sunday","10am to 3pm"],["Monday","Closed"]]},
@@ -118,7 +118,7 @@ function countItems(box){const c={};box.forEach(id=>c[id]=(c[id]||0)+1);return c
 
 /* --- load / save --- */
 let DB;
-function defaultAnnouncer(){return {on:true,sticky:true,size:"M",cdColor:"#C8102E",cdBg:"#FFFFFF",cdFx:true,imgOn:true,imgFx:true,
+function defaultAnnouncer(){return {on:true,sticky:true,size:"M",cdColor:"#C8102E",cdBg:"#FFFFFF",cdFx:true,cdSize:"L",imgOn:true,imgFx:true,
   live:{text:"Flash sale: {name}. {off} {applies}.",label:"Ends in",bg:"#C8102E",ink:"#FFFFFF",img:""},
   soon:{text:"Coming up: {name}, {off} {applies}.",label:"Starts in",bg:"#EEF0FF",ink:"#000096",img:""},
   fdlive:{text:"{name}: free delivery on {applies}.",label:"Ends in",bg:"#0A6B34",ink:"#FFFFFF",img:""},
@@ -128,7 +128,7 @@ function defaultAnnouncer(){return {on:true,sticky:true,size:"M",cdColor:"#C8102
 function defaultMarquee(){return {on:true,texts:["Baked fresh every morning","Build a box your way","Pickup or local delivery","Order by 8pm for next-day cookies"],images:[],bg:"#000096",color:"#ffffff",font:"display",size:"M",speed:"medium",fontData:null,fontName:""}}
 function defaultThanks(){return {logo:"",cookies:[],fx:true,amount:28,title:"Order placed",titleUpd:"Order updated",
   text:"Thanks, {name}! Your box of {size} is set for {mode} on {when}.",
-  urgent:"Your cookies are waiting! Pay within {hours} hours to keep them.",
+  urgent:"Your cookies are waiting! Pay within {hours} to keep them.",
   cdLabel:"Time left to pay",payBtn:"Pay now & secure my cookies 🍪",trackBtn:"Track my order",buildBtn:"Build another box",
   bg:"#ffffff",accent:"#000096",cdColor:"#C8102E"}}
 function defaultProofPop(){return {on:true,emoji:"🙏",img:"",cookies:[],fx:true,amount:36,
@@ -139,7 +139,7 @@ function defaultAlerts(){return {on:true,sound:true,vol:70,repeat:false,stay:tru
   ev:{order:{on:true,snd:"register"},proof:{on:true,snd:"chime"},complaint:{on:true,snd:"alarm"}}}}
 function defaultLabel(){return {logo:"",qr:"",qrCaption:"",notes:"",warnOn:true,warn1:"UNBOXING WITH UNCUT VIDEO!",warn2:"CONTACT US IF SEAL BROKEN"}}
 function migrate(db){
-  if(db.settings){const D={samedayOn:false,samedayLeadH:3,samedayCutoff:15,samedayFee:8,pickupOn:true,pickupLeadH:24,schedOn:true,schedLeadH:24};for(const k in D)if(db.settings[k]===undefined)db.settings[k]=D[k]}
+  if(db.settings){const D={samedayOn:false,samedayLeadH:3,samedayCutoff:15,samedayFee:8,samedayPayMin:60,minPayMin:30,payCdColor:"#C8102E",payCdSize:"L",payCdFx:true,pickupOn:true,pickupLeadH:24,schedOn:true,schedLeadH:24};for(const k in D)if(db.settings[k]===undefined)db.settings[k]=D[k]}
   db.label=Object.assign(defaultLabel(),db.label||{});
   db.thanks=Object.assign(defaultThanks(),db.thanks||{});
   if(!Array.isArray(db.broadcasts))db.broadcasts=[];
@@ -331,8 +331,38 @@ function fixWhen(){
   if(optOf(S)==="sameday"){S.day=ymd(shopNow().d);S.time="Same day";return}
   if(!dayOptions().some(d=>ymd(d)===S.day)){S.day=null;S.time=null}
   if(S.time&&!DB.settings.times.includes(S.time))S.time=null;
+  if(S.time&&S.day&&slotTooSoon(S.day,S.time,optOf(S)))S.time=null;
 }
 
+// ---- when must an order be paid? ----
+// slotStartMin mirrors the server: "10 to 11am" -> 600 (minutes after midnight), null when it can't be read
+function slotStartMin(p){
+  p=String(p||"").toLowerCase();let m=p.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:to|-|–|until)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/),h1,m1,h2,m2,s1,s2;
+  const mins=(h,mi,sf)=>(h%12+(sf==="pm"?12:0))*60+mi;
+  if(!m){m=p.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)/);if(!m)return null;h1=+m[1];m1=+(m[2]||0);if(h1<1||h1>12||m1>59)return null;return mins(h1,m1,m[3])}
+  h1=+m[1];m1=+(m[2]||0);s1=m[3];h2=+m[4];m2=+(m[5]||0);s2=m[6];
+  if(h1>24||h2>24||m1>59||m2>59)return null;
+  if(!s1&&!s2){if(h1>=24)return null;return h1*60+m1}
+  if(h1<1||h1>12||h2<1||h2>12)return null;
+  if(!s1){s1=s2;if(mins(h1,m1,s1)>mins(h2,m2,s2))s1=s2==="pm"?"am":"pm"}
+  return mins(h1,m1,s1);
+}
+function shopNowT(){ // the shop's wall clock as a plain number, so day and time can be compared in the shop's time zone
+  try{const p=new Intl.DateTimeFormat("en-CA",{timeZone:DB.settings.tz||"Asia/Jakarta",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hourCycle:"h23"}).formatToParts(new Date()).reduce((a,x)=>(a[x.type]=x.value,a),{});
+    return Date.UTC(+p.year,+p.month-1,+p.day,+p.hour,+p.minute,+p.second)}catch(e){const n=new Date();return Date.UTC(n.getFullYear(),n.getMonth(),n.getDate(),n.getHours(),n.getMinutes(),n.getSeconds())}
+}
+const minPayMs=()=>Math.max(1,+DB.settings.minPayMin||30)*60e3;
+const slotWall=(day,min)=>{const [y,m,d]=String(day).split("-").map(Number);return Date.UTC(y,m-1,d)+min*60e3};
+const slotTooSoon=(day,time,k)=>{const m=slotStartMin(time);return m!==null&&!!day&&slotWall(day,m)<shopNowT()+optLead(k)*3600e3+minPayMs()};
+// the pay deadline (real clock): the usual window, but never later than (pickup/delivery time - lead time); sameday gets a short window
+function payDeadlineMs(c){
+  const st=DB.settings,now=Date.now();let span=Math.max(1,+st.payWindowH||24)*3600e3;
+  if(c.mode!=="pickup"&&c.speed==="sameday")span=Math.min(span,Math.max(minPayMs(),(+st.samedayPayMin||60)*60e3));
+  else if(c.day){const m=slotStartMin(c.time),k=optOf(c);span=Math.min(span,slotWall(c.day,m===null?540:m)-shopNowT()-optLead(k)*3600e3)}
+  return now+Math.max(minPayMs(),span);
+}
+const fmtSpan=ms=>{const m=Math.max(1,Math.round(ms/60e3)),h=Math.floor(m/60),r=m%60;return h?`${h} hour${h>1?"s":""}${r?` ${r} min`:""}`:`${r} min`};
+function applyCdLook(){const st=DB.settings,r=document.documentElement;r.style.setProperty("--pcd",st.payCdColor||"#C8102E");r.style.setProperty("--pcdz",({M:1.1,L:1.4,XL:1.8})[st.payCdSize]||1.4);document.body.classList.toggle("pcd-fx",st.payCdFx!==false)}
 let shopCat="all";
 const catName = id => (DB.categories.find(c=>c.id===id)||{}).name||"";
 /* --- badges, best sellers and menu order --- */
@@ -387,12 +417,16 @@ function renderOpts(){
   $("#days").innerHTML = dayOptions().map(d=>{const closed=set.closedWeekdays.includes(d.getDay());
     return `<button class="day" type="button" data-day="${ymd(d)}" ${closed?`disabled aria-label="${fmtDay(ymd(d))}, closed"`:""}><small>${DOW[d.getDay()]}</small><strong>${d.getDate()}</strong></button>`}).join("");
   const closedTxt=set.closedWeekdays.length?`We're closed ${listJoin(set.closedWeekdays.slice().sort().map(d=>DOW_LONG[d])).replace(" or "," and ")}. `:"";
-  $("#daysHint").textContent=`${closedTxt}Order at least ${fmtLead(optLead(optOf(S)))} ahead. Orders after ${fmtHour(set.cutoffHour)} count from the next day.`;
+  $("#daysHint").textContent=`${closedTxt}Order at least ${fmtLead(optLead(optOf(S)))} ahead. Orders after ${fmtHour(set.cutoffHour)} count from the next day. Time slots that are too soon are greyed out.`;
+  renderTimes();
+}
+function renderTimes(){
+  const k=optOf(S);$("#times").innerHTML=DB.settings.times.map(t=>{const off=!!S.day&&k!=="sameday"&&slotTooSoon(S.day,t,k);return `<button class="chip" type="button" data-time="${esc(t)}" ${off?`disabled aria-label="${esc(t)}, too soon"`:""}>${esc(t)}</button>`}).join("");
+  document.querySelectorAll("[data-time]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.time===S.time));
 }
 function renderStoreStatic(){
   const set=DB.settings;
   renderMenu();renderMarquee($("#marq"),DB.marquee);
-  $("#times").innerHTML = set.times.map(t=>`<button class="chip" type="button" data-time="${esc(t)}">${esc(t)}</button>`).join("");
   renderOpts();
   const closedTxt=set.closedWeekdays.length?`We're closed ${listJoin(set.closedWeekdays.slice().sort().map(d=>DOW_LONG[d])).replace(" or "," and ")}. `:"";
   $("#heroStrip").innerHTML=[`Boxes of ${listJoin(activeSizes().map(s=>s.n))}`,set.samedayOn?`Sameday shipment before ${fmtHour(set.samedayCutoff)}`:"",optLead("scheduled")===24&&optLead("pickup")===24?`Order by ${fmtHour(set.cutoffHour)} for the next day`:`Order ${fmtLead(Math.min(optLead("pickup"),optLead("scheduled")))} ahead`,closedTxt?closedTxt.replace("We're closed ","Closed ").replace(/\. $/,""):""].filter(Boolean).map(t=>`<span>${t}</span>`).join("");
@@ -472,10 +506,10 @@ function renderStore(){
   saveCart();
 }
 function anRender(el,k,cfg,AN,text,ms){
-  const c=cfg[k],sig=JSON.stringify([k,text,c.label,c.bg,c.ink,AN.size,AN.cdColor,AN.cdBg,AN.cdFx,AN.imgOn&&c.img?c.img.length:0,AN.imgFx]);
+  const c=cfg[k],sig=JSON.stringify([k,text,c.label,c.bg,c.ink,AN.size,AN.cdSize,AN.cdColor,AN.cdBg,AN.cdFx,AN.imgOn&&c.img?c.img.length:0,AN.imgFx]);
   if(el._sig!==sig){el._sig=sig;el._ai=null;el.style.removeProperty("--mdur");el.style.removeProperty("--mbg");
     el.style.setProperty("--fl-bg",c.bg);el.style.setProperty("--fl-ink",c.ink);el.style.setProperty("--fl-cd",AN.cdColor);el.style.setProperty("--fl-cdbg",AN.cdBg);
-    el.className="flash sz-"+AN.size+(AN.cdFx?" fx-cd":"")+(AN.imgOn&&c.img&&AN.imgFx?" fx-img":"")+(el.id==="flash"?" pinned":"");
+    el.className="flash sz-"+AN.size+" cds-"+(AN.cdSize||"L")+(AN.cdFx?" fx-cd":"")+(AN.imgOn&&c.img&&AN.imgFx?" fx-img":"")+(el.id==="flash"?" pinned":"");
     el.innerHTML=`<div class="fw">${AN.imgOn&&c.img?`<img class="fimg" src="${esc(c.img)}" alt="">`:`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 1 3 9h4l-1 6 6.5-8h-4z" fill="currentColor"/></svg>`}<span class="ftx">${esc(text)}</span>${ms===null?"":`<span class="cdn"></span>`}</div>`}
   const cd=el.querySelector(".cdn");if(cd)cd.textContent=(c.label?c.label+" ":"")+fmtDur(ms);
 }
@@ -491,6 +525,7 @@ function anItems(now,AN){
   return items;
 }
 function updateFlash(now=Date.now()){
+  applyCdLook();
   const AN=DB.announcer,el=$("#flash"),hdr=$(".top");
   const items=AN.on?anItems(now,AN):[];
   if(!items.length){el.hidden=true;return}
@@ -530,11 +565,11 @@ function anMqBuild(el){
 }
 function anCd(el,now){el.querySelectorAll(".cdn[data-end]").forEach(c=>{const ms=+c.dataset.end-now;c.textContent=(c.dataset.lab?c.dataset.lab+" ":"")+fmtDur(Math.max(0,ms))})}
 function anMarquee(el,items,AN,now){
-  const m=AN.mq,sig="M"+JSON.stringify([items.map(i=>[i.k,i.text,i.end,AN[i.k].label,AN.imgOn&&AN[i.k].img?AN[i.k].img.length:0]),m,m.sepImg?m.sepImg.length:0,AN.cdColor,AN.cdBg,AN.cdFx,AN.imgOn,AN.imgFx]);
+  const m=AN.mq,sig="M"+JSON.stringify([items.map(i=>[i.k,i.text,i.end,AN[i.k].label,AN.imgOn&&AN[i.k].img?AN[i.k].img.length:0]),m,m.sepImg?m.sepImg.length:0,AN.cdSize,AN.cdColor,AN.cdBg,AN.cdFx,AN.imgOn,AN.imgFx]);
   if(el._sig!==sig){el._sig=sig;anEnsureFont(m);
     el.style.setProperty("--mbg",m.bg);el.style.setProperty("--mfg",m.ink);el.style.setProperty("--msz",(MQ_SIZE[m.size]||18)+"px");el.style.setProperty("--mfont",anFontFam(m));
     el.style.setProperty("--fl-bg",m.bg);el.style.setProperty("--fl-ink",m.ink);el.style.setProperty("--fl-cd",AN.cdColor);el.style.setProperty("--fl-cdbg",AN.cdBg);
-    el.className="flash marq anmq"+(AN.cdFx?" fx-cd":"")+(AN.imgOn&&AN.imgFx?" fx-img":"")+(el.id==="flash"?" pinned":"");
+    el.className="flash marq anmq cds-"+(AN.cdSize||"L")+(AN.cdFx?" fx-cd":"")+(AN.imgOn&&AN.imgFx?" fx-img":"")+(el.id==="flash"?" pinned":"");
     el.setAttribute("aria-label",items.map(i=>i.text).join(". "));
     el._ai={items,AN};anMqBuild(el)}
   else anCd(el,now);
@@ -673,7 +708,7 @@ function openCheckout(){
   if(!eo)prefillCust();
   if(eo){const c=eo.customer;$("#coEmail").value=c.email;$("#coName").value=c.name;$("#coPhone").value=c.phone;$("#coAddr").value=c.address||"";const nr=document.querySelector(`input[name="coNotify"][value="${eo.notify||"both"}"]`);if(nr)nr.checked=true}
   $("#sheetTitle").textContent=eo?"Review changes":"Checkout";$("#placeBtn").textContent=eo?"Save changes":"Place order";
-  $("#coNote").textContent=eo?`Your original payment deadline stays the same (${fmtLeft(eo.expiresAt-Date.now())} left).`:`You'll have ${DB.settings.payWindowH} hours to pay after placing your order. Unpaid orders are cancelled automatically.`+(S.mode==="delivery"?" Your box may be split into smaller or bigger boxes for delivery safety.":"");
+  $("#coNote").textContent=eo?`Your original payment deadline stays the same (${fmtLeft(eo.expiresAt-Date.now())} left).`:`You'll have ${fmtSpan(payDeadlineMs(S)-Date.now())} to pay after placing your order. Unpaid orders are cancelled automatically.`+(S.mode==="delivery"?" Your box may be split into smaller or bigger boxes for delivery safety.":"");
   $("#coErr").hidden=true;$("#checkoutView").hidden=false;$("#doneView").hidden=true;
   $("#sheet").hidden=false;document.body.style.overflow="hidden";setTimeout(()=>$("#coName").focus(),50);
 }
@@ -738,7 +773,7 @@ $("#tab1").addEventListener("click",()=>goStep(1));
 $("#tab2").addEventListener("click",()=>goStep(2));
 $("#backBtn").addEventListener("click",()=>goStep(1));
 $("#modes").addEventListener("click",e=>{const b=e.target.closest("[data-opt]");if(b&&!b.disabled){const k=b.dataset.opt;S.mode=k==="pickup"?"pickup":"delivery";S.speed=k==="sameday"?"sameday":"scheduled";renderOpts();renderStore()}});
-$("#days").addEventListener("click",e=>{const b=e.target.closest("[data-day]");if(b&&!b.disabled){S.day=b.dataset.day;renderStore()}});
+$("#days").addEventListener("click",e=>{const b=e.target.closest("[data-day]");if(b&&!b.disabled){S.day=b.dataset.day;if(S.time&&slotTooSoon(S.day,S.time,optOf(S)))S.time=null;renderTimes();renderStore()}});
 $("#times").addEventListener("click",e=>{const b=e.target.closest("[data-time]");if(b){S.time=b.dataset.time;renderStore()}});
 $("#extras").addEventListener("click",e=>{const b=e.target.closest("[data-addon]");if(!b)return;const id=b.dataset.addon;
   S.addons=S.addons.includes(id)?S.addons.filter(x=>x!==id):[...S.addons,id];renderStore();if(!RM&&S.addons.includes(id))bump(b.querySelector(".tick"))});
@@ -777,14 +812,14 @@ $("#coForm").addEventListener("submit",e=>{
     return}
   let o;
   if(ed){releaseHold(ed);Object.assign(ed,fields,{editedAt:Date.now()});o=ed;takeHold(o)}
-  else{o={id:uid(),code:newCode(),tracked:true,holds:false,createdAt:Date.now(),expiresAt:Date.now()+DB.settings.payWindowH*3600e3,status:"awaiting",...fields};DB.orders.unshift(o);takeHold(o)}
+  else{o={id:uid(),code:newCode(),tracked:true,holds:false,createdAt:Date.now(),expiresAt:payDeadlineMs(fields),status:"awaiting",...fields};DB.orders.unshift(o);takeHold(o)}
   if(!ed)logMsg(o,chanList(o.notify),"awaiting",msgText(o,"awaiting"),"system");
   saveDB();addMine(o.id);S.editId=null;saveCart();
   renderDone(o,!!ed);
   S=fresh();$("#coForm").reset();saveCart();sanitizeCart();renderStoreStatic();renderStore();renderEditBar();renderBag();
 });
 const COOKIE_SVG="data:image/svg+xml,"+encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><circle cx='32' cy='32' r='28' fill='#D9A066'/><circle cx='32' cy='32' r='28' fill='none' stroke='#B07A3F' stroke-width='3'/><g fill='#4A2A14'><circle cx='22' cy='24' r='4'/><circle cx='40' cy='19' r='3.5'/><circle cx='44' cy='38' r='4'/><circle cx='26' cy='43' r='3.5'/><circle cx='33' cy='31' r='2.6'/></g></svg>");
-function thFill(t,o){const del=o.mode==="delivery";return String(t).replace(/\{name\}/g,o.customer.name.split(" ")[0]||"friend").replace(/\{size\}/g,o.size).replace(/\{mode\}/g,del?"delivery":"pickup").replace(/\{when\}/g,`${fmtDay(o.day)}, ${o.time}`).replace(/\{hours\}/g,DB.settings.payWindowH).replace(/\{code\}/g,o.code).replace(/\{total\}/g,money(o.total))}
+function thFill(t,o){const del=o.mode==="delivery";return String(t).replace(/\{name\}/g,o.customer.name.split(" ")[0]||"friend").replace(/\{size\}/g,o.size).replace(/\{mode\}/g,del?"delivery":"pickup").replace(/\{when\}/g,`${fmtDay(o.day)}, ${o.time}`).replace(/\{hours\}\s*hours?/g,o.expiresAt?fmtSpan(o.expiresAt-Date.now()):DB.settings.payWindowH+" hours").replace(/\{hours\}/g,o.expiresAt?fmtSpan(o.expiresAt-Date.now()):DB.settings.payWindowH).replace(/\{code\}/g,o.code).replace(/\{total\}/g,money(o.total))}
 let dnTimer;
 function fxBurst(fx,T,fb){
   clearTimeout(fx._t);fx.innerHTML="";
@@ -845,7 +880,7 @@ function takeHold(o){if(SBH.on)return;if(o.tracked&&!o.holds){Object.entries(o.i
 function expireOrders(){
   if(SBH.on)return false;
   const now=Date.now();let ch=false;
-  DB.orders.forEach(o=>{if(o.status==="awaiting"&&o.expiresAt&&now>=o.expiresAt){o.status="cancelled";o.cancelReason=`Not paid within ${DB.settings.payWindowH} hours, so it was cancelled automatically.`;releaseHold(o);logMsg(o,chanList(o.notify||"both"),"cancelled",msgText(o,"cancelled"),"system");ch=true}});
+  DB.orders.forEach(o=>{if(o.status==="awaiting"&&o.expiresAt&&now>=o.expiresAt){o.status="cancelled";o.cancelReason="It was not paid in time, so it was cancelled automatically.";releaseHold(o);logMsg(o,chanList(o.notify||"both"),"cancelled",msgText(o,"cancelled"),"system");ch=true}});
   if(ch)saveDB();return ch;
 }
 const SEEN_KEY="delidome-seen-v1";let SEEN=0,SEENV=0;try{SEEN=+localStorage.getItem(SEEN_KEY)||0}catch(e){}
@@ -868,9 +903,12 @@ function rnDone(id,forGood){RN_SEEN[id]=forGood?-1:Date.now();RN_SEEN._last=Date
 {const rp=$("#rnPop");if(rp)rp.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
   if(b.dataset.rnrate){rnDone(b.dataset.rnrate,true);openMO(b.dataset.rnrate);setTimeout(()=>{const r=$("#moCard .rstars");r&&r.scrollIntoView({block:"center"})},80)}
   else if(b.dataset.rnlater)rnDone(b.dataset.rnlater)})}
+// orders still waiting for payment: the bell tells the customer to pay before the time runs out
+const payDue=()=>mineOrders().filter(o=>o.status==="awaiting"&&o.expiresAt&&o.expiresAt>Date.now());
 function renderBell(){
+  applyCdLook();
   try{rateNudge()}catch(e){}
-  const list=notifs(),n=list.filter(x=>x.m.at>SEEN).length+activeBroadcasts().filter(x=>x.at>SEEN).length,b=$("#bellCount"),btn=$("#bellBtn");
+  const list=notifs(),n=list.filter(x=>x.m.at>SEEN).length+activeBroadcasts().filter(x=>x.at>SEEN).length+payDue().length,b=$("#bellCount"),btn=$("#bellBtn");
   if(!b)return;b.hidden=!n;b.textContent=n>9?"9+":n;btn.classList.toggle("ring",n>0);
   btn.setAttribute("aria-label",n?`Notifications, ${n} new`:"Notifications");
   if(!$("#bellPop").hidden)drawBell(list);
@@ -880,13 +918,15 @@ const ST_ICON={awaiting:"⏳",review:"🔎",new:"✅",baking:"🍪",ready:"🚚"
 function drawBell(list){
   $("#bellTabs").innerHTML=[["all","All"],["orders","My orders"],["deals","News & deals"]].map(([k,l])=>`<button type="button" role="tab" data-belltab="${k}" aria-selected="${BELLF===k}">${l}</button>`).join("");
   const items=[];
+  if(BELLF!=="deals")payDue().forEach(o=>{
+    items.push({at:Infinity,h:`<button class="bell-it bell-pay" type="button" data-bellgo="${o.id}"><span class="bell-ic" aria-hidden="true">⏰</span><span class="bell-tx"><small>Order #${esc(o.code)} · waiting for payment</small><b>Pay now or you'll miss your cookies!</b><span class="bell-cdrow">Time left: <span class="cd" data-exp="${o.expiresAt}">${fmtLeft(o.expiresAt-Date.now())}</span></span></span><span class="bell-ch" aria-hidden="true">›</span></button>`})});
   if(BELLF!=="deals")list.forEach(x=>{const st=x.m.status,o=x.o,lab=st?stLabel(st,o.mode):"Update";
     items.push({at:x.m.at,h:`<button class="bell-it${x.m.at>SEENV?" new":""}" type="button" data-bellgo="${o.id}"><span class="bell-ic" aria-hidden="true">${ST_ICON[st]||"📦"}</span><span class="bell-tx"><small>Order · ${fmtAgo(x.m.at)}</small><b>Order #${esc(o.code)} · ${esc(lab)}</b><span>${esc(x.m.text)}</span></span><span class="bell-ch" aria-hidden="true">›</span></button>`})});
   if(BELLF!=="orders")DB.sales.filter(s=>saleStatus(s)!=="ended").forEach(s=>{const live=saleStatus(s)==="live";
     items.push({at:live?s.start:Date.now()-3600e3,h:`<button class="bell-it" type="button" data-bellsale="1"><span class="bell-ic" aria-hidden="true">${isFD(s)?"🚚":"🔥"}</span><span class="bell-tx"><small>${isFD(s)?"Free delivery":"Flash sale"} · ${live?fmtAgo(s.start):"coming up"}</small><b>${isFD(s)?(live?"Free delivery now":"Free delivery soon"):(live?"Flash sale now":"Flash sale soon")}: ${esc(s.name)}</b><span>${esc(saleOffText(s))} · ${live?"ends":"starts"} ${fmtDT(live?s.end:s.start)}</span></span><span class="bell-ch" aria-hidden="true">›</span></button>`})});
   if(BELLF!=="orders")activeBroadcasts().forEach(x=>{const p=x.pid&&prod(x.pid);
     items.push({at:x.at,h:`<button class="bell-it${x.at>SEENV?" new":""}" type="button" ${p?`data-bellprod="${p.id}"`:'data-bellnone="1"'}><span class="bell-ic" aria-hidden="true">${nfIcon(x.type)}</span><span class="bell-tx"><small>${nfName(x.type)} · ${fmtAgo(x.at)}</small><b>${esc(x.title)}</b>${x.text?`<span>${esc(x.text)}</span>`:""}${x.code?`<span class="bell-code" data-bellcode="${esc(x.code)}">🎟 ${esc(x.code)} · tap to copy</span>`:""}${p?`<span style="color:var(--blue);font-weight:600">View ${esc(p.name)}</span>`:""}</span>${p?`<span class="bell-ch" aria-hidden="true">›</span>`:"<span></span>"}</button>`})});
-  items.sort((a,b)=>b.at-a.at);
+  items.sort((a,b)=>(b.at===Infinity)-(a.at===Infinity)||b.at-a.at);
   $("#bellList").innerHTML=items.length?items.map(i=>i.h).join(""):`<div class="bell-empty">${BELLF==="deals"?"No news or deals right now.":"No notifications yet. Updates about your orders will show up here."}</div>`;
 }
 function openBell(){SEENV=SEEN;const list=notifs();drawBell(list);const pop=$("#bellPop");pop.hidden=false;$("#bellBtn").setAttribute("aria-expanded","true");
@@ -1002,11 +1042,11 @@ function renderMO(){
   if(SBH.on)SBH.needFiles(o);
   const items=Object.entries(o.items).map(([id,n])=>{const p=prod(id);return `<div class="m"><span>${n} × ${esc(p?p.name:"Removed flavor")}</span><span></span></div>`}).join("");
   const awaiting=o.status==="awaiting";
-  const total=Math.max(1,DB.settings.payWindowH*3600e3);
+  const total=Math.max(1,(o.expiresAt||0)-(o.createdAt||0)||DB.settings.payWindowH*3600e3);
   card.innerHTML=`<div class="sheet-top"><div><button class="mo-back" type="button" data-moback>← All orders</button><h3 style="margin-top:6px">${esc(o.code)}</h3></div><button class="x" type="button" data-moclose aria-label="Close">✕</button></div>
   <div class="mo-row" style="margin:6px 0 14px"><span class="mo-chip st-${o.status}">${cusLabel(o)}</span><span class="mo-sub">${modeName(o)} · ${esc(whenTxt(o))}</span></div>
   ${o.status==="cancelled"?`<div class="mo-pay" style="background:#FCE3E8"><b>This order was cancelled.</b><span>${esc(o.cancelReason||"It was cancelled.")}</span><button class="btn btn-blue btn-sm" type="button" data-monew>Build a new box</button></div>`:""}
-  ${awaiting?`<div class="mo-pay"><div><div class="mo-sub">Time left to pay</div><div class="mo-big cd" data-exp="${o.expiresAt}">${fmtLeft(o.expiresAt-Date.now())}</div><div class="mo-bar" style="margin-top:8px"><i data-expbar="${o.expiresAt}" style="width:${Math.max(0,Math.min(100,(o.expiresAt-Date.now())/total*100))}%"></i></div><p class="mo-sub" style="margin:8px 0 0">If it isn't paid in time, the order is cancelled automatically.</p></div>
+  ${awaiting?`<div class="mo-pay"><div><div class="mo-sub">Time left to pay</div><div class="mo-big cd" data-exp="${o.expiresAt}">${fmtLeft(o.expiresAt-Date.now())}</div><div class="mo-bar" style="margin-top:8px"><i data-expbar="${o.expiresAt}" data-expfrom="${o.createdAt||0}" style="width:${Math.max(0,Math.min(100,(o.expiresAt-Date.now())/total*100))}%"></i></div><p class="mo-sub" style="margin:8px 0 0">If it isn't paid in time, the order is cancelled automatically.</p></div>
     ${o.rejected?`<p class="err" style="margin:0">Your last proof couldn't be verified${o.rejected.reason?`: ${esc(o.rejected.reason)}`:""}. Please send it again.</p>`:""}
     <div><div class="mo-sub">Transfer exactly</div><div class="mo-big">${money(o.total)}</div></div>
     ${payMethodsHTML()}
@@ -1115,7 +1155,7 @@ function tickCountdowns(){
   const now=Date.now();
   document.querySelectorAll("[data-exp],[data-cexp]").forEach(el=>{el.textContent=fmtLeft(+(el.dataset.exp||el.dataset.cexp)-now)});
   if(!$("#moSheet").hidden&&!MO.cform&&[...document.querySelectorAll("[data-cexp]")].some(el=>+el.dataset.cexp<=now))renderMO();
-  document.querySelectorAll("[data-expbar]").forEach(el=>{const t=Math.max(1,DB.settings.payWindowH*3600e3);el.style.width=Math.max(0,Math.min(100,(+el.dataset.expbar-now)/t*100))+"%"});
+  document.querySelectorAll("[data-expbar]").forEach(el=>{const t=Math.max(1,(+el.dataset.expbar)-(+el.dataset.expfrom||0)||DB.settings.payWindowH*3600e3);el.style.width=Math.max(0,Math.min(100,(+el.dataset.expbar-now)/t*100))+"%"});
   renderBell();
 }
 function sweepOrders(){
@@ -1241,7 +1281,7 @@ function viewAnnouncer(){
       </div>
       <div class="grid3" style="margin-top:12px;align-items:end">${col("Background",K+".bg",c.bg)}${col("Text color",K+".ink",c.ink)}
         <label class="af">Text size<select class="in" data-an="size"><option value="S" ${AN.size==="S"?"selected":""}>Small</option><option value="M" ${AN.size==="M"?"selected":""}>Medium</option><option value="L" ${AN.size==="L"?"selected":""}>Large</option></select></label></div>
-      <div class="grid3" style="margin-top:12px;align-items:end">${col("Timer text (red by default)","cdColor",AN.cdColor)}${col("Timer background","cdBg",AN.cdBg)}<span></span></div>
+      <div class="grid3" style="margin-top:12px;align-items:end">${col("Timer text (red by default)","cdColor",AN.cdColor)}${col("Timer background","cdBg",AN.cdBg)}<label class="af">Timer size<select class="in" data-an="cdSize">${[["M","Medium"],["L","Large (default)"],["XL","Extra large"]].map(([v,l])=>`<option value="${v}" ${(AN.cdSize||"L")===v?"selected":""}>${l}</option>`).join("")}</select></label></div>
       <div style="margin-top:14px"><h2 style="font-size:15px;margin:0 0 6px">Banner image</h2>
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">${c.img?`<img src="${esc(c.img)}" alt="" style="height:48px;border-radius:10px;border:1px solid var(--line)">`:`<span class="note">No image yet. A lightning bolt shows instead.</span>`}
         <label class="ghost mqbtn">${c.img?"Replace image":"Upload image"}<input type="file" accept="image/*" hidden data-animg></label>${c.img?`<button class="danger" type="button" data-anrm>Remove</button>`:""}</div></div>
@@ -1649,7 +1689,7 @@ function logMsg(o,channels,st,text,by){o.msgs=o.msgs||[];channels.forEach(ch=>o.
 const chanList=v=>v==="both"?["whatsapp","email"]:v==="none"?[]:[v];
 function applyStatus(id,st){
   const o=DB.orders.find(x=>x.id===id);if(!o)return;const prev=o.status;o.status=st;let note="";
-  if(st==='awaiting'&&prev==='cancelled'){o.expiresAt=Date.now()+DB.settings.payWindowH*3600e3;delete o.cancelReason}
+  if(st==='awaiting'&&prev==='cancelled'){o.expiresAt=payDeadlineMs(o);delete o.cancelReason}
   if(st!=='cancelled')delete o.cancelReason;
   if(st==='new'&&!o.paidAt)o.paidAt=Date.now();
   if(st==='completed'&&prev!=='completed')o.completedAt=Date.now();
@@ -1701,7 +1741,7 @@ $("#modal").addEventListener("click",e=>{
   if(e.target.closest("[data-scok]")&&SC&&!SC.done){
     const o=DB.orders.find(x=>x.id===SC.id);if(!o)return;
     const chv=(document.querySelector('input[name="scNotify"]:checked')||{value:"none"}).value,text=$("#scText").value.trim(),channels=chanList(chv);
-    const ex=SC.extra;delete o.rejReq;delete o.payReq;if(ex&&ex.reject){o.rejected={at:Date.now(),reason:ex.reason||""};o.expiresAt=Date.now()+DB.settings.payWindowH*3600e3}
+    const ex=SC.extra;delete o.rejReq;delete o.payReq;if(ex&&ex.reject){o.rejected={at:Date.now(),reason:ex.reason||""};o.expiresAt=payDeadlineMs(o)}
     if(ex&&ex.manual){}
     applyStatus(SC.id,SC.st);
     if(channels.length&&text)logMsg(o,channels,SC.st,text,"staff");
@@ -2108,7 +2148,13 @@ function viewSettings(){
     </section>
     <section class="panel">
       <h2>Payment</h2><p class="sub">Shown to customers when they pay. Orders that aren't paid in time are cancelled automatically and their cookies go back into stock.</p>
-      <div class="grid2" style="align-items:start"><label class="af">Payment window<div class="money-in"><input class="in" type="number" min="1" step="1" data-k="settings::payWindowH" value="${s.payWindowH}"><span style="padding-right:10px">hours</span></div></label></div>
+      <div class="grid2" style="align-items:start"><label class="af">Payment window<div class="money-in"><input class="in" type="number" min="1" step="1" data-k="settings::payWindowH" value="${s.payWindowH}"><span style="padding-right:10px">hours</span></div><small class="note">The most time a customer gets to pay. It shrinks automatically when the order is due sooner (pickup or delivery time minus lead time).</small></label></div>
+      <div class="grid2" style="margin-top:12px;align-items:start"><label class="af">Sameday payment time<div class="money-in"><input class="in" type="number" min="1" step="5" data-k="settings::samedayPayMin" value="${s.samedayPayMin}"><span style="padding-right:10px">minutes</span></div><small class="note">Sameday shipment orders must be paid within this time.</small></label>
+        <label class="af">Shortest time to pay<div class="money-in"><input class="in" type="number" min="1" step="5" data-k="settings::minPayMin" value="${s.minPayMin}"><span style="padding-right:10px">minutes</span></div><small class="note">Time slots that leave less than this (after the lead time) are greyed out.</small></label></div>
+      <h3 style="margin:18px 0 4px;font-size:15px">Payment countdown look</h3><p class="sub" style="margin:0 0 8px">The "time left to pay" timer that customers see on their order, on the order placed page and in the notification bell.</p>
+      <div class="grid3" style="align-items:end"><label class="af">Timer color<input type="color" data-k="settings::payCdColor" value="${esc(s.payCdColor||"#C8102E")}" style="width:100%;height:42px"></label>
+        <label class="af">Timer size<select class="in" data-k="settings::payCdSize">${[["M","Medium"],["L","Large"],["XL","Extra large"]].map(([v,l])=>`<option value="${v}" ${s.payCdSize===v?"selected":""}>${l}</option>`).join("")}</select></label>
+        <label class="chk" style="padding-bottom:12px"><input type="checkbox" data-k="settings::payCdFx" ${s.payCdFx!==false?"checked":""}> Lively (pulsing)</label></div>
       <h3 style="margin:18px 0 4px;font-size:16px">Payment methods</h3><p class="sub" style="margin-top:0">Add as many as you need (bank, e-wallet, QRIS). Customers see the ones that are switched on. If you add a picture such as a QR code, customers can tap it to save it.</p>
       <div class="stack" style="gap:12px">${DB.payMethods.map(m=>`<div class="pmcard">
         <div class="pmtop"><span class="sw" title="Show to customers"><input type="checkbox" data-pmon="${m.id}" ${m.on?"checked":""} aria-label="Show ${esc(m.name||"method")} to customers"><span></span></span><input class="in" data-pm="${m.id}|name" maxlength="40" value="${esc(m.name)}" placeholder="Method name, e.g. Bank transfer" aria-label="Method name"><button class="danger" type="button" data-pmdel="${m.id}">Delete</button></div>
@@ -2166,8 +2212,8 @@ function setK(el){
   let v=el.type==="checkbox"?el.checked:el.type==="number"?Math.max(0,parseFloat(el.value)||0):el.value;
   if(field==="cutoffHour"||field==="samedayCutoff")v=+v;
   if(/^(sameday|pickup|sched)LeadH$/.test(field))v=Math.min(720,Math.round(v));
-  if(field==="payWindowH"||field==="complaintWindowH")v=Math.max(1,v);
-  if(field==="stock"||field==="lowStockAt"||field==="payWindowH"||field==="complaintWindowH"||/^custom(Min|Step|Max)$/.test(field))v=Math.round(v);
+  if(field==="payWindowH"||field==="complaintWindowH"||field==="samedayPayMin"||field==="minPayMin")v=Math.max(1,v);
+  if(field==="stock"||field==="lowStockAt"||field==="samedayPayMin"||field==="minPayMin"||field==="payWindowH"||field==="complaintWindowH"||/^custom(Min|Step|Max)$/.test(field))v=Math.round(v);
   if(coll==="settings"){DB.settings[field]=v;const t=DB.settings;if(/^custom/.test(field)){t.customMin=Math.max(1,t.customMin);t.customStep=Math.max(1,t.customStep);if(t.customMax<t.customMin)t.customMax=t.customMin}}
   else{const item=coll==="sizes"?DB.sizes.find(x=>String(x.n)===id):DB[coll].find(x=>x.id===id);if(item)item[field]=v}
   return {coll,field};
@@ -2391,7 +2437,7 @@ am.addEventListener("change",e=>{
     saveDB();toast("Saved");return;
   }
   if(/^settings::(samedayOn|pickupOn|schedOn)$/.test(el.dataset.k||"")&&!el.checked){const t=DB.settings,n=["samedayOn","pickupOn","schedOn"].filter(k=>k!==el.dataset.k.slice(10)&&(k==="samedayOn"?t[k]:t[k]!==false)).length;if(!n){el.checked=true;toast("Keep at least one way to get an order switched on.");return}}
-  if(el.dataset.k&&(el.type==="number"||el.type==="checkbox"||el.tagName==="SELECT")){const {coll,field}=setK(el);saveDB();toast("Saved");
+  if(el.dataset.k&&(el.type==="number"||el.type==="checkbox"||el.tagName==="SELECT")){const {coll,field}=setK(el);saveDB();toast("Saved");if(/^payCd/.test(field))applyCdLook();
     if(field==="art"||field==="active"||field==="currency"||field==="track"||field==="stock"||field==="lowStockAt"||field==="cat"||coll==="sizes"||/^custom/.test(field))renderAdmin()}
 });
 /* --- photo upload: auto square-crop + resize to 400px --- */
