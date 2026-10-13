@@ -2669,7 +2669,7 @@ function viewComplaints(){
   const scopeTxt=c=>c.scope==="order"?"Whole order":c.items.map(id=>{const p=prod(id);return p?p.name:"Removed flavor"}).join(", ");
   return head("Complaints","Problems customers report within "+DB.settings.complaintWindowH+" hours of delivery or pickup. Customers are asked to keep an uncut unboxing video as proof.")+MOCK+`
   <div class="stack"><section class="panel">
-    <div class="chips" style="margin-bottom:12px">${[["all","All"],...Object.entries(CP_STATUS)].map(([k,l])=>`<button class="fchip" type="button" data-cpf="${k}" aria-pressed="${A.cpFilter===k}">${l} <i>${cnt(k)}</i></button>`).join("")}</div>
+    <div class="chips" style="margin-bottom:12px">${[["all","All"],...Object.entries(CP_STATUS)].map(([k,l])=>`<button class="fchip" type="button" data-cpfilter="${k}" aria-pressed="${A.cpFilter===k}">${l} <i>${cnt(k)}</i></button>`).join("")}</div>
     ${rows.length?`<div class="tablewrap"><table class="t"><thead><tr><th>Order</th><th>Customer</th><th>Problem</th><th>Items</th><th>Status</th></tr></thead><tbody>
     ${rows.map(o=>{const c=o.complaint;return `<tr data-cpopen="${o.id}" style="cursor:pointer"><td><span class="code-c">${esc(o.code)}</span><span class="meta">${fmtAgo(c.at)}</span></td><td>${esc(o.customer.name)}<span class="meta">${esc(o.customer.phone)}</span></td><td><b>${esc(c.reason)}</b><span class="meta">${esc(c.text.slice(0,50))}${c.text.length>50?"…":""}</span></td><td>${esc(scopeTxt(c))}</td><td><span class="mo-chip st-${c.status==="resolved"?"completed":c.status==="rejected"?"cancelled":c.status==="review"?"baking":"awaiting"}">${CP_STATUS[c.status]}</span></td></tr>`}).join("")}
     </tbody></table></div>`:`<div class="empty">No complaints${A.cpFilter==="all"?" yet":" in this view"}.</div>`}
@@ -2698,7 +2698,7 @@ $("#drawer").addEventListener("click",e=>{
     o.complaint.status=$("#cpStatus").value;o.complaint.reply=$("#cpReply").value.trim();o.complaint.updatedAt=Date.now();saveDB();toast("Response saved");renderAdmin();openComplaint(o.id)}
 });
 am.addEventListener("click",e=>{
-  const f=e.target.closest("[data-cpf]");if(f){A.cpFilter=f.dataset.cpf;renderAdmin();return}
+  const f=e.target.closest("[data-cpfilter]");if(f){A.cpFilter=f.dataset.cpfilter;renderAdmin();return}
   const r=e.target.closest("tr[data-cpopen]");if(r)openComplaint(r.dataset.cpopen);
 });
 
