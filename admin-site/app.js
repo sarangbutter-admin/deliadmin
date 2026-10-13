@@ -1220,10 +1220,14 @@ function drawDraftBar(){
   const am=$("#amain");if(!am||!SBH.pending)return;
   const keys=SBH.pending();let bar=$("#draftBar");
   {const tabs={settings:["settings","boxes"],marquee:["marquee"],page:["landing","hero"]};document.querySelectorAll("[data-tab]").forEach(b=>b.classList.toggle("pend",keys.some(k=>(tabs[k]||[]).includes(b.dataset.tab))))}
-  if(!keys.length){if(bar)bar.remove();return}
-  const html=`<div class="db-tx"><b>Not published yet</b><span>${keys.map(k=>esc(DRAFT_NAMES[k])).join(", ")}. Customers still see the old version.</span></div><div class="db-act"><button class="btn btn-blue" type="button" data-dbpub>Publish changes</button><button class="ghost" type="button" data-dbdisc>Discard changes</button></div>`;
-  if(!bar){bar=document.createElement("div");bar.id="draftBar";bar.className="draftbar";bar.setAttribute("role","status");am.prepend(bar)}
-  if(bar.dataset.sig!==keys.join()){bar.dataset.sig=keys.join();bar.innerHTML=html}
+  const onTab=SBH.admin&&["settings","boxes","marquee","landing"].includes(A.tab);
+  if(!keys.length&&!onTab){if(bar)bar.remove();return}
+  const busy=keys.length>0,sig=(busy?keys.join():"idle")+"|"+A.tab;
+  const html=busy?`<div class="db-tx"><b>Not published yet</b><span>${keys.map(k=>esc(DRAFT_NAMES[k])).join(", ")}. Customers still see the old version.</span></div><div class="db-act"><button class="btn btn-blue" type="button" data-dbpub>Save &amp; publish</button><button class="ghost" type="button" data-dbdisc>Discard changes</button></div>`
+    :`<div class="db-tx"><b>✓ Everything here is published</b><span>Changes you make on this page go live only after you press Save &amp; publish.</span></div><div class="db-act"><button class="btn btn-blue" type="button" disabled>Save &amp; publish</button><button class="ghost" type="button" disabled>Discard changes</button></div>`;
+  if(!bar){bar=document.createElement("div");bar.id="draftBar";bar.setAttribute("role","status");am.prepend(bar)}
+  bar.className="draftbar"+(busy?"":" idle");
+  if(bar.dataset.sig!==sig){bar.dataset.sig=sig;bar.innerHTML=html}
 }
 function afterSave(){if(SBH.on&&SBH.admin)requestAnimationFrame(()=>{try{drawDraftBar()}catch(e){}})}
 function toastHook(msg){return msg==="Saved"&&SBH.admin&&SBH.pending&&["settings","boxes","marquee","landing"].includes(A.tab)&&SBH.pending().length?"Draft kept. Press Publish changes to show it in the shop.":msg}
@@ -1235,7 +1239,7 @@ document.addEventListener("click",async e=>{
     SBH.discard(keys);A.hr=null;try{applyCdLook()}catch(er){}renderAdmin();toast("Changes discarded. Back to the published version.");return}
   b.disabled=true;b.textContent="Publishing…";
   const ok=await SBH.publish(keys);
-  if(ok){toast("Published to the shop");renderAdmin()}else{b.disabled=false;b.textContent="Publish changes"}
+  if(ok){toast("Published to the shop");renderAdmin()}else{b.disabled=false;b.textContent="Save & publish"}
 });
 /* --- Announcer (owner) --- */
 A.an=null;A.anK="live";A.anEnd=Date.now()+2*3600e3+17*60e3;

@@ -908,3 +908,5 @@ body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
 .oc-b.oc-chk{box-shadow:0 0 0 3px rgba(0,0,150,.18)}
 .fchip.fc-rej{color:#C8102E;border-color:#F2A7B4}
 .fchip.fc-rej[aria-pressed="true"]{background:#C8102E;color:#fff;border-color:#C8102E}
+.draftbar.idle{background:#EEF7F1;border-color:#9AD3AE;color:#0a4d27;box-shadow:none}
+.draftbar button[disabled]{opacity:.45;cursor:not-allowed}
