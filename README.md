@@ -127,6 +127,7 @@ First things to do in the admin:
 * **Messages to customers**: the admin logs every status message and gives you one-tap WhatsApp / email buttons (they open your own WhatsApp or mail app). Fully automatic sending needs a messaging service and is not included.
 * **Time zone**: the order cut-off and the days customers can choose follow *Shop settings → Shop time zone* (default Asia/Jakarta), whatever the visitor's own time zone is.
 * **Free-plan limits**: Supabase pauses free projects after a week without activity and has storage / bandwidth limits. For a real shop the Pro plan is recommended.
+* **Draft and publish**: edits to Shop settings, Marquee banner and Landing page (and Top banner) stay in the owner's browser as a draft. A yellow bar shows "Not published yet" with **Publish changes** and **Discard changes**. Customers only see the published version. The Announcer and Top banner have their own Save & publish / Discard buttons too.
 * **Updating the site**: edit files in `src/`, run `node tools/build.js`, commit `src/`, `site/` and `admin-site/`, `git push`, Netlify redeploys. For database changes, add a new file in `supabase/migrations/` and run it in the SQL editor.
 * **Preview without Netlify**: `cd site && python3 -m http.server 8080`, then open <http://localhost:8080>.
 * **Single-file preview**: `python3 tools/bundle.py` writes `dist/delidome-single.html`.

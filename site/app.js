@@ -164,7 +164,7 @@ function migrate(db){
   return db;
 }
 function loadDB(){if(SBH.on){SBH.initDB();return}try{const s=JSON.parse(localStorage.getItem(DB_KEY)||"null");if(s&&s.v===1){DB=migrate(s);return}}catch(e){}DB=migrate(seedDB());saveDB()}
-function saveDB(){if(SBH.on)return SBH.save();try{localStorage.setItem(DB_KEY,JSON.stringify(DB));return true}catch(e){return false}}
+function saveDB(){const r=SBH.on?SBH.save():(()=>{try{localStorage.setItem(DB_KEY,JSON.stringify(DB));return true}catch(e){return false}})();if(typeof afterSave==="function")afterSave();return r}
 /* --- pricing --- */
 const prod = (id,db=DB) => db.products.find(p=>p.id===id);
 const isFD=s=>s.type==="freedelivery";
@@ -1147,7 +1147,7 @@ function sweepOrders(){
   if(view==="store"){sanitizeCart();renderStoreStatic();renderStore();renderEditBar();if(!$("#moSheet").hidden)renderMO()}
 }
 setInterval(()=>{tickCountdowns();if(Math.round(Date.now()/1000)%10===0)sweepOrders()},1000);
-function toast(msg){const t=$("#toast");t.textContent=msg;t.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>t.hidden=true,Math.max(1600,msg.length*45))}
+function toast(msg){if(typeof toastHook==="function")msg=toastHook(msg);const t=$("#toast");t.textContent=msg;t.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>t.hidden=true,Math.max(1600,msg.length*45))}
 function armed(btn,fn){if(btn.dataset.armed){fn();return}btn.dataset.armed="1";const t=btn.textContent;btn.textContent="Tap again to confirm";btn.classList.add("armed");
   setTimeout(()=>{if(btn.isConnected){delete btn.dataset.armed;btn.textContent=t;btn.classList.remove("armed")}},3000)}
 const stLabel=(k,mode)=>k==="ready"?(mode==="delivery"?"Out for delivery":"Ready for pickup"):k==="completed"?(mode==="delivery"?"Delivered":"Picked up"):STATUSES.find(x=>x[0]===k)[1];

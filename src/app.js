@@ -167,7 +167,8 @@ function migrate(db){
   return db;
 }
 function loadDB(){if(SBH.on){SBH.initDB();return}try{const s=JSON.parse(localStorage.getItem(DB_KEY)||"null");if(s&&s.v===1){DB=migrate(s);return}}catch(e){}DB=migrate(seedDB());saveDB()}
-function saveDB(){if(SBH.on)return SBH.save();try{localStorage.setItem(DB_KEY,JSON.stringify(DB));return true}catch(e){return false}}
+function saveDB(){const r=SBH.on?SBH.save():(()=>{try{localStorage.setItem(DB_KEY,JSON.stringify(DB));return true}catch(e){return false}})();if(typeof afterSave==="function")afterSave();return r}
+
 
 /* --- pricing --- */
 const prod = (id,db=DB) => db.products.find(p=>p.id===id);
@@ -1169,7 +1170,7 @@ setInterval(()=>{tickCountdowns();if(Math.round(Date.now()/1000)%10===0)sweepOrd
 /* ================= ADMIN ================= */
 const A={sel:new Set(),lbl:null,lblPrev:"sample",rvPid:null,tab:"dashboard",nf:{type:"news",title:"",text:"",pid:"",code:"",until:""},dd:"today",vr:"today",dsig:"",filter:"all",od:"all",q:"",pq:"",pcat:"all",modal:null,np:null,bakeDay:null,openOrder:null,
   draft:{kind:"discount",name:"Flash sale",type:"percent",value:20,appliesTo:"all",startMode:"now",startAt:"",durH:1,durM:0}};
-function toast(msg){const t=$("#toast");t.textContent=msg;t.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>t.hidden=true,Math.max(1600,msg.length*45))}
+function toast(msg){if(typeof toastHook==="function")msg=toastHook(msg);const t=$("#toast");t.textContent=msg;t.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>t.hidden=true,Math.max(1600,msg.length*45))}
 let saveTimer;function saveSoon(){clearTimeout(saveTimer);saveTimer=setTimeout(()=>{saveDB();toast("Saved")},500)}
 function armed(btn,fn){if(btn.dataset.armed){fn();return}btn.dataset.armed="1";const t=btn.textContent;btn.textContent="Tap again to confirm";btn.classList.add("armed");
   setTimeout(()=>{if(btn.isConnected){delete btn.dataset.armed;btn.textContent=t;btn.classList.remove("armed")}},3000)}
@@ -1202,9 +1203,33 @@ function renderAdmin(){
   if(A.tab==="announcer")anDrawPrev();
   if(A.tab==="hero")hrDraw();
   if(A.tab==="labels")fitLabel();
+  drawDraftBar();
 }
 
 
+/* --- drafts: shop settings, marquee banner and landing page go live only when the owner presses Publish --- */
+const DRAFT_NAMES={settings:"Shop settings",marquee:"Marquee banner",page:"Landing page and top banner"};
+function drawDraftBar(){
+  const am=$("#amain");if(!am||!SBH.pending)return;
+  const keys=SBH.pending();let bar=$("#draftBar");
+  {const tabs={settings:["settings","boxes"],marquee:["marquee"],page:["landing","hero"]};document.querySelectorAll("[data-tab]").forEach(b=>b.classList.toggle("pend",keys.some(k=>(tabs[k]||[]).includes(b.dataset.tab))))}
+  if(!keys.length){if(bar)bar.remove();return}
+  const html=`<div class="db-tx"><b>Not published yet</b><span>${keys.map(k=>esc(DRAFT_NAMES[k])).join(", ")}. Customers still see the old version.</span></div><div class="db-act"><button class="btn btn-blue" type="button" data-dbpub>Publish changes</button><button class="ghost" type="button" data-dbdisc>Discard changes</button></div>`;
+  if(!bar){bar=document.createElement("div");bar.id="draftBar";bar.className="draftbar";bar.setAttribute("role","status");am.prepend(bar)}
+  if(bar.dataset.sig!==keys.join()){bar.dataset.sig=keys.join();bar.innerHTML=html}
+}
+function afterSave(){if(SBH.on&&SBH.admin)requestAnimationFrame(()=>{try{drawDraftBar()}catch(e){}})}
+function toastHook(msg){return msg==="Saved"&&SBH.admin&&SBH.pending&&["settings","boxes","marquee","landing"].includes(A.tab)&&SBH.pending().length?"Draft kept. Press Publish changes to show it in the shop.":msg}
+document.addEventListener("click",async e=>{
+  const b=e.target.closest("[data-dbpub],[data-dbdisc]");if(!b||!SBH.pending)return;
+  const keys=SBH.pending();if(!keys.length)return;
+  if(b.dataset.dbdisc!==undefined){
+    if(b.dataset.arm!=="1"){b.dataset.arm="1";b.textContent="Tap again to discard";setTimeout(()=>{if(b.isConnected){b.dataset.arm="";b.textContent="Discard changes"}},3500);return}
+    SBH.discard(keys);A.hr=null;try{applyCdLook()}catch(er){}renderAdmin();toast("Changes discarded. Back to the published version.");return}
+  b.disabled=true;b.textContent="Publishing…";
+  const ok=await SBH.publish(keys);
+  if(ok){toast("Published to the shop");renderAdmin()}else{b.disabled=false;b.textContent="Publish changes"}
+});
 /* --- Announcer (owner) --- */
 A.an=null;A.anK="live";A.anEnd=Date.now()+2*3600e3+17*60e3;
 const anClone=o=>JSON.parse(JSON.stringify(o));
@@ -2251,7 +2276,7 @@ am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
   if(d.gotab){A.tab=d.gotab;renderAdmin();scrollTo(0,0)}
   else if(d.hrckrm!==undefined){hrDraft().cookies[+d.hrckrm]="";renderAdmin()}
   else if(d.hrmediarm!==undefined){hrDraft().src="";renderAdmin()}
-  else if(d.hrsave!==undefined){const prev=DB.page.hero;DB.page.hero=anClone(A.hr);if(saveDB()){toast("Top banner published to the shop");A.hr=null;renderAdmin()}else{DB.page.hero=prev;toast("Not enough storage space. Try smaller pictures.")}}
+  else if(d.hrsave!==undefined){const prev=DB.page.hero;DB.page.hero=anClone(A.hr);if(saveDB()){if(SBH.publish)SBH.publish(["page"]);toast("Top banner published to the shop");A.hr=null;renderAdmin()}else{DB.page.hero=prev;toast("Not enough storage space. Try smaller pictures.")}}
   else if(d.hrdisc!==undefined){A.hr=null;renderAdmin();toast("Changes discarded")}
   else if(d.hrreset!==undefined){armed(b,()=>{A.hr=anClone(defaultPage().hero);renderAdmin();toast("Reset in the preview. Press Save to publish.")})}
 });

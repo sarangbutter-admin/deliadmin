@@ -209,6 +209,7 @@
   }
 
   /* ================= owner: load ================= */
+  var HELD = { settings: 1, marquee: 1, page: 1 }, FORCE = {};
   var SN = { docs: {}, rows: {}, prods: {}, orders: {} }, SINCE = 0, pollT = null, dirty = false, flushing = false, again = false, flushT = null, failN = 0;
 
   function snapOrder(o) {
@@ -292,7 +293,7 @@
   }
   H.save = function () { if (!H.admin) return true; dirty = true; setSync("saving"); schedule(); return true; };
   function schedule(ms) { clearTimeout(flushT); flushT = setTimeout(flush, ms == null ? 500 : ms); }
-  addEventListener("beforeunload", function (e) { if (H.admin && (dirty || flushing)) { e.preventDefault(); e.returnValue = ""; } });
+  addEventListener("beforeunload", function (e) { if (H.admin && (dirty || flushing || H.pending().length)) { e.preventDefault(); e.returnValue = ""; } });
 
   var upCache = {};
   async function walk(o) {
@@ -323,8 +324,9 @@
         var k = DOCS[di], v = DB[k];
         if (v === undefined) continue;
         if (J(v) === SN.docs[k]) continue;
+        if (HELD[k] && !FORCE[k] && SN.docs[k] !== undefined) continue;                    // draft: stays on this screen until the owner publishes it
         await walk(v);
-        (function (k, v) { var js = J(v); ops.push({ fn: "admin_put_doc", args: { p_key: k, p_data: v }, done: function () { SN.docs[k] = js; } }); })(k, v);
+        (function (k, v) { var js = J(v); ops.push({ fn: "admin_put_doc", args: { p_key: k, p_data: v }, done: function () { SN.docs[k] = js; delete FORCE[k]; } }); })(k, v);
       }
       // 2) simple collections
       var cn = Object.keys(COLLS);
@@ -467,4 +469,20 @@
     return d;
   };
   H.flush = flush;
+  /* drafts: these screens only go live when the owner presses Publish */
+  H.pending = function () { return H.admin ? Object.keys(HELD).filter(function (k) { return DB[k] !== undefined && SN.docs[k] !== undefined && J(DB[k]) !== SN.docs[k]; }) : []; };
+  H.publish = function (keys) {
+    keys = (keys || H.pending()).filter(function (k) { return HELD[k]; });
+    keys.forEach(function (k) { FORCE[k] = 1; });
+    dirty = true; setSync("saving"); clearTimeout(flushT);
+    return new Promise(function (res) {
+      (function go() {
+        if (flushing) { return setTimeout(go, 150); }
+        flush().then(function () { res(keys.every(function (k) { return J(DB[k]) === SN.docs[k]; })); });
+      })();
+    });
+  };
+  H.discard = function (keys) {
+    (keys || H.pending()).forEach(function (k) { if (HELD[k] && SN.docs[k] != null) { delete FORCE[k]; DB[k] = JSON.parse(SN.docs[k]); } });
+  };
 })();

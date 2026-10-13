@@ -682,3 +682,6 @@ body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
 @keyframes pcdGlow{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--pcd,#C8102E) 40%,transparent)}50%{box-shadow:0 0 0 6px color-mix(in srgb,var(--pcd,#C8102E) 0%,transparent)}}
 @media (prefers-reduced-motion:reduce){body.pcd-fx .mo-pay .cd,body.pcd-fx .mo-sub .cd[data-exp],body.pcd-fx .bell-pay .cd,body.pcd-fx #doneCd .cd,body.pcd-fx .bell-pay{animation:none}}
 .flash.cds-M .cdn{font-size:1em}.flash.cds-L .cdn{font-size:1.25em;font-weight:800}.flash.cds-XL .cdn{font-size:1.6em;font-weight:800}
+
+/* unpublished-changes bar (shop settings, marquee banner, landing page) */
+.draftbar .btn{min-height:44px}.draftbar .ghost{min-height:44px;background:#fff}

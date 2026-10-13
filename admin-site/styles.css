@@ -863,3 +863,11 @@ body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
 @keyframes pcdGlow{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--pcd,#C8102E) 40%,transparent)}50%{box-shadow:0 0 0 6px color-mix(in srgb,var(--pcd,#C8102E) 0%,transparent)}}
 @media (prefers-reduced-motion:reduce){body.pcd-fx .mo-pay .cd,body.pcd-fx .mo-sub .cd[data-exp],body.pcd-fx .bell-pay .cd,body.pcd-fx #doneCd .cd,body.pcd-fx .bell-pay{animation:none}}
 .flash.cds-M .cdn{font-size:1em}.flash.cds-L .cdn{font-size:1.25em;font-weight:800}.flash.cds-XL .cdn{font-size:1.6em;font-weight:800}
+
+/* unpublished-changes bar (shop settings, marquee banner, landing page) */
+.draftbar{position:sticky;top:0;z-index:30;display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin:0 0 14px;padding:12px 14px;border-radius:12px;background:#FFF4D6;border:2px solid #E0A800;color:#3b2b00;box-shadow:0 4px 14px rgba(0,0,0,.12)}
+.draftbar .db-tx{display:flex;flex-direction:column;gap:2px;font-size:14px;min-width:0}
+.draftbar .db-tx b{font-size:15px}
+.draftbar .db-act{display:flex;gap:8px;flex-wrap:wrap}
+.draftbar .btn{min-height:44px}.draftbar .ghost{min-height:44px;background:#fff}
+[data-tab].pend .nl::after{content:"";display:inline-block;width:9px;height:9px;border-radius:50%;background:#E0A800;margin-left:8px;vertical-align:middle}
