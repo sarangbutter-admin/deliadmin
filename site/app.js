@@ -767,7 +767,7 @@ $("#giftNote").addEventListener("input",e=>{S.note=e.target.value;saveCart()});
 $("#coForm").addEventListener("input",saveCust);$("#coForm").addEventListener("change",saveCust);
 $("#panelCta").addEventListener("click",e=>cta(e.currentTarget.dataset.go));
 $("#barCta").addEventListener("click",e=>cta(e.currentTarget.dataset.go));
-$("#pillBtn").addEventListener("click",()=>scrollToEl($("#build")));
+$("#pillBtn").addEventListener("click",()=>{const b=$("#pillBtn");b.classList.add("tapped");clearTimeout(b._t);b._t=setTimeout(()=>b.classList.remove("tapped"),1400);scrollToEl($("#build"))});
 $("#closeSheet").addEventListener("click",closeSheet);
 $("#sheet").addEventListener("click",e=>{if(e.target.id==="sheet")closeSheet()});
 document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;if(!$("#sheet").hidden)closeSheet();closeReviews();closeMO()});
