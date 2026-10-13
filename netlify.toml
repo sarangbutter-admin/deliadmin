@@ -9,8 +9,10 @@
   ignore = "test \"$BRANCH\" = \"main\" || ( test -n \"$CACHED_COMMIT_REF\" && test \"$CACHED_COMMIT_REF\" != \"$COMMIT_REF\" && git diff --quiet \"$CACHED_COMMIT_REF\" \"$COMMIT_REF\" -- site netlify.toml )"
 
 # Pull-request previews are off unless you turn them on in Netlify.
-# (No separate production rule: the line above already refuses to build "main",
-#  so whichever branch is set as production, only non-main branches such as "dev" build.)
+# Production deploys cost credits (15 each), so they are NEVER built automatically,
+# whatever branch is set as production. Only free branch deploys (e.g. "dev") build.
+[context.production]
+  ignore = "exit 0"
 
 # Security headers for every page
 [[headers]]
