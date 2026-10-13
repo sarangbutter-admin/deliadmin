@@ -27,7 +27,7 @@ If `config.js` is left empty the site runs in **demo mode**: everything is store
 ### 1. Supabase (the database)
 
 1. Create a project at <https://supabase.com> (any region close to your customers). Save the database password somewhere safe.
-2. Open **SQL Editor → New query**, paste the whole file `supabase/migrations/20260101000000_delidome_schema.sql`, press **Run**. Then do the same with `20260102000000_roles_customers.sql` (staff roles + customer list) `20260103000000_hardening.sql` (tighter permissions) `20260104000000_storage_select.sql` (picture uploads) and `20260105000000_badges_reviews.sql` (badges, best sellers, buyer-only reviews). All are safe to run again later.
+2. Open **SQL Editor → New query**, paste the whole file `supabase/migrations/20260101000000_delidome_schema.sql`, press **Run**. Then do the same with `20260102000000_roles_customers.sql` (staff roles + customer list) `20260103000000_hardening.sql` (tighter permissions) `20260104000000_storage_select.sql` (picture uploads) `20260105000000_badges_reviews.sql` (badges, best sellers, buyer-only reviews) and `20260106000000_team_log.sql` (staff usernames, access checkboxes, activity log, owner password). All are safe to run again later.
 3. Create your owner login: **Authentication → Users → Add user → Create new user**. Enter your email and a long password, and tick **Auto Confirm User**.
 4. Tell the database that this email is the owner. In **SQL Editor** run (use your own email):
    ```sql
@@ -89,7 +89,9 @@ First things to do in the admin:
 ### Staff and customers
 
 * **Owner** can do everything. **Staff** can only work with orders (confirm payment, change status), complaints, shipping labels and the customer list. This is enforced inside the database, not just hidden in the screen.
-* To add staff: create their login in Supabase (**Authentication → Users → Add user**, tick Auto Confirm), then add the same email in the **Team** tab.
+* To add staff: **Team** tab → name, username, password, role name, and tick what they may do. They sign in on the team site with that username. You can change their access, set a new password or remove them (their login is deleted too).
+* **Activity** (owners only): who did what and when. Entries older than 3 months are deleted automatically; owners can add notes, delete entries, or delete everything with their own password.
+* Deleting a flavor, category, box size or extra, and changing any price, asks for the owner password (unlocked for 10 minutes). This is checked in the database too.
 * **Customers**: every order saves the name and WhatsApp number automatically, once per number (`0812…` and `+62 812…` are the same customer). You can add a customer by hand (name + WhatsApp). Deleting is owner-only; a deleted customer returns automatically on their next order.
 
 ### 6. Optional

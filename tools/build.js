@@ -123,7 +123,7 @@ fs.copyFileSync(R('src/styles.css'),R('admin-site/styles.css'));
     if(!tokens.length)return true;
     return tokens.some(t=>used(t.slice(1)));
   });
-  let o=keep.filter(l=>!/^\/\*.*\b(admin|owner|sign-in)\b.*\*\/$/i.test(l.trim())).join('\n').replace(/\.adminlink(?:::before)?\{[^}]*\}/g,'').replace(/and a shop admin \(sidebar \+ panels\) sharing one mock data store/,'');
+  let o=keep.filter(l=>!/^\/\*.*\b(admin|owner|sign-in|team|staff|activity|password|editor)\b.*\*\/$/i.test(l.trim())).join('\n').replace(/\.adminlink(?:::before)?\{[^}]*\}/g,'').replace(/and a shop admin \(sidebar \+ panels\) sharing one mock data store/,'');
   wr('site/styles.css',o);
 }
 for(const f of ['404.html','robots.txt']){fs.copyFileSync(R('src/'+f),R('site/'+f))}

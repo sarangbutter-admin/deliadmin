@@ -166,7 +166,7 @@
     if (el) el.remove();
     el = document.createElement("div"); el.id = "adLogin";
     el.innerHTML = '<form class="adl-card" novalidate><h2>Team sign in</h2><p class="adl-sub">For the owner and staff.</p>' +
-      '<label>Email<input class="in" id="adlEmail" type="email" autocomplete="username" required></label>' +
+      '<label>Username or email<input class="in" id="adlEmail" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>' +
       '<label>Password<input class="in" id="adlPass" type="password" autocomplete="current-password" required></label>' +
       '<p class="adl-err" id="adlErr" role="alert" hidden></p>' +
       '<button class="btn btn-blue" type="submit" id="adlGo">Sign in</button></form>';
@@ -177,7 +177,8 @@
     el.querySelector("form").addEventListener("submit", async function (e) {
       e.preventDefault();
       var em = $q("#adlEmail").value.trim(), pw = $q("#adlPass").value, b = $q("#adlGo");
-      if (!em || !pw) { err.textContent = "Enter your email and password."; err.hidden = false; return; }
+      if (!em || !pw) { err.textContent = "Enter your username (or email) and password."; err.hidden = false; return; }
+      if (em.indexOf("@") < 0) em = em.toLowerCase() + "@team.delidome.local";   // staff sign in with a username
       b.disabled = true; b.textContent = "Signing in…"; err.hidden = true;
       try { await K.login(em, pw); await startAdmin(); }
       catch (ex) { err.textContent = ex.message; err.hidden = false; b.disabled = false; b.textContent = "Sign in"; }
@@ -262,6 +263,7 @@
       var me = await K.rpc("admin_me", {}, true);
       if (!me || !me.admin) { K.logout(); throw new Error("This account isn't on the team. Ask the owner to add your email."); }
       H.role = me.role === "staff" ? "staff" : "owner"; H.email = me.email || K.email() || "";
+      H.perms = Array.isArray(me.perms) ? me.perms : []; H.title = me.title || ""; H.username = me.username || ""; H.name = me.name || "";
       var r = await K.rpc("admin_load", {}, true);
       var fresh = !(r.docs && r.docs.settings);
       if (fresh && H.role !== "owner") { K.logout(); throw new Error("The shop hasn't been set up yet. The owner needs to sign in first."); }
@@ -353,7 +355,12 @@
         var out = { id: p.id, pos: pi };
         if (!was) { out.create = Object.assign({}, p); }
         else {
-          out.set = rest; out.replace = true;
+          // send only the fields that changed here, so two people editing different things don't undo each other
+          var old = {}; try { old = JSON.parse(was.j); } catch (e) {}
+          var set = {}, unset = [];
+          Object.keys(rest).forEach(function (k) { if (J(rest[k]) !== J(old[k])) set[k] = rest[k]; });
+          Object.keys(old).forEach(function (k) { if (!(k in rest)) unset.push(k); });
+          out.set = set; if (unset.length) out.unset = unset;
           if (p.stock !== was.stock) out.stockAdd = (p.stock | 0) - (was.stock | 0);
           var nowRev = (p.reviews || []).map(function (r) { return r.id + "|" + J(r); }), oldIds = {}, newIds = {};
           was.revs.forEach(function (s) { oldIds[s] = 1; }); nowRev.forEach(function (s) { newIds[s] = 1; });
@@ -389,7 +396,12 @@
     } catch (e) {
       failN++; setSync("error", e.message);
       if (failN === 1 || failN % 6 === 0) toast("Couldn't save: " + e.message);
-      if (/sign in|session|jwt|42501/i.test(e.message)) { H.admin = false; clearInterval(pollT); loginUI("Please sign in again to save your changes."); }
+      if (/Owner password needed/i.test(e.message) && window.needOwner) {
+        window.needOwner("save this change").then(function () { schedule(50); })
+          .catch(function () { toast("Change not saved. Reloading…"); dirty = false; setTimeout(function () { location.reload(); }, 1200); });
+      }
+      else if (/don.t have access/i.test(e.message)) { toast(e.message + " Reloading…"); dirty = false; setTimeout(function () { location.reload(); }, 1800); }
+      else if (/sign in|session|jwt|42501/i.test(e.message)) { H.admin = false; clearInterval(pollT); loginUI("Please sign in again to save your changes."); }
       else again = true;
     } finally {
       flushing = false;

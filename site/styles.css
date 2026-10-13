@@ -610,7 +610,6 @@ textarea.in{resize:vertical;border-radius:10px}
 #sbLoading{position:fixed;left:50%;top:76px;transform:translateX(-50%);z-index:250;background:#fff;color:var(--ink,#0B0B45);border:1.5px solid var(--blue,#000096);border-radius:999px;padding:9px 16px;display:flex;gap:12px;align-items:center;font-size:14px;box-shadow:0 8px 24px rgba(0,0,150,.18);max-width:calc(100vw - 32px)}
 #sbLoading button{border:0;background:var(--blue,#000096);color:#fff;border-radius:999px;padding:6px 12px;font-weight:600;cursor:pointer}
 
-/* flavor background editor */
 .bgcol .in{max-width:120px}
 
 /* hex code box next to every colour picker */
@@ -645,3 +644,7 @@ textarea.in{resize:vertical;border-radius:10px}
 .bdgtog.on,.bdgtog.auto{opacity:1;border-style:solid;border-color:var(--blue)}
 .bdsample .pwrap{width:130px}
 .bdprev-big .bdg{font-size:15px;padding:6px 12px}
+
+.tmpresets .lblx{font-size:13px;font-weight:600;color:var(--muted)}
+.pchip.own{background:var(--blue);color:var(--white)}.pchip.none{background:#FCE3E8;color:var(--red)}
+.rolechip.own{background:var(--blue);color:var(--white)}

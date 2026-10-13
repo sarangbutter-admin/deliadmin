@@ -786,12 +786,13 @@ function notifs(){
 const RN_KEY="delidome-ratenudge-v1";let RN_SEEN={};try{RN_SEEN=JSON.parse(localStorage.getItem(RN_KEY)||"{}")||{}}catch(e){}
 function rateNudge(){
   if(view!=="store"||!$("#rnPop")||!$("#rnPop").hidden||!$("#moSheet").hidden||!$("#sheet").hidden)return;
+  if(Date.now()-(RN_SEEN._last||0)<864e5)return;   // one reminder a day at most
   const o=mineOrders().find(o=>o.status==="completed"&&!(RN_SEEN[o.id]===-1||Date.now()-(RN_SEEN[o.id]||0)<864e5)&&Object.keys(o.items||{}).some(pid=>prod(pid)&&!(o.rated||{})[pid]));if(!o)return;
   const left=Object.keys(o.items).filter(pid=>prod(pid)&&!(o.rated||{})[pid]).map(pid=>prod(pid).name);
   $("#rnPop").innerHTML=`<div class="rn-ic" aria-hidden="true">⭐</div><div class="rn-tx"><b>How were your cookies?</b><span>Your order ${esc(o.code)} was ${o.mode==="delivery"?"delivered":"picked up"}. Rate ${esc(listJoin(left.slice(0,3)).replace(" or "," and "))}${left.length>3?" and more":""}.</span></div><div class="rn-act"><button class="btn btn-blue btn-sm" type="button" data-rnrate="${o.id}">Rate now</button><button class="linkbtn sm" type="button" data-rnlater="${o.id}">Later</button></div>`;
   $("#rnPop").hidden=false;
 }
-function rnDone(id,forGood){RN_SEEN[id]=forGood?-1:Date.now();try{localStorage.setItem(RN_KEY,JSON.stringify(RN_SEEN))}catch(e){}$("#rnPop").hidden=true}
+function rnDone(id,forGood){RN_SEEN[id]=forGood?-1:Date.now();RN_SEEN._last=Date.now();try{localStorage.setItem(RN_KEY,JSON.stringify(RN_SEEN))}catch(e){}$("#rnPop").hidden=true}
 {const rp=$("#rnPop");if(rp)rp.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
   if(b.dataset.rnrate){rnDone(b.dataset.rnrate,true);openMO(b.dataset.rnrate);setTimeout(()=>{const r=$("#moCard .rstars");r&&r.scrollIntoView({block:"center"})},80)}
   else if(b.dataset.rnlater)rnDone(b.dataset.rnlater)})}
@@ -1067,9 +1068,9 @@ const head = (title,sub) => `<div class="ahead"><div><h1>${title}</h1><p>${sub}<
 const MOCK = SBH.on ? "" : `<div class="mocknote"><span>●</span><span><b>Mockup.</b> Changes save in this browser and show in the shop straight away. Orders tagged <b>Example</b> are sample data. This becomes the Supabase backend later.</span></div>`;
 
 function renderAdmin(){
-  if(!tabAllowed(A.tab))A.tab="orders";
+  if(!tabAllowed(A.tab))A.tab=Object.keys(TAB_PERM).find(tabAllowed)||"orders";
   document.querySelectorAll("#anav [data-tab]").forEach(b=>{b.style.display=tabAllowed(b.dataset.tab)?"":"none"});
-  {const r=document.querySelector("#adminView .side .role");if(r)r.textContent=ROLE()==="owner"?"Owner":"Staff"}
+  {const r=document.querySelector("#adminView .side .role");if(r)r.textContent=ROLE()==="owner"?"Owner":(SBH.title||"Staff")}
   if(A.tab!=="labels")A.lbl=null;
   document.querySelectorAll("#anav [data-tab]").forEach(b=>b.setAttribute("aria-current",b.dataset.tab===A.tab?"page":"false"));
   const nNew=DB.orders.filter(o=>o.status==="review"||o.status==="new").length,nLive=DB.sales.filter(s=>saleStatus(s)==="live").length;
@@ -1079,7 +1080,8 @@ function renderAdmin(){
   $("#cSales").textContent=nLive?nLive+" live":"";$("#cSales").hidden=!nLive;
   const lowN=DB.products.filter(isLow).length;
   $("#cProducts").textContent=lowN?lowN+" low":DB.products.filter(p=>p.status==="available").length;$("#cProducts").classList.toggle("live",!!lowN);
-  $("#amain").innerHTML=({notify:viewNotify,dashboard:viewDashboard,orders:viewOrders,sales:viewSales,products:viewProducts,complaints:viewComplaints,boxes:viewBoxes,marquee:viewMarquee,announcer:viewAnnouncer,coupons:viewCoupons,hero:viewHero,labels:viewLabels,landing:viewLanding,settings:viewSettings,customers:viewCustomers,team:viewTeam,badges:viewBadges})[A.tab]();
+  $("#amain").innerHTML=({notify:viewNotify,dashboard:viewDashboard,orders:viewOrders,sales:viewSales,products:viewProducts,complaints:viewComplaints,boxes:viewBoxes,marquee:viewMarquee,announcer:viewAnnouncer,coupons:viewCoupons,hero:viewHero,labels:viewLabels,landing:viewLanding,settings:viewSettings,customers:viewCustomers,team:viewTeam,badges:viewBadges,log:viewLog})[A.tab]();
+  if(A.tab==="log"&&LG.list===null)loadLog();
   if(A.tab==="customers"&&(CU.list===null||CU.stale))loadCustomers();
   if(A.tab==="team"&&TM.list===null)loadTeam();
   tickAdmin();
@@ -2182,7 +2184,7 @@ am.addEventListener("click",e=>{
   else if(d.saleStart){const s=DB.sales.find(x=>x.id===d.saleStart),len=s.end-s.start;s.start=Date.now();s.end=s.start+len;saveDB();toast("Flash sale is live");renderAdmin()}
   else if(d.saleDel){armed(b,()=>{DB.sales=DB.sales.filter(x=>x.id!==d.saleDel);saveDB();toast("Sale deleted");renderAdmin()})}
   else if(d.pstatus){const [id,st]=d.pstatus.split(":");prod(id).status=st;saveDB();toast("Saved");renderAdmin()}
-  else if(d.pdel!==undefined){armed(b,()=>{DB.products=DB.products.filter(p=>p.id!==d.pdel);saveDB();toast("Flavor deleted");renderAdmin()})}
+  else if(d.pdel!==undefined){armed(b,()=>needOwner("delete a flavor").then(()=>{DB.products=DB.products.filter(p=>p.id!==d.pdel);saveDB();toast("Flavor deleted");renderAdmin()}).catch(()=>{}))}
   else if(d.rvadmin){openAdminReviews(d.rvadmin)}
   else if(d.padd!==undefined){openAddFlavor()}
   else if(d.pcatmanage!==undefined){openCats()}
@@ -2193,9 +2195,9 @@ am.addEventListener("click",e=>{
     if(DB.sizes.some(s=>s.n===n)){err.textContent=`There's already a box of ${n}.`;err.hidden=false;return}
     if(!(p>0)){err.textContent="Set a price above 0.";err.hidden=false;return}
     DB.sizes.push({n,price:p,active:true});saveDB();toast(`Box of ${n} added`);renderAdmin()}
-  else if(d.sdel){armed(b,()=>{if(DB.sizes.length<=1){toast("Keep at least one box size");return}DB.sizes=DB.sizes.filter(s=>String(s.n)!==d.sdel);saveDB();toast("Size deleted");renderAdmin()})}
+  else if(d.sdel){armed(b,()=>{if(DB.sizes.length<=1){toast("Keep at least one box size");return}needOwner("delete a box size").then(()=>{DB.sizes=DB.sizes.filter(s=>String(s.n)!==d.sdel);saveDB();toast("Size deleted");renderAdmin()}).catch(()=>{})})}
   else if(d.aadd!==undefined){DB.addons.push({id:uid(),name:"New extra",desc:"",price:1,active:false});saveDB();toast("Extra added, turned off");renderAdmin()}
-  else if(d.adel){armed(b,()=>{DB.addons=DB.addons.filter(a=>a.id!==d.adel);saveDB();toast("Extra deleted");renderAdmin()})}
+  else if(d.adel){armed(b,()=>needOwner("delete an extra").then(()=>{DB.addons=DB.addons.filter(a=>a.id!==d.adel);saveDB();toast("Extra deleted");renderAdmin()}).catch(()=>{}))}
   else if(d.closed){const i=+d.closed,c=DB.settings.closedWeekdays;DB.settings.closedWeekdays=c.includes(i)?c.filter(x=>x!==i):[...c,i];saveDB();toast("Saved");renderAdmin()}
   else if(d.pbg){openBg(d.pbg);return}
   else if(d.pbadge){const [pid,bid]=d.pbadge.split(":"),p=prod(pid);if(!p)return;const l=p.badges||[];p.badges=l.includes(bid)?l.filter(x=>x!==bid):[...l,bid];if(!p.badges.length)delete p.badges;saveDB();renderAdmin();return}
@@ -2916,7 +2918,7 @@ $("#modal").addEventListener("click",e=>{
   else if(d.catadd!==undefined)addCat();
   else if(d.rvadd!==undefined)addAdminReview();
   else if(d.rvdel){armed(b,()=>{const p=prod(A.rvPid);p.reviews=p.reviews.filter(r=>r.id!==d.rvdel);saveDB();toast("Review deleted");renderAdminReviews();renderAdmin()})}
-  else if(d.catdel){armed(b,()=>{const id=d.catdel;DB.products.forEach(p=>{if(p.cat===id)p.cat=""});DB.categories=DB.categories.filter(c=>c.id!==id);if(A.pcat===id)A.pcat="all";saveDB();toast("Category deleted");renderCats();renderAdmin()})}
+  else if(d.catdel){armed(b,()=>needOwner("delete a category").then(()=>{const id=d.catdel;DB.products.forEach(p=>{if(p.cat===id)p.cat=""});DB.categories=DB.categories.filter(c=>c.id!==id);if(A.pcat===id)A.pcat="all";saveDB();toast("Category deleted");renderCats();renderAdmin()}).catch(()=>{}))}
 });
 $("#modal").addEventListener("submit",e=>{if(e.target.id==="npForm"){e.preventDefault();saveNewFlavor()}});
 $("#modal").addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.id==="newCatName"){e.preventDefault();addCat()}});
@@ -3023,8 +3025,15 @@ new MutationObserver(()=>hexify()).observe(document.body,{childList:true,subtree
 
 /* --- Customers + team --- */
 const ROLE=()=>SBH.on?(SBH.role||"owner"):"owner";
-const STAFF_TABS=["orders","complaints","labels","customers"];
-const tabAllowed=t=>ROLE()==="owner"||STAFF_TABS.includes(t);
+const PERMS=[["dashboard","Dashboard","sales numbers and visits"],["orders","Orders","confirm payments, change status, edit orders"],["complaints","Complaints","reply and resolve"],
+  ["customers","Customers","see, add and edit"],["labels","Shipping labels","print labels"],["products","Flavors & stock","edit flavors and stock (prices need the owner password)"],
+  ["badges","Badges","design badges"],["boxes","Boxes & extras","sizes and extras (prices need the owner password)"],["sales","Flash sales",""],["coupons","Coupons",""],
+  ["notify","Notifications","messages to all customers"],["design","Shop look","top banner, landing page, marquee, announcer"],["settings","Shop settings","settings and payment methods"]];
+const PERM_PRESETS={Cashier:["orders","complaints","customers","labels"],Packer:["orders","labels"],Baker:["orders","products"],Manager:PERMS.map(p=>p[0]).filter(k=>k!=="settings")};
+const TAB_PERM={dashboard:"dashboard",orders:"orders",complaints:"complaints",customers:"customers",labels:"labels",products:"products",badges:"badges",boxes:"boxes",
+  sales:"sales",coupons:"coupons",notify:"notify",announcer:"design",hero:"design",landing:"design",marquee:"design",settings:"settings"};
+const myPerms=()=>SBH.on?(SBH.perms||[]):PERMS.map(p=>p[0]);
+const tabAllowed=t=>ROLE()==="owner"||(TAB_PERM[t]&&myPerms().includes(TAB_PERM[t]));
 const CU={list:null,q:"",form:null,err:"",loading:false,stale:false};
 const TM={list:null,err:"",loading:false};
 function demoCustomers(){   // demo mode only: customers come from this browser's orders + the ones added by hand
@@ -3088,24 +3097,134 @@ async function loadTeam(){
   try{TM.list=await SBH.rpc("admin_team_list",{});TM.err=""}catch(e){TM.err=e.message;if(TM.list===null)TM.list=[]}
   TM.loading=false;if(A.tab==="team"&&!A.modal)renderAdmin();
 }
+const TEAM_DOMAIN="team.delidome.local";
+const permChips=m=>m.role==="owner"?`<span class="pchip own">Everything</span>`:((m.perms||[]).length?(m.perms||[]).map(k=>{const p=PERMS.find(x=>x[0]===k);return p?`<span class="pchip">${esc(p[1])}</span>`:""}).join(""):`<span class="pchip none">No access yet</span>`);
+function tmFormHTML(){const F=TM.form,isNew=F.mode==="new";
+  return `<section class="panel" id="tmForm"><h2>${isNew?"Add a team member":"Change "+esc(F.name||F.username||F.email)}</h2>
+    ${isNew?`<p class="sub">They sign in on this team site with the username and password you set here. No email needed.</p>`:""}
+    <div class="grid2" style="margin-top:10px"><label class="af">Name<input class="in" id="tmName" maxlength="80" value="${esc(F.name)}" autocomplete="off" placeholder="e.g. Sari"></label>
+      <label class="af">Role name<input class="in" id="tmTitle" maxlength="40" value="${esc(F.title)}" list="tmTitles" autocomplete="off" placeholder="e.g. Cashier, Packer, Baker"><datalist id="tmTitles">${Object.keys(PERM_PRESETS).map(k=>`<option value="${k}">`).join("")}</datalist></label></div>
+    ${isNew?`<div class="grid2" style="margin-top:10px"><label class="af">Username (to sign in)<input class="in" id="tmUser" maxlength="30" value="${esc(F.username)}" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="e.g. sari"></label>
+      <label class="af">Password (8+ characters)<span class="pwrow"><input class="in" id="tmPass" type="password" maxlength="72" autocomplete="new-password" value="${esc(F.password)}"><button class="ghost" type="button" data-tmshow>Show</button></span></label></div>`
+      :`<p class="note" style="margin:8px 0 0">Signs in as <b>${esc(F.username||F.email)}</b></p>`}
+    <div class="seg" role="group" aria-label="Access level" style="margin-top:12px"><button type="button" data-tmlevel="staff" aria-pressed="${F.role!=="owner"}">Staff: pick what they can do</button><button type="button" data-tmlevel="owner" aria-pressed="${F.role==="owner"}">Owner: everything</button></div>
+    ${F.role==="owner"?`<p class="note">Owners can do everything, including the team, the activity log and prices.</p>`:`
+      <div class="tmpresets"><span class="lblx">Quick pick:</span>${Object.keys(PERM_PRESETS).map(k=>`<button class="fchip" type="button" data-tmpreset="${k}">${k}</button>`).join("")}<button class="fchip" type="button" data-tmpreset="">Clear</button></div>
+      <div class="permgrid">${PERMS.map(([k,l,h])=>`<label class="permbox"><input type="checkbox" data-tmperm="${k}" ${F.perms.includes(k)?"checked":""}><span><b>${l}</b>${h?`<small>${h}</small>`:""}</span></label>`).join("")}</div>
+      <p class="note">Deleting flavors, categories, box sizes or extras, and changing any price, always asks for the owner password.</p>`}
+    <p class="err" id="tmErr" ${TM.err?"":"hidden"}>${esc(TM.err)}</p>
+    <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap"><button class="btn btn-blue" type="button" data-tmsave>${isNew?"Create login":"Save changes"}</button>${isNew?"":`<button class="btn btn-ghost-blue" type="button" data-tmcancel>Cancel</button>`}</div></section>`;
+}
 function viewTeam(){
   if(!SBH.on)return head("Team","Add staff who can handle orders.")+MOCK+`<section class="panel"><div class="empty">Team accounts work once the site is connected to Supabase.</div></section>`;
+  if(!TM.form)TM.form={mode:"new",name:"",username:"",password:"",title:"",role:"staff",perms:PERM_PRESETS.Cashier.slice()};
   const me=(SBH.email||"").toLowerCase();
-  const rows=(TM.list||[]).map(m=>`<div class="pmcard" style="gap:6px"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center"><b>${esc(m.name||m.email)}</b><span style="font-size:12px;font-weight:700;color:${m.role==="owner"?"var(--blue)":"#555"}">${m.role==="owner"?"Owner":"Staff"}${m.email.toLowerCase()===me?" · you":""}</span></div>
-    <div class="note" style="margin:0">${esc(m.email)}${m.login?"":" · <b style=\"color:var(--red)\">no login yet</b> (create the user in Supabase)"}</div>
-    ${m.email.toLowerCase()===me?"":`<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="ghost" type="button" data-tmrole="${esc(m.email)}" data-to="${m.role==="owner"?"staff":"owner"}">Make ${m.role==="owner"?"staff":"owner"}</button><button class="danger" type="button" data-tmdel="${esc(m.email)}">Remove</button></div>`}</div>`).join("");
-  return head("Team","Owners can change everything. Staff can work with orders, complaints, shipping labels and customers, and nothing else.")+MOCK+`<div class="stack">
-    <section class="panel"><h2>Add a team member</h2>
-      <p class="sub">First create their login in Supabase: <b>Authentication → Users → Add user → Create new user</b> (tick Auto Confirm User). Then add the same email here.</p>
-      <div class="grid3" style="margin-top:10px"><label class="af">Email<input class="in" id="tmEmail" type="email" maxlength="120" autocomplete="off"></label>
-        <label class="af">Name (optional)<input class="in" id="tmName" maxlength="80" autocomplete="off"></label>
-        <label class="af">Role<select class="in" id="tmRole"><option value="staff">Staff</option><option value="owner">Owner</option></select></label></div>
-      <p class="err" id="tmErr" ${TM.err?"":"hidden"}>${esc(TM.err)}</p>
-      <div style="margin-top:14px"><button class="btn btn-blue" type="button" data-tmadd>Add to team</button></div></section>
+  const rows=(TM.list||[]).map(m=>{const self=m.email.toLowerCase()===me;return `<div class="pmcard tmrow"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center"><b>${esc(m.name||m.username||m.email)}${self?" (you)":""}</b><span class="rolechip${m.role==="owner"?" own":""}">${m.role==="owner"?"Owner":esc(m.title||"Staff")}</span></div>
+    <div class="note" style="margin:0">${m.username?`Username: <b>${esc(m.username)}</b>`:esc(m.email)}${m.login?"":" · <b style=\"color:var(--red)\">no login yet</b>"}</div>
+    <div class="pchips">${permChips(m)}</div>
+    ${self?"":`<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="ghost" type="button" data-tmedit="${esc(m.email)}">Change access</button>${m.login?`<button class="ghost" type="button" data-tmpw="${esc(m.email)}">New password</button>`:""}<button class="danger" type="button" data-tmdel="${esc(m.email)}">Remove</button></div>`}</div>`}).join("");
+  return head("Team","Owners can do everything. Staff only see and do what you tick for them. Everything they do is in the Activity log.")+`<div class="stack">
+    ${tmFormHTML()}
     <section class="panel"><h2>Team${TM.list?` (${TM.list.length})`:""}</h2><div style="margin-top:10px;display:grid;gap:10px">${TM.list===null?`<div class="empty">Loading…</div>`:rows}</div></section></div>`;
 }
-function tmErr(m){TM.err=m;const e=$("#tmErr");if(e){e.textContent=m;e.hidden=!m}}
-async function tmCall(fn,args,ok){try{TM.list=await SBH.rpc(fn,args);TM.err="";renderAdmin();if(ok)toast(ok)}catch(e){tmErr(e.message)}}
+function tmErr(m){TM.err=m;const e=$("#tmErr");if(e){e.textContent=m;e.hidden=!m;if(m)e.scrollIntoView({block:"center"})}}
+function tmRead(){const F=TM.form;if(!F)return;const v=id=>{const e=$("#"+id);return e?e.value:undefined};
+  ["name","title"].forEach(k=>{const x=v("tm"+k[0].toUpperCase()+k.slice(1));if(x!==undefined)F[k]=x});
+  const u=v("tmUser");if(u!==undefined)F.username=u;const pw=v("tmPass");if(pw!==undefined)F.password=pw;
+  if(F.role!=="owner")F.perms=[...document.querySelectorAll("[data-tmperm]")].filter(c=>c.checked).map(c=>c.dataset.tmperm);}
+async function tmCall(fn,args,ok){try{TM.list=await SBH.rpc(fn,args);TM.err="";TM.form=null;renderAdmin();if(ok)toast(ok);return true}catch(e){tmErr(e.message);return false}}
+am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b||A.tab!=="team")return;const d=b.dataset;
+  if(d.tmlevel){tmRead();TM.form.role=d.tmlevel;renderAdmin();$("#tmForm").scrollIntoView({block:"start"})}
+  else if(d.tmpreset!==undefined){tmRead();TM.form.perms=(PERM_PRESETS[d.tmpreset]||[]).slice();if(d.tmpreset&&!TM.form.title)TM.form.title=d.tmpreset;renderAdmin();$("#tmForm").scrollIntoView({block:"start"})}
+  else if(d.tmshow!==undefined){const i=$("#tmPass");i.type=i.type==="password"?"text":"password";b.textContent=i.type==="password"?"Show":"Hide"}
+  else if(d.tmcancel!==undefined){TM.form=null;TM.err="";renderAdmin()}
+  else if(d.tmsave!==undefined){tmRead();const F=TM.form;
+    if(F.mode==="new"){const un=F.username.trim().toLowerCase();
+      if(!/^[a-z0-9][a-z0-9._-]{2,29}$/.test(un))return tmErr("Username: 3 to 30 letters or numbers (dots, dashes and _ are fine), no spaces.");
+      if(F.password.length<8)return tmErr("Password: at least 8 characters.");
+      tmCall("admin_team_create",{p:{username:un,name:F.name.trim(),password:F.password,title:F.title.trim(),role:F.role,perms:F.perms}},"Login created for "+un)}
+    else tmCall("admin_team_set",{p:{email:F.email,name:F.name.trim(),title:F.title.trim(),role:F.role,perms:F.perms}},"Saved")}
+  else if(d.tmedit){const m=(TM.list||[]).find(x=>x.email===d.tmedit);if(!m)return;TM.err="";
+    TM.form={mode:"edit",email:m.email,username:m.username||"",name:m.name||"",title:m.title||"",role:m.role,perms:(m.perms||[]).slice(),password:""};renderAdmin();$("#tmForm").scrollIntoView({block:"start"})}
+  else if(d.tmpw){const m=(TM.list||[]).find(x=>x.email===d.tmpw);
+    pwPrompt({title:"New password for "+(m&&(m.name||m.username)||d.tmpw),text:"At least 8 characters. Tell them the new password yourself.",button:"Set password",autocomplete:"new-password",
+      run:async pw=>{if(pw.length<8)return {ok:false,err:"Password: at least 8 characters."};try{TM.list=await SBH.rpc("admin_team_password",{p_email:d.tmpw,p_password:pw});return {ok:true}}catch(x){return {ok:false,err:x.message}}}})
+      .then(()=>{renderAdmin();toast("Password changed")}).catch(()=>{})}
+  else if(d.tmdel)armed(b,()=>tmCall("admin_team_remove",{p_email:d.tmdel},"Removed"));
+});
+
+/* --- Activity log (owner only) --- */
+const LG={list:null,q:"",loading:false,more:true,qT:null,note:null};
+async function loadLog(older){
+  if(!SBH.on){LG.list=[];LG.more=false;return renderAdmin()}
+  if(LG.loading)return;LG.loading=true;
+  try{const before=older&&LG.list&&LG.list.length?LG.list[LG.list.length-1].at:null;
+    const r=await SBH.rpc("admin_log_list",{p_before:before,p_q:LG.q});LG.list=older?(LG.list||[]).concat(r):r;LG.more=r.length>=200;LG.err=""}
+  catch(e){LG.err=e.message;if(LG.list===null)LG.list=[]}
+  LG.loading=false;if(A.tab==="log"&&!A.modal){const y=scrollY;renderAdmin();if(older)scrollTo(0,y)}
+}
+function logRows(){
+  if(!LG.list)return `<div class="empty">Loading…</div>`;if(!LG.list.length)return `<div class="empty">${LG.q?"Nothing matches.":"Nothing yet."}</div>`;
+  let day="";return LG.list.map(x=>{const d=new Date(x.at),dk=d.toDateString();const h=dk!==day?`<div class="lgday">${d.toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long"})}</div>`:"";day=dk;
+    return h+`<div class="lgrow"><span class="lgt">${d.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})}</span><div class="lgmain"><div><b>${esc(x.actor)}</b> <span class="rolechip${x.role==="Owner"?" own":""}">${esc(x.role)}</span></div>
+      <div class="lga">${esc(x.action)}${x.detail?` <span>· ${esc(x.detail)}</span>`:""}</div>
+      ${LG.note===x.id?`<div class="pwrow" style="margin-top:6px"><input class="in" id="lgNote" maxlength="300" value="${esc(x.note)}" placeholder="Your note"><button class="btn btn-blue btn-sm" type="button" data-lgnotesave="${x.id}">Save</button></div>`:x.note?`<div class="lgnote">📝 ${esc(x.note)}</div>`:""}</div>
+      <div class="lgbtn"><button class="linkbtn sm" type="button" data-lgnote="${x.id}">${x.note?"Edit note":"Note"}</button><button class="linkbtn sm danger-t" type="button" data-lgdel="${x.id}">Delete</button></div></div>`}).join("");
+}
+function viewLog(){
+  if(!SBH.on)return head("Activity","Everything the owner and staff do.")+MOCK+`<section class="panel"><div class="empty">The activity log works once the site is connected to Supabase.</div></section>`;
+  return head("Activity","Everything the owner and staff did on the team site. Only owners can see this. Entries older than 3 months are deleted automatically.")+`<div class="stack">
+    <section class="panel"><div class="pwrow"><input class="in" id="lgQ" type="search" placeholder="Search name, action, order code…" value="${esc(LG.q)}"><button class="ghost" type="button" data-lgreload>Refresh</button></div>
+      ${LG.err?`<p class="err">${esc(LG.err)}</p>`:""}
+      <div class="lglist" id="lgList">${logRows()}</div>
+      ${LG.list&&LG.more?`<div style="margin-top:12px"><button class="ghost" type="button" data-lgmore>Load older</button></div>`:""}</section>
+    <div><button class="danger" type="button" data-lgclear>Delete the whole log…</button></div></div>`;
+}
+am.addEventListener("input",e=>{if(e.target.id!=="lgQ")return;LG.q=e.target.value;clearTimeout(LG.qT);LG.qT=setTimeout(()=>{LG.list=null;loadLog().then(()=>{const q=$("#lgQ");if(q){q.focus();q.setSelectionRange(q.value.length,q.value.length)}})},400)});
+am.addEventListener("click",async e=>{const b=e.target.closest("button");if(!b||A.tab!=="log")return;const d=b.dataset;
+  if(d.lgreload!==undefined){LG.list=null;renderAdmin();loadLog()}
+  else if(d.lgmore!==undefined)loadLog(true);
+  else if(d.lgnote){LG.note=+d.lgnote;const y=scrollY;renderAdmin();scrollTo(0,y);const i=$("#lgNote");i&&i.focus()}
+  else if(d.lgnotesave){const id=+d.lgnotesave,v=$("#lgNote").value.trim();try{await SBH.rpc("admin_log_note",{p_id:id,p_note:v});const x=LG.list.find(y=>y.id===id);if(x)x.note=v;LG.note=null;const y=scrollY;renderAdmin();scrollTo(0,y);toast("Note saved")}catch(x){toast(x.message)}}
+  else if(d.lgdel){armed(b,async()=>{try{await SBH.rpc("admin_log_delete",{p_ids:[+d.lgdel]});LG.list=LG.list.filter(y=>y.id!==+d.lgdel);const y=scrollY;renderAdmin();scrollTo(0,y);toast("Entry deleted")}catch(x){toast(x.message)}})}
+  else if(d.lgclear!==undefined){pwPrompt({title:"Delete the whole activity log?",text:"This can't be undone. Type your own owner password to confirm.",button:"Delete everything",danger:true,
+      run:async pw=>{try{return await SBH.rpc("admin_log_clear",{p_password:pw})}catch(x){return {ok:false,err:x.message}}}})
+    .then(()=>{LG.list=null;renderAdmin();loadLog();toast("Activity log deleted")}).catch(()=>{})}
+});
+
+/* --- owner password prompt (used for deletes, price changes and clearing the log) --- */
+function pwPrompt(o){
+  return new Promise((resolve,reject)=>{
+    const w=document.createElement("div");w.className="pwmodal";w.setAttribute("role","dialog");w.setAttribute("aria-modal","true");
+    w.innerHTML=`<form class="pwcard" novalidate><h3>${esc(o.title)}</h3><p class="note">${esc(o.text||"")}</p>
+      <label class="af">Password<input class="in" type="password" id="pwIn" autocomplete="${o.autocomplete||"current-password"}" maxlength="72"></label>
+      <p class="err" id="pwErr" hidden></p>
+      <div class="modal-actions"><button class="btn btn-ghost-blue" type="button" data-pwcancel>Cancel</button><button class="btn ${o.danger?"btn-red":"btn-blue"}" type="submit">${esc(o.button||"Confirm")}</button></div></form>`;
+    document.body.appendChild(w);const inp=w.querySelector("#pwIn"),err=w.querySelector("#pwErr"),go=w.querySelector("button[type=submit]");setTimeout(()=>inp.focus(),30);
+    const done=ok=>{w.remove();ok?resolve():reject(new Error("cancelled"))};
+    w.addEventListener("click",e=>{if(e.target===w||e.target.closest("[data-pwcancel]"))done(false)});
+    w.addEventListener("keydown",e=>{if(e.key==="Escape"){e.stopPropagation();done(false)}});
+    w.querySelector("form").addEventListener("submit",async e=>{e.preventDefault();const pw=inp.value;if(!pw){err.textContent="Type the password.";err.hidden=false;return}
+      go.disabled=true;err.hidden=true;const r=await o.run(pw);go.disabled=false;
+      if(r&&r.ok){done(true);return}err.textContent=(r&&r.err)||"That didn't work.";err.hidden=false;inp.select()});
+  });
+}
+let SUDO_UNTIL=0;
+function needOwner(what){
+  if(!SBH.on||SUDO_UNTIL>Date.now()+15000)return Promise.resolve();
+  return pwPrompt({title:"Owner password needed",text:`To ${what}, type the owner's password. It stays unlocked for 10 minutes.`,button:"Confirm",
+    run:async pw=>{try{const r=await SBH.rpc("admin_sudo",{p_password:pw});if(r&&r.ok)SUDO_UNTIL=r.until;return r}catch(x){return {ok:false,err:x.message}}}});
+}
+window.needOwner=needOwner;
+// price fields ask for the owner password before they change
+const PRICE_K=/^(products:[^:]+:surcharge|sizes:[^:]+:price|addons:[^:]+:price|settings::deliveryFee|settings::customPer)$/;
+am.addEventListener("change",e=>{const el=e.target;if(!el.dataset||!el.dataset.k||!PRICE_K.test(el.dataset.k)||!SBH.on||SUDO_UNTIL>Date.now()+15000)return;
+  const [coll,id,field]=el.dataset.k.split(":"),item=coll==="settings"?DB.settings:coll==="sizes"?DB.sizes.find(x=>String(x.n)===id):DB[coll].find(x=>x.id===id);
+  if(!item)return;const old=item[field],nv=el.value;if(String(old)===String(Math.max(0,parseFloat(nv)||0)))return;
+  e.stopImmediatePropagation();el.value=old;
+  needOwner("change a price").then(()=>{el.value=nv;el.dispatchEvent(new Event("change",{bubbles:true}))}).catch(()=>toast("Price not changed"));
+},true);
+
 am.addEventListener("input",e=>{if(e.target.id==="cuSearch"){CU.q=e.target.value;const l=$("#cuList");if(l)l.innerHTML=cuRows()}});
 am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;const d=b.dataset;
   if(d.cusave!==undefined)cuSave();
