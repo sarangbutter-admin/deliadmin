@@ -875,8 +875,9 @@ const addMine=id=>{if(!MINE.includes(id))MINE.unshift(id);try{localStorage.setIt
 const mineOrders=()=>MINE.map(id=>DB.orders.find(o=>o.id===id)).filter(Boolean);
 function fmtLeft(ms){ms=Math.max(0,ms);const t=Math.floor(ms/1000),h=Math.floor(t/3600),m=Math.floor(t%3600/60),sec=t%60;return [h,m,sec].map(n=>String(n).padStart(2,"0")).join(":")}
 const CUS={awaiting:"Awaiting payment",review:"Checking payment",new:"Confirmed",baking:"Baking",cancelled:"Cancelled"};
+const isRej=o=>o.status==="awaiting"&&!!o.rejected;
 const refundTxt=o=>o.refund?(o.refund.full?"Refunded":"Partly refunded"):"";
-const cusLabel=o=>(CUS[o.status]||stLabel(o.status,o.mode))+(o.refund?" · "+refundTxt(o):"");
+const cusLabel=o=>(isRej(o)?"Payment rejected":(CUS[o.status]||stLabel(o.status,o.mode)))+(o.refund?" · "+refundTxt(o):"");
 function releaseHold(o){if(SBH.on)return;if(o.tracked&&o.holds){Object.entries(o.items).forEach(([pid,n])=>{const p=prod(pid);if(p&&p.track)p.stock+=n});o.holds=false}}
 function takeHold(o){if(SBH.on)return;if(o.tracked&&!o.holds){Object.entries(o.items).forEach(([pid,n])=>{const p=prod(pid);if(p&&p.track)p.stock=Math.max(0,p.stock-n)});o.holds=true}}
 function expireOrders(){
@@ -923,7 +924,7 @@ function drawBell(list){
   $("#bellTabs").innerHTML=[["all","All"],["orders","My orders"],["deals","News & deals"]].map(([k,l])=>`<button type="button" role="tab" data-belltab="${k}" aria-selected="${BELLF===k}">${l}</button>`).join("");
   const items=[];
   if(BELLF!=="deals")payDue().forEach(o=>{
-    items.push({at:Infinity,h:`<button class="bell-it bell-pay" type="button" data-bellgo="${o.id}"><span class="bell-ic" aria-hidden="true">⏰</span><span class="bell-tx"><small>Order #${esc(o.code)} · waiting for payment</small><b>Pay now or you'll miss your cookies!</b><span class="bell-cdrow">Time left: <span class="cd" data-exp="${o.expiresAt}">${fmtLeft(o.expiresAt-Date.now())}</span></span></span><span class="bell-ch" aria-hidden="true">›</span></button>`})});
+    items.push({at:Infinity,h:`<button class="bell-it bell-pay" type="button" data-bellgo="${o.id}"><span class="bell-ic" aria-hidden="true">⏰</span><span class="bell-tx"><small>Order #${esc(o.code)} · ${isRej(o)?"payment rejected":"waiting for payment"}</small><b>${isRej(o)?"Payment rejected – please send a new proof":"Pay now or you'll miss your cookies!"}</b>${isRej(o)&&o.rejected.reason?`<span class="bell-rej">Reason: ${esc(o.rejected.reason)}</span>`:""}<span class="bell-cdrow">Time left: <span class="cd" data-exp="${o.expiresAt}">${fmtLeft(o.expiresAt-Date.now())}</span></span></span><span class="bell-ch" aria-hidden="true">›</span></button>`})});
   if(BELLF!=="deals")refundList().forEach(o=>{
     items.push({at:o.refund.at,h:`<button class="bell-it${o.refund.at>SEENV?" new":""}" type="button" data-bellgo="${o.id}"><span class="bell-ic" aria-hidden="true">💸</span><span class="bell-tx"><small>Order #${esc(o.code)} · ${fmtAgo(o.refund.at)}</small><b>${o.refund.full?"Your order was refunded":"Part of your order was refunded"}: ${money(o.refund.amount)}</b><span>${o.refund.note?esc(o.refund.note)+" · ":""}It can take a few days to show in your account.</span></span><span class="bell-ch" aria-hidden="true">›</span></button>`})});
   if(BELLF!=="deals")list.forEach(x=>{const st=x.m.status,o=x.o,lab=st?stLabel(st,o.mode):"Update";
@@ -987,7 +988,7 @@ function moSteps(o){
   const labels=["Order placed","Payment","Confirmed","Baking",o.mode==="delivery"?"Out for delivery":"Ready for pickup",o.mode==="delivery"?"Delivered":"Picked up"];
   const idx={awaiting:1,review:1,new:2,baking:3,ready:4,completed:5}[o.status]??1;
   const del=o.mode==="delivery",ship=del&&(o.courier||o.awb);
-  const sub=i=>i===4&&del?(ship?`<span class="trk">${o.courier?`Courier: <b>${esc(o.courier)}</b>`:""}${o.courier&&o.awb?"<br>":""}${o.awb?`Airway bill: <b>${esc(o.awb)}</b> <button class="trkcopy" type="button" data-awbcopy="${esc(o.awb)}">Copy</button>`:""}</span>`:(o.status==="ready"?"Courier details will show here soon":"")):i===0?fmtDT(o.createdAt):i===1?(o.status==="awaiting"?"Waiting for your payment":o.status==="review"?"Proof sent, we're checking it":"Received"):"";
+  const sub=i=>i===1&&isRej(o)?`<span class="trk-rej">Rejected${o.rejected.reason?": "+esc(o.rejected.reason):""}. Please send a new proof.</span>`:i===4&&del?(ship?`<span class="trk">${o.courier?`Courier: <b>${esc(o.courier)}</b>`:""}${o.courier&&o.awb?"<br>":""}${o.awb?`Airway bill: <b>${esc(o.awb)}</b> <button class="trkcopy" type="button" data-awbcopy="${esc(o.awb)}">Copy</button>`:""}</span>`:(o.status==="ready"?"Courier details will show here soon":"")):i===0?fmtDT(o.createdAt):i===1?(o.status==="awaiting"?"Waiting for your payment":o.status==="review"?"Proof sent, we're checking it":"Received"):"";
   return `<ol class="track-l">${labels.map((l,i)=>{const done=i<idx||(o.status==="completed"&&i===5),now=i===idx&&!done;
     return `<li class="${done?"done":now?"now":""}"><span class="dot">${done?"✓":""}</span><span>${l}${(done||now||(i===4&&ship&&o.status==="completed"))&&sub(i)?`<small>${sub(i)}</small>`:""}</span></li>`}).join("")}</ol>`;
 }
@@ -1037,7 +1038,7 @@ function renderMO(){
   if(!o){
     MO.id=null;
     card.innerHTML=`<div class="sheet-top"><h3>My orders</h3><button class="x" type="button" data-moclose aria-label="Close">✕</button></div>
-    ${list.length?`<div class="mo-list">${list.map(x=>`<button class="mo-card" type="button" data-moopen="${x.id}"><div class="mo-row"><span class="mo-code">${esc(x.code)}</span><span class="mo-chip st-${x.status}">${cusLabel(x)}</span></div>
+    ${list.length?`<div class="mo-list">${list.map(x=>`<button class="mo-card" type="button" data-moopen="${x.id}"><div class="mo-row"><span class="mo-code">${esc(x.code)}</span><span class="mo-chip st-${isRej(x)?"rejected":x.status}">${cusLabel(x)}</span></div>
       <div class="mo-row"><span>Box of ${x.size} · ${money(x.total)}${x.refund?` · <b style="color:#0a7a3b">${refundTxt(x)} ${money(x.refund.amount)}</b>`:""}</span><span class="mo-sub">${fmtDay(x.day)}, ${esc(x.time)}</span></div>
       ${x.status==="completed"&&x.complaint?`<div class="mo-sub">Complaint: ${CP_STATUS[x.complaint.status]}</div>`:cwinOpen(x)?`<div class="mo-sub">Complaint window: <span class="cd" data-cexp="${cwinEnd(x)}">${fmtLeft(cwinEnd(x)-Date.now())}</span></div>`:""}${x.status==="completed"&&Object.keys(x.items).some(id=>prod(id)&&!(x.rated||{})[id])?`<div class="mo-sub">Tap to rate your cookies</div>`:""}
       ${x.status==="awaiting"?`<div class="mo-sub">Pay within <span class="cd" data-exp="${x.expiresAt}">${fmtLeft(x.expiresAt-Date.now())}</span></div>`:""}</button>`).join("")}</div>`:`<p class="hint">No orders yet in this browser. Build a box and it will show up here.</p>`}
@@ -1050,11 +1051,11 @@ function renderMO(){
   const awaiting=o.status==="awaiting";
   const total=Math.max(1,(o.expiresAt||0)-(o.createdAt||0)||DB.settings.payWindowH*3600e3);
   card.innerHTML=`<div class="sheet-top"><div><button class="mo-back" type="button" data-moback>← All orders</button><h3 style="margin-top:6px">${esc(o.code)}</h3></div><button class="x" type="button" data-moclose aria-label="Close">✕</button></div>
-  <div class="mo-row" style="margin:6px 0 14px"><span class="mo-chip st-${o.status}">${cusLabel(o)}</span><span class="mo-sub">${modeName(o)} · ${esc(whenTxt(o))}</span></div>
+  <div class="mo-row" style="margin:6px 0 14px"><span class="mo-chip st-${isRej(o)?"rejected":o.status}">${cusLabel(o)}</span><span class="mo-sub">${modeName(o)} · ${esc(whenTxt(o))}</span></div>
   ${o.refund?`<div class="mo-pay" style="background:#E6F6EC;border-color:#9AD3AE"><b>💸 ${o.refund.full?"Refunded":"Partly refunded"}: ${money(o.refund.amount)}</b><span>${fmtDT(o.refund.at)}${o.refund.note?" · "+esc(o.refund.note):""}</span><span class="mo-sub">It can take a few days to show in your account.</span></div>`:""}
   ${o.status==="cancelled"?`<div class="mo-pay" style="background:#FCE3E8"><b>This order was cancelled.</b><span>${esc(o.cancelReason||"It was cancelled.")}</span><button class="btn btn-blue btn-sm" type="button" data-monew>Build a new box</button></div>`:""}
   ${awaiting?`<div class="mo-pay"><div><div class="mo-sub">Time left to pay</div><div class="mo-big cd" data-exp="${o.expiresAt}">${fmtLeft(o.expiresAt-Date.now())}</div><div class="mo-bar" style="margin-top:8px"><i data-expbar="${o.expiresAt}" data-expfrom="${o.createdAt||0}" style="width:${Math.max(0,Math.min(100,(o.expiresAt-Date.now())/total*100))}%"></i></div><p class="mo-sub" style="margin:8px 0 0">If it isn't paid in time, the order is cancelled automatically.</p></div>
-    ${o.rejected?`<p class="err" style="margin:0">Your last proof couldn't be verified${o.rejected.reason?`: ${esc(o.rejected.reason)}`:""}. Please send it again.</p>`:""}
+    ${o.rejected?`<div class="rej-box" role="alert"><b>✕ Payment rejected</b><span>${o.rejected.reason?esc(o.rejected.reason):"We couldn't verify your payment proof."}</span><span>Please send a new payment proof below before the time runs out.</span></div>`:""}
     <div><div class="mo-sub">Transfer exactly</div><div class="mo-big">${money(o.total)}</div></div>
     ${payMethodsHTML()}
     <form class="form" id="moPay" novalidate><h4 style="margin:0">Send your payment proof</h4>
@@ -1639,7 +1640,7 @@ function viewOrders(){
       <div class="bakesum"><span>${cookies} cookies</span>${Object.entries(bySize).sort((a,b)=>a[0]-b[0]).map(([n,c])=>`<span>${c} × box of ${n}</span>`).join("")}<span>${pick} pickup</span><span>${deliv} delivery</span></div>`;
   }
   const base=ordRows(),rows=shownRows(),todayYmd=ymd(t);
-  const cnt=k=>k==="all"?base.length:base.filter(o=>o.status===k).length;
+  const cnt=k=>k==="all"?base.length:k==="rejected"?base.filter(isRej).length:k==="awaiting"?base.filter(o=>o.status==="awaiting"&&!isRej(o)).length:base.filter(o=>o.status===k).length;
   const toPrint=rows.filter(o=>canLabel(o)&&!o.labelAt).length;
   const dayTxt=A.od==="all"?"all dates":A.od==="today"?"today":fmtDay(A.od);
   const alerts=DB.products.filter(isLow).sort((a,b)=>a.stock-b.stock);
@@ -1663,7 +1664,7 @@ function viewOrders(){
           <button class="fchip" type="button" data-od="today" aria-pressed="${A.od==="today"}">Today</button>
           <input class="oc-date" type="date" data-oddate value="${A.od!=="all"&&A.od!=="today"?A.od:""}" aria-label="Show orders placed on a date">
         </div>
-        <div class="chips" style="margin-top:12px">${[["all","All"],...STATUSES].map(([k,l])=>`<button class="fchip" type="button" data-filter="${k}" aria-pressed="${A.filter===k}">${l} <i>${cnt(k)}</i></button>`).join("")}</div>
+        <div class="chips" style="margin-top:12px">${[["all","All"],...STATUSES.slice(0,2),["rejected","Rejected"],...STATUSES.slice(2)].map(([k,l])=>`<button class="fchip${k==="rejected"?" fc-rej":""}" type="button" data-filter="${k}" aria-pressed="${A.filter===k}">${l} <i>${cnt(k)}</i></button>`).join("")}</div>
         <div class="tools-row" style="margin:12px 0 14px">
           <span class="note" style="margin:0">${rows.length} order${rows.length===1?"":"s"} · ${esc(dayTxt)} (by order date)</span>
           <div class="colin" style="flex-wrap:wrap;gap:8px"><button class="btn btn-blue btn-sm" type="button" data-printsel ${toPrint?"":"disabled"}>Print unprinted labels (${toPrint})</button>
@@ -1680,9 +1681,10 @@ function openOrder(id){
   const d=$("#drawer");
   d.innerHTML=`<div class="drawer-card" role="dialog" aria-modal="true" aria-label="Order ${esc(o.code)}">
     <div class="sheet-top"><div><h3>${esc(o.code)}</h3><span class="note">Placed ${fmtDT(o.createdAt)}${o.example?" · Example":""}</span></div><button class="x" type="button" data-close aria-label="Close">✕</button></div>
-    <div class="dsec"><h4>Status</h4><div class="seg">${STATUSES.map(([k])=>`<button type="button" data-set-status="${k}" aria-pressed="${o.status===k}">${stLabel(k,o.mode)}</button>`).join("")}</div></div>
+    <div class="dsec"><h4>Status</h4><div class="seg">${STATUSES.map(([k])=>`<button type="button" data-set-status="${k}" aria-pressed="${o.status===k}"${k==="awaiting"&&isRej(o)?' class="oc-rejb"':""}>${k==="awaiting"&&isRej(o)?"✕ Rejected":stLabel(k,o.mode)}</button>`).join("")}</div></div>
     ${o.status==="awaiting"?`<div class="dsec"><h4>Payment</h4><p class="hint" style="margin:0 0 8px">Waiting for the customer. Cancels automatically in <span class="cd" data-exp="${o.expiresAt||0}">${fmtLeft((o.expiresAt||0)-Date.now())}</span>.</p><button class="btn btn-blue btn-sm" type="button" data-pay-manual>Mark as paid (cash or other)</button></div>`:""}
-    ${o.proof?`<div class="dsec"><h4>Payment proof</h4><dl class="dl"><dt>Name</dt><dd>${esc(o.proof.name)}</dd><dt>Sent</dt><dd>${fmtDT(o.proof.at)}</dd><dt>Amount due</dt><dd>${money(o.total)}</dd></dl><a href="${esc(imgOk(o.proof.img))}" target="_blank" rel="noopener" style="display:block;margin-top:10px"><img class="proofimg" src="${esc(imgOk(o.proof.img))}" alt="Payment proof from ${esc(o.proof.name)}"></a>
+    ${isRej(o)?`<div class="dsec"><h4>Payment proof</h4><p class="rej-t" style="margin:0">✕ Rejected ${fmtAgo(o.rejected.at||Date.now())}${o.rejected.reason?`: ${esc(o.rejected.reason)}`:""}</p><p class="hint" style="margin:6px 0 0">The proof is hidden until the customer sends a new one. It then comes back here as Check payment.</p></div>`:""}
+    ${o.proof&&!isRej(o)?`<div class="dsec"><h4>Payment proof</h4><dl class="dl"><dt>Name</dt><dd>${esc(o.proof.name)}</dd><dt>Sent</dt><dd>${fmtDT(o.proof.at)}</dd><dt>Amount due</dt><dd>${money(o.total)}</dd></dl><a href="${esc(imgOk(o.proof.img))}" target="_blank" rel="noopener" style="display:block;margin-top:10px"><img class="proofimg" src="${esc(imgOk(o.proof.img))}" alt="Payment proof from ${esc(o.proof.name)}"></a>
       ${o.status==="review"&&o.rejReq?`<div class="oc-alert appr rej" style="margin-top:12px">⏳ ${ROLE()==="owner"?`${esc(o.rejReq.by)} wants to REJECT this proof${o.rejReq.reason?` ("${esc(o.rejReq.reason)}")`:""}`:"Proof rejection sent – waiting for owner approval"}</div>${ROLE()==="owner"?`<div class="mo-row" style="gap:8px;margin-top:8px"><button class="danger" type="button" data-rapprove-d>✓ Approve rejection</button><button class="oc-b" type="button" data-rdeny-d>Keep payment</button></div>`:""}`:''}
       ${o.status==="review"?`<div class="stack" style="margin-top:12px;gap:10px"><label class="af">Reason if rejecting (optional)<input class="in" id="rejReason" maxlength="80" placeholder="e.g. amount doesn't match"></label><div class="mo-row" style="gap:8px"><button class="btn btn-blue btn-sm" type="button" data-pay-ok>Confirm payment</button><button class="danger" type="button" data-pay-no>Reject</button></div></div>`:""}</div>`:""}
     <div class="dsec"><h4>Messages to customer</h4><p class="hint" style="margin:0 0 8px">Customer prefers: ${o.notify==="whatsapp"?"WhatsApp":o.notify==="email"?"Email":"WhatsApp and email"}</p>
@@ -1732,14 +1734,14 @@ function stepWhy(o,st){
 }
 const canEditOrder=o=>ROLE()==="owner"?!["cancelled","completed"].includes(o.status):["awaiting","review"].includes(o.status);
 const canCancelOrder=o=>ROLE()==="owner"?!["cancelled","completed"].includes(o.status):["awaiting","review"].includes(o.status);
-const shownRows=()=>ordRows().filter(o=>A.filter==="all"||o.status===A.filter);
+const shownRows=()=>ordRows().filter(o=>A.filter==="all"||(A.filter==="rejected"?isRej(o):A.filter==="awaiting"?o.status==="awaiting"&&!isRej(o):o.status===A.filter));
 function orderCard(o){
   const del=o.mode==="delivery",c=o.customer,paid=canLabel(o);
   const flow=["awaiting","new","baking","ready","completed"];
   const keys=flow.includes(o.status)?flow:[o.status,...flow];
   const items=Object.entries(o.items).map(([id,n])=>{const p=prod(id);return `<div>${esc(p?p.name:"Removed flavor")} ×${n}</div>`}).join("");
   const addons=o.addons.map(id=>{const a=DB.addons.find(x=>x.id===id);return a?`<div class="note" style="margin:0">+ ${esc(a.name)}</div>`:""}).join("");
-  const payLine=o.proof?`Payment proof from <b>${esc(o.proof.name)}</b> · ${fmtAgo(o.proof.at)}`:(o.status==="awaiting"?`Payment: <b>not paid yet</b> · cancels in <span class="cd" data-exp="${o.expiresAt||0}">${fmtLeft((o.expiresAt||0)-Date.now())}</span>`:"");
+  const payLine=isRej(o)?`<span class="rej-t">✕ Payment proof rejected${o.rejected.reason?`: ${esc(o.rejected.reason)}`:""}</span><br>Waiting for a new proof · cancels in <span class="cd" data-exp="${o.expiresAt||0}">${fmtLeft((o.expiresAt||0)-Date.now())}</span>`:o.proof?`Payment proof from <b>${esc(o.proof.name)}</b> · ${fmtAgo(o.proof.at)}`:(o.status==="awaiting"?`Payment: <b>not paid yet</b> · cancels in <span class="cd" data-exp="${o.expiresAt||0}">${fmtLeft((o.expiresAt||0)-Date.now())}</span>`:"");
   const canEdit=canEditOrder(o),own=ROLE()==="owner";
   const lbl=paid?(o.labelAt?`<div class="oc-lbl ok">✓ Label printed ${fmtAgo(o.labelAt)}</div>`:`<div class="oc-lbl warn">⚠ Label not printed yet</div>`):(o.status==="cancelled"?"":`<div class="oc-lbl off">Label can be printed after payment is confirmed</div>`);
   return `<article class="oc-card" aria-label="Order ${esc(o.code)}">
@@ -1749,12 +1751,12 @@ function orderCard(o){
       :o.status==="review"&&o.rejReq?`<div class="oc-alert appr rej">⏳ ${own?`${esc(o.rejReq.by)} wants to REJECT this payment proof${o.rejReq.reason?` ("${esc(o.rejReq.reason)}")`:""} – needs your approval`:`Proof rejection sent – waiting for owner approval`}</div>${own?`<div class="oc-sts"><button class="danger" type="button" data-rapprove="${o.id}">✓ Approve rejection</button><button class="oc-b" type="button" data-rdeny="${o.id}">Keep payment (turn down)</button></div>`:""}`
       :o.status==="review"?`<div class="oc-alert pay">💰 Payment submitted – needs your confirmation</div>`:""}
     ${o.complaint&&(o.complaint.status==="open"||o.complaint.status==="review")?`<div class="oc-alert cmp">ORDER COMPLAINED - need your attention</div>`:""}
-    ${o.proof?`<div><button class="oc-b" type="button" data-oproof="${o.id}">View payment proof</button></div>`:""}
+    ${o.proof&&!isRej(o)?`<div><button class="oc-b" type="button" data-oproof="${o.id}">View payment proof</button></div>`:""}
     <div class="oc-info"><span class="mode" style="margin:0">${modeName(o)}</span> ${esc(whenTxt(o))}<br>${esc(c.phone)} · ${esc(c.email)}${del&&c.address?`<br>${esc(c.address)}`:""}${o.note?`<br><i>Note: ${esc(o.note)}</i>`:""}</div>
     <div class="oc-items"><div class="note" style="margin:0">Box of ${o.size} · placed ${fmtAgo(o.createdAt)}</div>${items}${addons}</div>
     ${payLine?`<div class="oc-info">${payLine}</div>`:""}
     ${o.cancelReason?`<div class="oc-info">Cancel reason: ${esc(o.cancelReason)}</div>`:""}
-    <div class="oc-sts" role="group" aria-label="Order status">${keys.map(k=>{const why=stepWhy(o,k);return `<button class="oc-b${why&&o.status!==k?" off":""}" type="button" data-ostatus="${o.id}:${k}" aria-pressed="${o.status===k}" ${why&&o.status!==k?`aria-disabled="true" title="${esc(why)}"`:""}>${k==="new"?"✓ ":""}${k==="new"&&o.status==="review"&&!own&&!o.payReq?"Confirm payment (owner approves)":stLabel(k,o.mode)}</button>`}).join("")}</div>
+    <div class="oc-sts" role="group" aria-label="Order status">${keys.map(k=>{const why=stepWhy(o,k);return `<button class="oc-b${why&&o.status!==k?" off":""}${k==="awaiting"&&isRej(o)?" oc-rejb":""}${k==="review"&&o.status==="review"?" oc-chk":""}" type="button" data-ostatus="${o.id}:${k}" aria-pressed="${o.status===k}" ${why&&o.status!==k?`aria-disabled="true" title="${esc(why)}"`:""}>${k==="new"?"✓ ":""}${k==="awaiting"&&isRej(o)?"✕ Rejected":k==="new"&&o.status==="review"&&!own&&!o.payReq?"Confirm payment (owner approves)":stLabel(k,o.mode)}</button>`}).join("")}</div>
     <div class="oc-sts">${canEdit?`<button class="oc-b" type="button" data-osub="${o.id}">✎ Edit / substitute</button>`:""}${canCancelOrder(o)?`<button class="oc-b" type="button" data-ocancel="${o.id}">✕ Cancel order</button>`:""}${canRefund(o)?`<button class="oc-b" type="button" data-refund="${o.id}">💸 Refund</button>`:""}<button class="oc-b" type="button" data-order="${o.id}">Details</button></div>
     ${lbl}
     ${paid&&del?`<div class="grid2"><label class="af" style="font-size:12px">Courier<input class="in" data-oship="courier" data-oid="${o.id}" ${!own&&["ready","completed"].includes(o.status)&&String(o.awb||"").trim()?"disabled":""} maxlength="30" value="${esc(o.courier||"")}" placeholder="e.g. JNE"></label><label class="af" style="font-size:12px">Airway bill<input class="in" data-oship="awb" data-oid="${o.id}" ${!own&&["ready","completed"].includes(o.status)&&String(o.awb||"").trim()?"disabled":""} maxlength="40" value="${esc(o.awb||"")}" placeholder="Tracking no."></label></div>`:""}
@@ -1795,6 +1797,7 @@ $("#modal").addEventListener("click",e=>{
 
 /* --- customer messages: templates, log, confirm dialog --- */
 const CHANNELS={whatsapp:"WhatsApp",email:"Email"};
+function rejMsg(o,reason){const nm=(o.customer.name.split(" ")[0]||"there");return `Hi ${nm}, we couldn't accept the payment proof for order ${o.code}${reason?": "+reason:""}. Please send a new payment proof in My orders before the time runs out, or your order will be cancelled automatically.`}
 function msgText(o,st){
   const nm=(o.customer.name.split(" ")[0]||"there"),shop=DB.page.name||"Delidome",when=whenTxt(o);
   const t={
@@ -1852,12 +1855,12 @@ function renderStatusDialog(){
   const opt=(v,label,sub)=>`<label class="chk" style="align-items:flex-start"><input type="radio" name="scNotify" value="${v}" ${pref===v?"checked":""}><span>${label}${sub?`<small class="note" style="display:block">${esc(sub)}</small>`:""}</span></label>`;
   $("#modalCard").innerHTML=`<div class="sheet-top"><h3 id="modalTitle">Change status?</h3><button class="x" type="button" data-mclose aria-label="Close">✕</button></div>
   <p style="margin:0 0 4px"><b>${esc(o.code)}</b> · ${esc(c.name)}</p>
-  <p style="margin:0 0 14px"><span class="mo-chip st-${o.status}">${esc(stLabel(o.status,o.mode))}</span> → <span class="mo-chip st-${st}">${esc(stLabel(st,o.mode))}</span></p>
+  <p style="margin:0 0 14px"><span class="mo-chip st-${o.status}">${esc(stLabel(o.status,o.mode))}</span> → <span class="mo-chip st-${SC.extra&&SC.extra.reject?"rejected":st}">${esc(SC.extra&&SC.extra.reject?"Rejected":stLabel(st,o.mode))}</span></p>
   ${st==="cancelled"?`<p class="hint" style="margin:0 0 12px">Cancelling puts the cookies back into stock.</p>`:""}
   <div class="af" style="gap:8px">Notify the customer by
     <div class="stack" style="gap:8px">${opt("whatsapp","WhatsApp",c.phone)}${opt("email","Email",c.email)}${opt("both","Both")}${opt("none","Don't notify")}</div>
     <p class="note" style="margin:0">The customer chose: ${esc(pref==="both"?"WhatsApp and email":CHANNELS[pref])}.</p></div>
-  <label class="af" style="margin-top:12px">Message<textarea class="in" id="scText" rows="4" maxlength="500">${esc(msgText(Object.assign({},o,SC.extra&&SC.extra.reason?{cancelReason:SC.extra.reason}:{}),st))}</textarea></label>
+  <label class="af" style="margin-top:12px">Message<textarea class="in" id="scText" rows="4" maxlength="500">${esc(SC.extra&&SC.extra.reject?rejMsg(o,SC.extra.reason):msgText(Object.assign({},o,SC.extra&&SC.extra.reason?{cancelReason:SC.extra.reason}:{}),st))}</textarea></label>
   <div class="mo-row" style="margin-top:16px;gap:10px;justify-content:flex-end"><button class="ghost" type="button" data-mclose>Keep as ${esc(stLabel(o.status,o.mode))}</button><button class="btn btn-blue btn-sm" type="button" data-scok>Yes, change status</button></div>`;
   if(!$("#modal").hidden){}else openModal($("#modalCard").innerHTML,"status");
   A.modal="status";
@@ -1911,6 +1914,34 @@ document.addEventListener("click",async e=>{
     else{o.refund={amount:amt,full:amt>=o.total-.005,at:Date.now(),note,by:"Owner"};logMsg(o,channels,"refunded",text,"staff");saveDB()}
     RF.done=true;RF.text=text;RF.channels=channels;renderRefund();renderAdmin();if(A.openOrder===o.id)openOrder(o.id);
   }catch(err){er.textContent=err.message||"Couldn't save the refund.";er.hidden=false;btn.disabled=false;btn.textContent="Mark as refunded"}
+});
+
+/* --- Check payment pop-up: view the proof, approve or reject with a reason --- */
+let CPY=null;
+function openCheckPay(id){
+  const o=DB.orders.find(x=>x.id===id);if(!o||o.status!=="review")return;
+  if(SBH.on&&o.proof&&!o.proof.img&&!o._ft){o._ft=1;SBH.adminFiles(o).then(()=>openCheckPay(id));return}
+  CPY={id};const own=ROLE()==="owner",pr=o.proof;
+  const waiting=o.payReq?`<div class="oc-alert appr" style="margin:10px 0 0">⏳ ${esc(o.payReq.by)} already approved this payment${own?" – your approval finishes it":" – waiting for the owner"}.</div>`:o.rejReq?`<div class="oc-alert appr rej" style="margin:10px 0 0">⏳ ${esc(o.rejReq.by)} wants to reject this proof${o.rejReq.reason?` ("${esc(o.rejReq.reason)}")`:""}${own?" – your decision finishes it":" – waiting for the owner"}.</div>`:"";
+  openModal(`<div class="sheet-top"><h3 id="modalTitle">Check payment · ${esc(o.code)}</h3><button class="x" type="button" data-mclose aria-label="Close">✕</button></div>
+  ${pr?`<dl class="dl"><dt>Paid by</dt><dd>${esc(pr.name)}</dd><dt>Sent</dt><dd>${fmtDT(pr.at)}</dd><dt>Amount due</dt><dd><b>${money(o.total)}</b></dd></dl>
+  ${pr.img?`<a href="${esc(imgOk(pr.img))}" target="_blank" rel="noopener" style="display:block;margin-top:10px"><img class="proofimg" src="${esc(imgOk(pr.img))}" alt="Payment proof from ${esc(pr.name)}"></a>`:`<p class="hint">Loading the picture…</p>`}`:`<p class="hint">No proof picture.</p>`}
+  ${waiting}
+  <label class="af" style="margin-top:12px">Reason if you reject (the customer sees this)<textarea class="in" id="cpyReason" rows="2" maxlength="80" placeholder="e.g. the amount doesn't match, the picture is blurry">${esc((o.rejReq&&o.rejReq.reason)||"")}</textarea></label>
+  <p class="err" id="cpyErr" hidden></p>
+  <div class="mo-row" style="margin-top:14px;gap:10px;justify-content:flex-end"><button class="danger" type="button" data-cpyno>✕ Reject</button><button class="btn btn-blue btn-sm" type="button" data-cpyok>✓ Approve payment</button></div>
+  ${own?"":`<p class="note" style="margin:8px 0 0">Your choice goes to the owner to approve.</p>`}`,"checkpay");
+}
+$("#modal").addEventListener("click",e=>{
+  if(A.modal!=="checkpay"||!CPY)return;
+  const o=DB.orders.find(x=>x.id===CPY.id);if(!o)return;
+  if(e.target.closest("[data-cpyok]")){closeModal();CPY=null;
+    if(ROLE()==="owner"&&o.payReq){SBH.on?SBH.patchOrder(o.id,{status:"new"}).then(()=>{toast("Payment approved");renderAdmin()}).catch(x=>toast(x.message)):setOrderStatus(o.id,"new");return}
+    setOrderStatus(o.id,"new");return}
+  if(e.target.closest("[data-cpyno]")){
+    const r=($("#cpyReason").value||"").trim();
+    if(!r){const er=$("#cpyErr");er.textContent="Type a reason so the customer knows what to fix.";er.hidden=false;$("#cpyReason").focus();return}
+    closeModal();CPY=null;setOrderStatus(o.id,"awaiting",{reject:true,reason:r});return}
 });
 
 /* --- Flash sales --- */
@@ -2536,7 +2567,10 @@ am.addEventListener("click",e=>{
   if(e.target.closest("select,input,textarea"))return;
   const b=e.target.closest("button,tr[data-order]");if(!b)return;const d=b.dataset;
   if(d.order){openOrder(d.order);return}
-  if(d.ostatus){const [i,st]=d.ostatus.split(":");setOrderStatus(i,st);return}
+  if(d.ostatus){const [i,st]=d.ostatus.split(":"),oo=DB.orders.find(x=>x.id===i);
+    if(oo&&st==="review"&&oo.status==="review"){openCheckPay(i);return}
+    if(oo&&st==="awaiting"&&isRej(oo)){toast("Rejected"+(oo.rejected.reason?": "+oo.rejected.reason:"")+". Waiting for the customer to send a new proof.");return}
+    setOrderStatus(i,st);return}
   if(d.rapprove){const o=DB.orders.find(x=>x.id===d.rapprove);if(o)setOrderStatus(o.id,"awaiting",{reject:true,reason:(o.rejReq&&o.rejReq.reason)||""});return}
   if(d.rdeny){armed(b,()=>SBH.patchOrder(d.rdeny,{rejReqReject:true}).then(()=>{toast("Kept. The order stays at Check payment.");renderAdmin()}).catch(x=>toast(x.message)));return}
   if(d.papprove){setOrderStatus(d.papprove,"new");return}
@@ -3282,7 +3316,7 @@ am.addEventListener("submit",e=>{if(e.target.id==="saleForm"){e.preventDefault()
 $("#anav").addEventListener("click",e=>{const b=e.target.closest("[data-tab]");if(b){A.tab=b.dataset.tab;closeDrawer();renderAdmin();if(matchMedia("(max-width:860px)").matches){const m=$("#amain");window.scrollTo(0,Math.max(0,m.getBoundingClientRect().top+window.scrollY-8))}else window.scrollTo(0,0)}});
 $("#drawer").addEventListener("click",e=>{
   if(e.target.id==="drawer"||e.target.closest("[data-close]")){closeDrawer();return}
-  const b=e.target.closest("[data-set-status]");if(b){setOrderStatus(A.openOrder,b.dataset.setStatus);return}
+  const b=e.target.closest("[data-set-status]");if(b){const oo=DB.orders.find(x=>x.id===A.openOrder);if(oo&&b.dataset.setStatus==="review"&&oo.status==="review"){openCheckPay(oo.id);return}setOrderStatus(A.openOrder,b.dataset.setStatus);return}
   const o=DB.orders.find(x=>x.id===A.openOrder);if(!o)return;
   if(e.target.closest("[data-cpgo]")){openComplaint(o.id);return}
   if(e.target.closest("[data-rapprove-d]")){setOrderStatus(o.id,"awaiting",{reject:true,reason:(o.rejReq&&o.rejReq.reason)||""});return}

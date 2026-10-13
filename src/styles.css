@@ -896,3 +896,15 @@ body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
 @media (min-width:760px){.db-kpis.perf{grid-template-columns:repeat(4,minmax(0,1fr))}}
 .db-k.warn{background:#FCECEE;border-color:#F2B8C0}.db-k.warn strong{color:#C8102E}
 .db-k.good{background:#E6F6EC;border-color:#9AD3AE}.db-k.good strong{color:#0a7a3b}
+
+/* payment rejected */
+.st-rejected,.mo-chip.st-rejected{background:#FCE3E8;color:#C8102E}
+.rej-box{display:grid;gap:4px;padding:12px 14px;border-radius:12px;background:#FCE3E8;border:1.5px solid #F2A7B4;color:#7a0018}
+.rej-box b{color:#C8102E;font-size:15px}
+.trk-rej,.bell-rej{color:#C8102E;font-weight:700}
+.rej-t{color:#C8102E;font-weight:700}
+.oc-b.oc-rejb,.seg .oc-rejb{color:#C8102E;border-color:#C8102E;font-weight:800}
+.oc-b.oc-rejb[aria-pressed="true"],.seg .oc-rejb[aria-pressed="true"]{background:#C8102E;color:#fff;border-color:#C8102E}
+.oc-b.oc-chk{box-shadow:0 0 0 3px rgba(0,0,150,.18)}
+.fchip.fc-rej{color:#C8102E;border-color:#F2A7B4}
+.fchip.fc-rej[aria-pressed="true"]{background:#C8102E;color:#fff;border-color:#C8102E}
