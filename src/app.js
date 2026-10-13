@@ -57,7 +57,7 @@ function rng(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15
 function seedDB(){
   const now=Date.now(), H=3600e3;
   const db={v:1,
-    settings:{currency:"$",tz:"Asia/Jakarta",deliveryFee:5,deliveryKm:10,cutoffHour:20,closedWeekdays:[1],lowStockAt:10,customOn:true,customMin:14,customStep:2,customMax:48,customPer:3.25,payWindowH:24,complaintWindowH:24,waCountry:"62",payBank:"Example Bank\nAccount 123 456 7890\nName: Delidome Cookies",
+    settings:{currency:"$",tz:"Asia/Jakarta",deliveryFee:5,deliveryKm:10,samedayOn:false,samedayLeadH:3,samedayCutoff:15,samedayFee:8,pickupOn:true,pickupLeadH:24,schedOn:true,schedLeadH:24,cutoffHour:20,closedWeekdays:[1],lowStockAt:10,customOn:true,customMin:14,customStep:2,customMax:48,customPer:3.25,payWindowH:24,complaintWindowH:24,waCountry:"62",payBank:"Example Bank\nAccount 123 456 7890\nName: Delidome Cookies",
       times:["10 to 11am","12 to 1pm","3 to 4pm","5 to 6pm"],
       address:"12 Example Street, Your City. Look for the blue dome sign.",
       hours:[["Tue to Fri","10am to 6pm"],["Saturday","9am to 5pm"],["Sunday","10am to 3pm"],["Monday","Closed"]]},
@@ -136,6 +136,7 @@ function defaultAlerts(){return {on:true,sound:true,vol:70,repeat:false,stay:tru
   ev:{order:{on:true,snd:"register"},proof:{on:true,snd:"chime"},complaint:{on:true,snd:"alarm"}}}}
 function defaultLabel(){return {logo:"",qr:"",qrCaption:"",notes:"",warnOn:true,warn1:"UNBOXING WITH UNCUT VIDEO!",warn2:"CONTACT US IF SEAL BROKEN"}}
 function migrate(db){
+  if(db.settings){const D={samedayOn:false,samedayLeadH:3,samedayCutoff:15,samedayFee:8,pickupOn:true,pickupLeadH:24,schedOn:true,schedLeadH:24};for(const k in D)if(db.settings[k]===undefined)db.settings[k]=D[k]}
   db.label=Object.assign(defaultLabel(),db.label||{});
   db.thanks=Object.assign(defaultThanks(),db.thanks||{});
   if(!Array.isArray(db.broadcasts))db.broadcasts=[];
@@ -207,7 +208,7 @@ function quote(c,db=DB,{at=Date.now(),withDelivery=true}={}){
   const addons=r2((c.addons||[]).reduce((a,id)=>{const x=db.addons.find(y=>y.id===id&&y.active);return a+(x?x.price:0)},0));
   const cp=c.coupon?couponCheck(c.coupon,c,db,{base,saleDisc:discount,phone:c.phone,excl:c.editId}):null;
   const couponDisc=cp&&cp.ok?cp.discount:0;
-  const fee=withDelivery&&c.mode==="delivery"&&!(cp&&cp.ok&&cp.freeDel)?db.settings.deliveryFee:0;
+  const fee=withDelivery&&c.mode==="delivery"&&!(cp&&cp.ok&&cp.freeDel)?(c.speed==="sameday"?(db.settings.samedayFee??db.settings.deliveryFee):db.settings.deliveryFee):0;
   return {base,sale,discount,surcharge,addons,fee,coupon:cp&&cp.ok?cp.coupon:null,couponDisc,couponErr:cp&&!cp.ok?cp.err:"",total:r2(base-discount-couponDisc+surcharge+addons+fee)};
 }
 const saleOffText = s => s.type==="percent"?`${s.value}% off`:`${money(s.value)} off`;
@@ -268,12 +269,11 @@ function crumbColors(p){
 
 /* ================= SHOP ================= */
 loadDB();
-const fresh = () => ({size:6, box:[], step:1, mode:"pickup", day:null, time:null, note:"", addons:[], coupon:""});
+const fresh = () => ({size:6, box:[], step:1, mode:"pickup", speed:"scheduled", day:null, time:null, note:"", addons:[], coupon:""});
 let S = fresh(), hadCart=false;
 try{const s=JSON.parse(localStorage.getItem(CART_KEY)||"null");if(s&&Array.isArray(s.box)){S={...S,...s,step:s.step===2?2:1};hadCart=true;
-  if(!dayOptions().some(d=>ymd(d)===S.day)){S.day=null;S.time=null}
-  if(S.time&&!DB.settings.times.includes(S.time))S.time=null}}catch(e){}
-const saveCart = () => {try{localStorage.setItem(CART_KEY,JSON.stringify({size:S.size,box:S.box,mode:S.mode,note:S.note,addons:S.addons,editId:S.editId||null,day:S.day,time:S.time,step:S.step,coupon:S.coupon||""}))}catch(e){}};
+  }}catch(e){}
+const saveCart = () => {try{localStorage.setItem(CART_KEY,JSON.stringify({size:S.size,box:S.box,mode:S.mode,speed:S.speed,note:S.note,addons:S.addons,editId:S.editId||null,day:S.day,time:S.time,step:S.step,coupon:S.coupon||""}))}catch(e){}};
 const activeSizes = () => DB.sizes.filter(s=>s.active).sort((a,b)=>a.n-b.n);
 const heldOwn = id => {if(!S.editId||view!=="store")return 0;const o=DB.orders.find(x=>x.id===S.editId);return o&&o.holds&&o.status==="awaiting"?(o.items[id]||0):0};
 const stockLeft = p => p&&p.track?Math.max(0,p.stock+heldOwn(p.id)):Infinity;
@@ -303,9 +303,28 @@ function shopNow(){
     return {d:new Date(+p.year,+p.month-1,+p.day),h:+p.hour}}catch(e){}}
   const n=new Date();return {d:today0(),h:n.getHours()};
 }
+// the three ways to get an order: Sameday shipment, Pickup, Scheduled delivery (each can be switched off and has its own lead time)
+const OPT_NAME={sameday:"Sameday shipment",pickup:"Pickup",scheduled:"Scheduled delivery"};
+const optOf=c=>c.mode==="pickup"?"pickup":c.speed==="sameday"?"sameday":"scheduled";
+const whenTxt=o=>o.mode!=="pickup"&&o.speed==="sameday"?"Today (sameday)":`${fmtDay(o.day)}, ${o.time}`;
+const modeName=o=>o.mode==="pickup"?"Pickup":o.speed==="sameday"?"Sameday shipment":o.speed==="scheduled"?"Scheduled delivery":"Delivery";
+const optLead=(k,s=DB.settings)=>Math.max(0,+(k==="sameday"?s.samedayLeadH:k==="pickup"?s.pickupLeadH:s.schedLeadH)||0);
+const fmtLead=h=>h>=24&&h%24===0?`${h/24} day${h/24>1?"s":""}`:`${h} hour${h===1?"":"s"}`;
+function samedayOpen(){const n=shopNow(),s=DB.settings;return !!s.samedayOn&&n.h<s.samedayCutoff&&!s.closedWeekdays.includes(n.d.getDay())}
+const optOn=k=>k==="sameday"?!!DB.settings.samedayOn:k==="pickup"?DB.settings.pickupOn!==false:DB.settings.schedOn!==false;
+const optAvail=k=>k==="sameday"?samedayOpen():optOn(k);
 function dayOptions(){
-  const now=shopNow(),start=addDays(now.d,now.h>=DB.settings.cutoffHour?2:1);
+  const now=shopNow(),k=optOf(S);
+  if(k==="sameday")return [now.d];
+  let start=addDays(now.d,Math.floor((now.h+Math.ceil(optLead(k)))/24));if(now.h>=DB.settings.cutoffHour)start=addDays(start,1);
   return Array.from({length:7},(_,i)=>addDays(start,i));
+}
+// keep the chosen option, day and time valid
+function fixWhen(){
+  if(!optAvail(optOf(S))){const k=["pickup","scheduled","sameday"].find(optAvail);if(k){S.mode=k==="pickup"?"pickup":"delivery";S.speed=k==="sameday"?"sameday":"scheduled"}}
+  if(optOf(S)==="sameday"){S.day=ymd(shopNow().d);S.time="Same day";return}
+  if(!dayOptions().some(d=>ymd(d)===S.day)){S.day=null;S.time=null}
+  if(S.time&&!DB.settings.times.includes(S.time))S.time=null;
 }
 
 let shopCat="all";
@@ -355,15 +374,22 @@ function renderMenu(){
     </div>`}).join("");
   $("#xtraHint").hidden=!prods.some(p=>p.surcharge>0&&!isOut(p));
 }
+function renderOpts(){
+  const set=DB.settings;fixWhen();
+  $("#modes").innerHTML=["sameday","pickup","scheduled"].filter(optOn).map(k=>{const ok=optAvail(k);return `<button class="chip" type="button" data-opt="${k}" ${ok?"":"disabled"}>${OPT_NAME[k]}${ok?"":" (closed today)"}</button>`}).join("");
+  const sd=optOf(S)==="sameday";$("#dayBlock").hidden=sd;$("#timeBlock").hidden=sd;
+  $("#days").innerHTML = dayOptions().map(d=>{const closed=set.closedWeekdays.includes(d.getDay());
+    return `<button class="day" type="button" data-day="${ymd(d)}" ${closed?`disabled aria-label="${fmtDay(ymd(d))}, closed"`:""}><small>${DOW[d.getDay()]}</small><strong>${d.getDate()}</strong></button>`}).join("");
+  const closedTxt=set.closedWeekdays.length?`We're closed ${listJoin(set.closedWeekdays.slice().sort().map(d=>DOW_LONG[d])).replace(" or "," and ")}. `:"";
+  $("#daysHint").textContent=`${closedTxt}Order at least ${fmtLead(optLead(optOf(S)))} ahead. Orders after ${fmtHour(set.cutoffHour)} count from the next day.`;
+}
 function renderStoreStatic(){
   const set=DB.settings;
   renderMenu();renderMarquee($("#marq"),DB.marquee);
   $("#times").innerHTML = set.times.map(t=>`<button class="chip" type="button" data-time="${esc(t)}">${esc(t)}</button>`).join("");
-  $("#days").innerHTML = dayOptions().map(d=>{const closed=set.closedWeekdays.includes(d.getDay());
-    return `<button class="day" type="button" data-day="${ymd(d)}" ${closed?`disabled aria-label="${fmtDay(ymd(d))}, closed"`:""}><small>${DOW[d.getDay()]}</small><strong>${d.getDate()}</strong></button>`}).join("");
+  renderOpts();
   const closedTxt=set.closedWeekdays.length?`We're closed ${listJoin(set.closedWeekdays.slice().sort().map(d=>DOW_LONG[d])).replace(" or "," and ")}. `:"";
-  $("#daysHint").textContent=`${closedTxt}Order by ${fmtHour(set.cutoffHour)} for the next day.`;
-  $("#heroStrip").innerHTML=[`Boxes of ${listJoin(activeSizes().map(s=>s.n))}`,`Order by ${fmtHour(set.cutoffHour)} for the next day`,closedTxt?closedTxt.replace("We're closed ","Closed ").replace(/\. $/,""):""].filter(Boolean).map(t=>`<span>${t}</span>`).join("");
+  $("#heroStrip").innerHTML=[`Boxes of ${listJoin(activeSizes().map(s=>s.n))}`,set.samedayOn?`Sameday shipment before ${fmtHour(set.samedayCutoff)}`:"",optLead("scheduled")===24&&optLead("pickup")===24?`Order by ${fmtHour(set.cutoffHour)} for the next day`:`Order ${fmtLead(Math.min(optLead("pickup"),optLead("scheduled")))} ahead`,closedTxt?closedTxt.replace("We're closed ","Closed ").replace(/\. $/,""):""].filter(Boolean).map(t=>`<span>${t}</span>`).join("");
   renderLanding();
   $("#hours").innerHTML = set.hours.map(h=>`<dt>${esc(h[0])}</dt><dd>${esc(h[1])}</dd>`).join("");
   $("#addr").textContent = set.address;
@@ -402,8 +428,8 @@ function renderStore(){
   $("#tab2").setAttribute("aria-current",S.step===2?"step":"false");
   $("#tab1").classList.toggle("done",S.step===2&&full());
   $("#tab2").disabled=!full();
-  document.querySelectorAll("[data-mode]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.mode===S.mode));
-  $("#modeHint").textContent=S.mode==="delivery"?`Local delivery adds ${money(DB.settings.deliveryFee)}. We deliver within ${DB.settings.deliveryKm} km of the shop.`:"Free pickup at the front counter.";
+  document.querySelectorAll("[data-opt]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.opt===optOf(S)));
+  {const k=optOf(S),st=DB.settings;$("#modeHint").textContent=k==="sameday"?`Sameday shipment adds ${money(st.samedayFee??st.deliveryFee)}. Order before ${fmtHour(st.samedayCutoff)} and we ship about ${fmtLead(optLead("sameday"))} after your payment is confirmed. We deliver within ${st.deliveryKm} km of the shop.`:k==="scheduled"?`Scheduled delivery adds ${money(st.deliveryFee)}. Pick a day and time. We deliver within ${st.deliveryKm} km of the shop.`:"Free pickup at the front counter. Pick a day and time.";}
   document.querySelectorAll(".day").forEach(b=>b.setAttribute("aria-pressed",b.dataset.day===S.day));
   document.querySelectorAll("[data-time]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.time===S.time));
   document.querySelectorAll("[data-addon]").forEach(b=>b.setAttribute("aria-pressed",S.addons.includes(b.dataset.addon)));
@@ -422,8 +448,8 @@ function renderStore(){
   if(q.surcharge>0)L+=`<div><dt>Premium flavors</dt><dd>+${money(q.surcharge)}</dd></div>`;
   if(S.step===2){
     S.addons.forEach(id=>{const a=DB.addons.find(x=>x.id===id);if(a)L+=`<div><dt>${esc(a.name)}</dt><dd>+${money(a.price)}</dd></div>`});
-    L+=`<div><dt>${S.mode==="delivery"?"Delivery":"Pickup"}</dt><dd>${q.fee?money(q.fee):"Free"}</dd></div>`;
-    if(S.day)L+=`<div><dt>When</dt><dd>${fmtDay(S.day)}${S.time?", "+esc(S.time):""}</dd></div>`;
+    L+=`<div><dt>${OPT_NAME[optOf(S)]}</dt><dd>${q.fee?money(q.fee):"Free"}</dd></div>`;
+    if(S.day)L+=`<div><dt>When</dt><dd>${S.mode!=="pickup"&&S.speed==="sameday"?"Today (sameday)":fmtDay(S.day)+(S.time?", "+esc(S.time):"")}</dd></div>`;
   }
   $("#lines").innerHTML=L;
   renderCoupon(q);
@@ -591,8 +617,8 @@ function openCheckout(){
     (q.sale?`<div class="sl"><span>${esc(q.sale.name)} (${saleOffText(q.sale)})</span><span class="num">−${money(q.discount)}</span></div>`:"")+
     (q.coupon&&q.couponDisc>0?`<div class="sl"><span>Coupon ${esc(q.coupon.code)}</span><span class="num">−${money(q.couponDisc)}</span></div>`:"")+
     S.addons.map(id=>{const a=DB.addons.find(x=>x.id===id);return a?`<div><span>${esc(a.name)}</span><span class="num">+${money(a.price)}</span></div>`:""}).join("")+
-    `<div><span>${S.mode==="delivery"?"Delivery":"Pickup"}</span><span class="num">${q.fee?money(q.fee):"Free"}</span></div>`+
-    `<div><span>When</span><span>${fmtDay(S.day)}, ${esc(S.time)}</span></div>`+
+    `<div><span>${OPT_NAME[optOf(S)]}</span><span class="num">${q.fee?money(q.fee):"Free"}</span></div>`+
+    `<div><span>When</span><span>${esc(whenTxt(S))}</span></div>`+
     (S.note?`<div><span>Note</span><span style="text-align:right">${esc(S.note)}</span></div>`:"")+
     `<div class="t"><span>Total</span><span class="num">${money(q.total)}</span></div>`;
   const del=S.mode==="delivery";$("#addrFields").hidden=!del;
@@ -665,7 +691,7 @@ $("#clearBtn").addEventListener("click",clearBox);
 $("#tab1").addEventListener("click",()=>goStep(1));
 $("#tab2").addEventListener("click",()=>goStep(2));
 $("#backBtn").addEventListener("click",()=>goStep(1));
-$("#modes").addEventListener("click",e=>{const b=e.target.closest("[data-mode]");if(b){S.mode=b.dataset.mode;renderStore()}});
+$("#modes").addEventListener("click",e=>{const b=e.target.closest("[data-opt]");if(b&&!b.disabled){const k=b.dataset.opt;S.mode=k==="pickup"?"pickup":"delivery";S.speed=k==="sameday"?"sameday":"scheduled";renderOpts();renderStore()}});
 $("#days").addEventListener("click",e=>{const b=e.target.closest("[data-day]");if(b&&!b.disabled){S.day=b.dataset.day;renderStore()}});
 $("#times").addEventListener("click",e=>{const b=e.target.closest("[data-time]");if(b){S.time=b.dataset.time;renderStore()}});
 $("#extras").addEventListener("click",e=>{const b=e.target.closest("[data-addon]");if(!b)return;const id=b.dataset.addon;
@@ -694,11 +720,11 @@ $("#coForm").addEventListener("submit",e=>{
   const notify=(document.querySelector('input[name="coNotify"]:checked')||{value:"both"}).value;
   const cust={name:$("#coName").value.trim(),email:$("#coEmail").value.trim(),phone:$("#coPhone").value.trim(),
     address:del?$("#coAddr").value.trim():""};
-  const fields={notify,size:S.size,items:countItems(S.box),mode:S.mode,day:S.day,time:S.time,note:S.note,addons:[...S.addons],sale:q.sale?`${q.sale.name} (${saleOffText(q.sale)})`:"",
+  const fields={notify,size:S.size,items:countItems(S.box),mode:S.mode,speed:S.mode==="pickup"?"pickup":S.speed,day:S.day,time:S.time,note:S.note,addons:[...S.addons],sale:q.sale?`${q.sale.name} (${saleOffText(q.sale)})`:"",
     base:q.base,discount:q.discount,coupon:q.coupon?q.coupon.code:"",couponDisc:q.couponDisc,surcharge:q.surcharge,addonsTotal:q.addons,fee:q.fee,total:q.total,customer:cust};
   if(SBH.on){
     const btn=f.querySelector("button[type=submit]");if(btn)btn.disabled=true;
-    SBH.place({notify,size:S.size,items:fields.items,mode:S.mode,day:S.day,time:S.time,note:S.note,addons:[...S.addons],coupon:fields.coupon,expectTotal:q.total,customer:cust},ed).then(o=>{
+    SBH.place({notify,size:S.size,items:fields.items,mode:S.mode,speed:S.speed,day:S.day,time:S.time,note:S.note,addons:[...S.addons],coupon:fields.coupon,expectTotal:q.total,customer:cust},ed).then(o=>{
       addMine(o.id);S.editId=null;saveCart();renderDone(o,!!ed);
       S=fresh();$("#coForm").reset();saveCart();sanitizeCart();renderStoreStatic();renderStore();renderEditBar();renderBag();
     }).catch(err=>{$("#coErr").textContent=err.message;$("#coErr").hidden=false;SBH.loadShop(true)}).finally(()=>{if(btn)btn.disabled=false});
@@ -932,7 +958,7 @@ function renderMO(){
   const awaiting=o.status==="awaiting";
   const total=Math.max(1,DB.settings.payWindowH*3600e3);
   card.innerHTML=`<div class="sheet-top"><div><button class="mo-back" type="button" data-moback>← All orders</button><h3 style="margin-top:6px">${esc(o.code)}</h3></div><button class="x" type="button" data-moclose aria-label="Close">✕</button></div>
-  <div class="mo-row" style="margin:6px 0 14px"><span class="mo-chip st-${o.status}">${cusLabel(o)}</span><span class="mo-sub">${o.mode==="delivery"?"Delivery":"Pickup"} · ${fmtDay(o.day)}, ${esc(o.time)}</span></div>
+  <div class="mo-row" style="margin:6px 0 14px"><span class="mo-chip st-${o.status}">${cusLabel(o)}</span><span class="mo-sub">${modeName(o)} · ${esc(whenTxt(o))}</span></div>
   ${o.status==="cancelled"?`<div class="mo-pay" style="background:#FCE3E8"><b>This order was cancelled.</b><span>${esc(o.cancelReason||"It was cancelled.")}</span><button class="btn btn-blue btn-sm" type="button" data-monew>Build a new box</button></div>`:""}
   ${awaiting?`<div class="mo-pay"><div><div class="mo-sub">Time left to pay</div><div class="mo-big cd" data-exp="${o.expiresAt}">${fmtLeft(o.expiresAt-Date.now())}</div><div class="mo-bar" style="margin-top:8px"><i data-expbar="${o.expiresAt}" style="width:${Math.max(0,Math.min(100,(o.expiresAt-Date.now())/total*100))}%"></i></div><p class="mo-sub" style="margin:8px 0 0">If it isn't paid in time, the order is cancelled automatically.</p></div>
     ${o.rejected?`<p class="err" style="margin:0">Your last proof couldn't be verified${o.rejected.reason?`: ${esc(o.rejected.reason)}`:""}. Please send it again.</p>`:""}
@@ -949,7 +975,7 @@ function renderMO(){
   <div class="dsec"><h4>Your box of ${o.size}</h4><div class="summary" style="margin:0">${items}
     ${o.discount>0?`<div class="sl"><span>${esc(o.sale||"Flash sale")}</span><span class="num">−${money(o.discount)}</span></div>`:""}
     ${o.couponDisc>0?`<div class="sl"><span>Coupon ${esc(o.coupon)}</span><span class="num">−${money(o.couponDisc)}</span></div>`:""}
-    <div><span>${o.mode==="delivery"?"Delivery":"Pickup"}</span><span class="num">${o.fee?money(o.fee):"Free"}</span></div>
+    <div><span>${modeName(o)}</span><span class="num">${o.fee?money(o.fee):"Free"}</span></div>
     <div class="t"><span>Total</span><span class="num">${money(o.total)}</span></div></div>${o.mode==="delivery"?`<p class="hint">Your box may be split into smaller or bigger boxes for delivery safety.</p>`:""}</div>
   ${o.status==="completed"?ratingHTML(o):""}
   ${complaintHTML(o)}
@@ -963,8 +989,8 @@ function renderEditBar(){
 }
 function startEdit(id){
   const o=DB.orders.find(x=>x.id===id);if(!o||o.status!=="awaiting"){toast("This order can't be edited any more");return}
-  S.editId=id;S.size=o.size;S.box=Object.entries(o.items).flatMap(([pid,n])=>Array(n).fill(pid));S.mode=o.mode;S.note=o.note||"";S.addons=[...o.addons];S.coupon=o.coupon||"";
-  S.day=dayOptions().some(d=>ymd(d)===o.day)?o.day:null;S.time=S.day?o.time:null;S.step=1;
+  S.editId=id;S.size=o.size;S.box=Object.entries(o.items).flatMap(([pid,n])=>Array(n).fill(pid));S.mode=o.mode;S.speed=o.speed==="sameday"?"sameday":"scheduled";S.note=o.note||"";S.addons=[...o.addons];S.coupon=o.coupon||"";
+  S.day=dayOptions().some(d=>ymd(d)===o.day)?o.day:null;S.time=S.day?o.time:null;S.step=1;fixWhen();
   closeMO();sanitizeCart();renderStoreStatic();renderStore();renderEditBar();saveCart();scrollToEl($("#build"));toast(`Editing ${o.code}`);
 }
 $("#moBtn").addEventListener("click",()=>openMO(null));
@@ -1428,7 +1454,7 @@ function openOrder(id){
     ${o.cancelReason?`<div class="dsec"><h4>Cancelled</h4><p class="hint" style="margin:0">${esc(o.cancelReason)}</p></div>`:""}
     <div class="dsec"><h4>Shipping label</h4>${o.mode==="delivery"?`<div class="grid2"><label class="af">Courier<input class="in" data-ship="courier" maxlength="30" value="${esc(o.courier||"")}" placeholder="e.g. JNE"></label><label class="af">Airway bill / tracking no.<input class="in" data-ship="awb" maxlength="40" value="${esc(o.awb||"")}" placeholder="e.g. JP1234567890"></label></div>`:`<p class="hint" style="margin:0 0 8px">Pickup order: the label shows the pickup time.</p>`}<button class="btn btn-blue btn-sm" type="button" data-printone="${o.id}" style="margin-top:10px">Print label</button></div>
     <div class="dsec"><h4>Customer</h4><dl class="dl"><dt>Name</dt><dd>${esc(o.customer.name)}</dd><dt>WhatsApp</dt><dd>${esc(o.customer.phone)}</dd><dt>Email</dt><dd>${esc(o.customer.email)}</dd>${o.customer.address?`<dt>Address</dt><dd>${esc(o.customer.address)}</dd>`:""}</dl></div>
-    <div class="dsec"><h4>When</h4><dl class="dl"><dt>${o.mode==="delivery"?"Delivery":"Pickup"}</dt><dd>${fmtDay(o.day)}, ${esc(o.time)}</dd>${o.note?`<dt>Note</dt><dd>${esc(o.note)}</dd>`:""}</dl></div>
+    <div class="dsec"><h4>When</h4><dl class="dl"><dt>${modeName(o)}</dt><dd>${esc(whenTxt(o))}</dd>${o.note?`<dt>Note</dt><dd>${esc(o.note)}</dd>`:""}</dl></div>
     <div class="dsec"><h4>Box of ${o.size}</h4><div class="ditems">${Object.entries(o.items).map(([id,n])=>{const p=prod(id);return `<div>${miniPlate(p)}<span>${n} × ${esc(p?p.name:"Removed flavor")}</span><span class="num">${p&&p.surcharge>0?"+"+money(p.surcharge*n):""}</span></div>`}).join("")}</div></div>
     <div class="dsec"><h4>Payment</h4><div class="summary" style="margin:0">
       <div><span>Box of ${o.size}</span><span class="num">${money(o.base)}</span></div>
@@ -1436,7 +1462,7 @@ function openOrder(id){
       ${o.couponDisc>0?`<div class="sl"><span>Coupon ${esc(o.coupon)}</span><span class="num">−${money(o.couponDisc)}</span></div>`:""}
       ${o.surcharge>0?`<div><span>Premium flavors</span><span class="num">+${money(o.surcharge)}</span></div>`:""}
       ${o.addons.map(id=>{const a=DB.addons.find(x=>x.id===id);return `<div><span>${esc(a?a.name:"Extra")}</span><span class="num">${a?"+"+money(a.price):""}</span></div>`}).join("")}
-      <div><span>${o.mode==="delivery"?"Delivery":"Pickup"}</span><span class="num">${o.fee?money(o.fee):"Free"}</span></div>
+      <div><span>${modeName(o)}</span><span class="num">${o.fee?money(o.fee):"Free"}</span></div>
       <div class="t"><span>Total</span><span class="num">${money(o.total)}</span></div></div></div>
   </div>`;
   d.hidden=false;
@@ -1485,7 +1511,7 @@ function orderCard(o){
       :o.status==="review"?`<div class="oc-alert pay">💰 Payment submitted – needs your confirmation</div>`:""}
     ${o.complaint&&(o.complaint.status==="open"||o.complaint.status==="review")?`<div class="oc-alert cmp">ORDER COMPLAINED - need your attention</div>`:""}
     ${o.proof?`<div><button class="oc-b" type="button" data-oproof="${o.id}">View payment proof</button></div>`:""}
-    <div class="oc-info"><span class="mode" style="margin:0">${del?"Delivery":"Pickup"}</span> ${esc(fmtDay(o.day))} · ${esc(o.time)}<br>${esc(c.phone)} · ${esc(c.email)}${del&&c.address?`<br>${esc(c.address)}`:""}${o.note?`<br><i>Note: ${esc(o.note)}</i>`:""}</div>
+    <div class="oc-info"><span class="mode" style="margin:0">${modeName(o)}</span> ${esc(whenTxt(o))}<br>${esc(c.phone)} · ${esc(c.email)}${del&&c.address?`<br>${esc(c.address)}`:""}${o.note?`<br><i>Note: ${esc(o.note)}</i>`:""}</div>
     <div class="oc-items"><div class="note" style="margin:0">Box of ${o.size} · placed ${fmtAgo(o.createdAt)}</div>${items}${addons}</div>
     ${payLine?`<div class="oc-info">${payLine}</div>`:""}
     ${o.cancelReason?`<div class="oc-info">Cancel reason: ${esc(o.cancelReason)}</div>`:""}
@@ -1531,7 +1557,7 @@ $("#modal").addEventListener("click",e=>{
 /* --- customer messages: templates, log, confirm dialog --- */
 const CHANNELS={whatsapp:"WhatsApp",email:"Email"};
 function msgText(o,st){
-  const nm=(o.customer.name.split(" ")[0]||"there"),shop=DB.page.name||"Delidome",when=`${fmtDay(o.day)}, ${o.time}`;
+  const nm=(o.customer.name.split(" ")[0]||"there"),shop=DB.page.name||"Delidome",when=whenTxt(o);
   const t={
     awaiting:`Hi ${nm}, your ${shop} order ${o.code} (${money(o.total)}) is waiting for payment. Please pay and send your proof in My orders before it is cancelled automatically.`,
     review:`Hi ${nm}, we got your payment proof for order ${o.code} and we're checking it now.`,
@@ -1967,6 +1993,15 @@ function viewSettings(){
         <label class="af">Delivery fee<div class="money-in"><span>${esc(s.currency)}</span><input class="in" type="number" min="0" step="0.5" data-k="settings::deliveryFee" value="${s.deliveryFee}"></div></label>
         <label class="af">Delivery radius<div class="money-in"><input class="in" type="number" min="1" data-k="settings::deliveryKm" value="${s.deliveryKm}"><span style="padding-right:10px">km</span></div></label>
       </div>
+      <h3 style="margin:18px 0 4px;font-size:15px">Ways to get an order</h3><p class="sub" style="margin:0 0 8px">Switch each one on or off. Lead time = how long before the pickup or delivery a customer must order.</p>
+      <div class="stack" style="gap:10px">${[
+        ["sameday","Sameday shipment","samedayOn","samedayLeadH","hours it takes to ship after payment is confirmed","hours"],
+        ["pickup","Pickup","pickupOn","pickupLeadH","order at least this far ahead (24 = next day)","hours"],
+        ["scheduled","Scheduled delivery","schedOn","schedLeadH","order at least this far ahead (24 = next day)","hours"]].map(([k,n,on,lead,hint,u])=>`<div class="pmcard" style="gap:8px">
+        <label class="chk"><input type="checkbox" data-k="settings::${on}" ${s[on]!==false&&(on!=="samedayOn"||s[on])?"checked":""}> <b>${n}</b></label>
+        <div class="grid3"><label class="af">Lead time<div class="money-in"><input class="in" type="number" min="0" step="1" data-k="settings::${lead}" value="${s[lead]}"><span style="padding-right:10px">${u}</span></div><small class="note">${hint}</small></label>
+        ${k==="sameday"?`<label class="af">Order by (today)<select class="in" data-k="settings::samedayCutoff">${Array.from({length:24},(_,h)=>`<option value="${h}" ${h===s.samedayCutoff?"selected":""}>${fmtHour(h)}</option>`).join("")}</select></label>
+        <label class="af">Sameday fee<div class="money-in"><span>${esc(s.currency)}</span><input class="in" type="number" min="0" step="0.5" data-k="settings::samedayFee" value="${s.samedayFee}"></div></label>`:""}</div></div>`).join("")}</div>
       <div class="grid2" style="margin-top:12px">
         <label class="af">Order cutoff for next day<select class="in" data-k="settings::cutoffHour">${Array.from({length:24},(_,h)=>`<option value="${h}" ${h===s.cutoffHour?"selected":""}>${fmtHour(h)}</option>`).join("")}</select></label>
         <div class="af">Closed days<div class="chips">${DOW.map((d,i)=>`<button class="fchip" type="button" data-closed="${i}" aria-pressed="${s.closedWeekdays.includes(i)}">${d}</button>`).join("")}</div></div>
@@ -2053,7 +2088,8 @@ function viewSettings(){
 function setK(el){
   const [coll,id,field]=el.dataset.k.split(":");
   let v=el.type==="checkbox"?el.checked:el.type==="number"?Math.max(0,parseFloat(el.value)||0):el.value;
-  if(field==="cutoffHour")v=+v;
+  if(field==="cutoffHour"||field==="samedayCutoff")v=+v;
+  if(/^(sameday|pickup|sched)LeadH$/.test(field))v=Math.min(720,Math.round(v));
   if(field==="payWindowH"||field==="complaintWindowH")v=Math.max(1,v);
   if(field==="stock"||field==="lowStockAt"||field==="payWindowH"||field==="complaintWindowH"||/^custom(Min|Step|Max)$/.test(field))v=Math.round(v);
   if(coll==="settings"){DB.settings[field]=v;const t=DB.settings;if(/^custom/.test(field)){t.customMin=Math.max(1,t.customMin);t.customStep=Math.max(1,t.customStep);if(t.customMax<t.customMin)t.customMax=t.customMin}}
@@ -2267,6 +2303,7 @@ am.addEventListener("change",e=>{
     else DB.settings.hours=lines.map(l=>{const [a,...b]=l.split("|");return [a.trim(),b.join("|").trim()]});
     saveDB();toast("Saved");return;
   }
+  if(/^settings::(samedayOn|pickupOn|schedOn)$/.test(el.dataset.k||"")&&!el.checked){const t=DB.settings,n=["samedayOn","pickupOn","schedOn"].filter(k=>k!==el.dataset.k.slice(10)&&(k==="samedayOn"?t[k]:t[k]!==false)).length;if(!n){el.checked=true;toast("Keep at least one way to get an order switched on.");return}}
   if(el.dataset.k&&(el.type==="number"||el.type==="checkbox"||el.tagName==="SELECT")){const {coll,field}=setK(el);saveDB();toast("Saved");
     if(field==="art"||field==="active"||field==="currency"||field==="track"||field==="stock"||field==="lowStockAt"||field==="cat"||coll==="sizes"||/^custom/.test(field))renderAdmin()}
 });
@@ -2689,7 +2726,7 @@ function openComplaint(id){
     <div class="dsec"><h4>Problem</h4><dl class="dl"><dt>Type</dt><dd>${esc(c.reason)}</dd><dt>About</dt><dd>${esc(names)}</dd><dt>Delivered</dt><dd>${o.completedAt?fmtDT(o.completedAt):"n/a"}</dd></dl><p style="white-space:pre-line;margin:10px 0 0">${esc(c.text)}</p>
       ${c.photos.length?`<div class="cphotos" style="margin-top:10px">${c.photos.map(src=>`<a href="${esc(imgOk(src))}" target="_blank" rel="noopener"><img src="${esc(imgOk(src))}" alt="Customer photo"></a>`).join("")}</div>`:""}
       <p class="hint" style="margin:10px 0 0">The customer confirmed they have an uncut unboxing video. Ask for it on WhatsApp before you decide.</p></div>
-    <div class="dsec"><h4>Customer</h4><dl class="dl"><dt>Name</dt><dd>${esc(o.customer.name)}</dd><dt>WhatsApp</dt><dd>${esc(o.customer.phone)} ${wa?`<a href="https://wa.me/${wa}" target="_blank" rel="noopener">Open WhatsApp</a>`:""}</dd><dt>Email</dt><dd>${esc(o.customer.email)}</dd><dt>${o.mode==="delivery"?"Delivery":"Pickup"}</dt><dd>${fmtDay(o.day)}, ${esc(o.time)}</dd></dl></div>
+    <div class="dsec"><h4>Customer</h4><dl class="dl"><dt>Name</dt><dd>${esc(o.customer.name)}</dd><dt>WhatsApp</dt><dd>${esc(o.customer.phone)} ${wa?`<a href="https://wa.me/${wa}" target="_blank" rel="noopener">Open WhatsApp</a>`:""}</dd><dt>Email</dt><dd>${esc(o.customer.email)}</dd><dt>${modeName(o)}</dt><dd>${fmtDay(o.day)}, ${esc(o.time)}</dd></dl></div>
     <div class="dsec"><h4>Your response</h4><div class="stack" style="gap:10px">
       <label class="af">Status<select class="in" id="cpStatus">${Object.entries(CP_STATUS).map(([k,l])=>`<option value="${k}" ${c.status===k?"selected":""}>${l}</option>`).join("")}</select></label>
       <label class="af">Reply (the customer sees this in My orders)<textarea class="in" id="cpReply" rows="4" maxlength="600" placeholder="e.g. Sorry about that. We'll send a replacement box tomorrow.">${esc(c.reply||"")}</textarea></label>
@@ -2853,7 +2890,7 @@ function bakeSheetHTML(day){
   <h2>Cookies to bake</h2>
   <table><thead><tr><th></th><th>Flavor</th><th style="text-align:right">Qty</th></tr></thead><tbody>${rows.map(([id,n])=>{const p=prod(id);return `<tr><td class="c">☐</td><td>${esc(p?p.name:"Removed flavor")}</td><td class="n">${n}</td></tr>`}).join("")||`<tr><td colspan="3">Nothing to bake.</td></tr>`}</tbody></table>
   <h2>Orders (${live.length})</h2>
-  <table><thead><tr><th></th><th>Order</th><th>Time</th><th>Type</th><th>Box</th><th>Items</th></tr></thead><tbody>${live.map(o=>`<tr><td class="c">☐</td><td><b>${esc(o.code)}</b><br>${esc(o.customer.name)}${o.status==="review"?`<span class="bk-flag">CHECK PAYMENT</span>`:""}</td><td>${esc(o.time)}</td><td>${o.mode==="delivery"?"Delivery":"Pickup"}</td><td>Box of ${o.size}${o.addons.length?`<br>+ ${o.addons.map(id=>{const a=DB.addons.find(x=>x.id===id);return esc(a?a.name:"Extra")}).join(", ")}`:""}</td><td>${Object.entries(o.items).map(([id,n])=>{const p=prod(id);return `${n} × ${esc(p?p.name:"Removed flavor")}`}).join("<br>")}${o.note?`<br><i>Note: ${esc(o.note)}</i>`:""}</td></tr>`).join("")||`<tr><td colspan="6">No orders.</td></tr>`}</tbody></table></div>`;
+  <table><thead><tr><th></th><th>Order</th><th>Time</th><th>Type</th><th>Box</th><th>Items</th></tr></thead><tbody>${live.map(o=>`<tr><td class="c">☐</td><td><b>${esc(o.code)}</b><br>${esc(o.customer.name)}${o.status==="review"?`<span class="bk-flag">CHECK PAYMENT</span>`:""}</td><td>${esc(o.time)}</td><td>${modeName(o)}</td><td>Box of ${o.size}${o.addons.length?`<br>+ ${o.addons.map(id=>{const a=DB.addons.find(x=>x.id===id);return esc(a?a.name:"Extra")}).join(", ")}`:""}</td><td>${Object.entries(o.items).map(([id,n])=>{const p=prod(id);return `${n} × ${esc(p?p.name:"Removed flavor")}`}).join("<br>")}${o.note?`<br><i>Note: ${esc(o.note)}</i>`:""}</td></tr>`).join("")||`<tr><td colspan="6">No orders.</td></tr>`}</tbody></table></div>`;
 }
 function printBake(day){
   if(!day){toast("No orders to bake yet");return}
@@ -3260,7 +3297,7 @@ function needOwner(what){
 }
 window.needOwner=needOwner;
 // price fields ask for the owner password before they change
-const PRICE_K=/^(products:[^:]+:surcharge|sizes:[^:]+:price|addons:[^:]+:price|settings::deliveryFee|settings::customPer)$/;
+const PRICE_K=/^(products:[^:]+:surcharge|sizes:[^:]+:price|addons:[^:]+:price|settings::deliveryFee|settings::samedayFee|settings::customPer)$/;
 am.addEventListener("change",e=>{const el=e.target;if(!el.dataset||!el.dataset.k||!PRICE_K.test(el.dataset.k)||!SBH.on||SUDO_UNTIL>Date.now()+15000)return;
   const [coll,id,field]=el.dataset.k.split(":"),item=coll==="settings"?DB.settings:coll==="sizes"?DB.sizes.find(x=>String(x.n)===id):DB[coll].find(x=>x.id===id);
   if(!item)return;const old=item[field],nv=el.value;if(String(old)===String(Math.max(0,parseFloat(nv)||0)))return;

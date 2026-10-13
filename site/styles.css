@@ -511,6 +511,7 @@ footer a{color:var(--white)}
 
 .side .logo{color:var(--white);margin:0 8px 2px}
 .side .role{font-size:11px;opacity:.7;margin:0 8px 18px;letter-spacing:.12em;text-transform:uppercase;font-weight:600}
+.nav .count{font-size:12px;background:var(--white);color:var(--blue);border-radius:999px;padding:1px 8px;font-variant-numeric:tabular-nums}
 .nav .count.live{background:var(--red);color:var(--white)}
 .nav button[aria-current="page"] .count:not(.live){background:var(--blue);color:var(--white)}
 @media (max-width:860px){
