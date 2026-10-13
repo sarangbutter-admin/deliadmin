@@ -1472,6 +1472,27 @@ function srFilter(){
 }
 const kpiTile=(n,l,sub,hot)=>`<div class="db-k${hot?" hot":""}" style="cursor:default"><strong>${n}</strong><small>${l}</small>${sub?`<small style="opacity:.75">${sub}</small>`:""}</div>`;
 const rankList=(rows,unit)=>rows.length?`<ol class="rank">${rows.map(([n,v],i)=>{const mx=rows[0][1]||1;return `<li><span class="rk-n">${i+1}</span><span class="rk-l">${esc(n)}</span><span class="rk-v">${v} ${v===1?unit.replace(/s$/,""):unit}</span><i class="rk-b" style="width:${Math.max(4,v/mx*100)}%"></i></li>`}).join("")}</ol>`:`<div class="empty">Nothing in this period.</div>`;
+function moreInsights(set){
+  const key=o=>normPhone(o.customer&&o.customer.phone)||String(o.customer&&o.customer.email||"").toLowerCase()||o.id;
+  const per={};set.forEach(o=>{const k=key(o),c=per[k]||(per[k]={name:(o.customer&&o.customer.name)||"Customer",n:0,spent:0});c.n++;c.spent+=(o.total||0)-((o.refund&&o.refund.amount)||0)});
+  const everyPaid={};DB.orders.filter(o=>o.paidAt||o.status==="completed").forEach(o=>{const k=key(o);everyPaid[k]=(everyPaid[k]||0)+1});
+  const uniq=Object.keys(per).length,repeat=Object.keys(per).filter(k=>(everyPaid[k]||0)>=2).length;
+  const disc=set.reduce((x,o)=>x+(o.discount||0)+(o.couponDisc||0),0);
+  const pick=set.filter(o=>o.mode!=="delivery").length,del=set.length-pick,same=set.filter(o=>o.speed==="sameday").length;
+  const slots={};set.forEach(o=>{if(o.time)slots[o.time]=(slots[o.time]||0)+1});
+  const busy=Object.entries(slots).sort((x,y)=>y[1]-x[1])[0];
+  const top=Object.values(per).sort((x,y)=>y.spent-x.spent||y.n-x.n).slice(0,5);
+  const t=(n,l)=>`<div class="db-k" style="cursor:default"><strong>${n}</strong><small>${l}</small></div>`;
+  return `<section class="panel"><h2>✨ More insights</h2>
+    <div class="db-kpis perf" style="margin-top:12px">
+      ${t(uniq,"Unique customers")}${t(repeat,"Repeat customers")}
+      ${t(money(disc),"Discounts given")}${t(`${pick} / ${del}`,"Pickup / Delivery")}
+      ${t(same,"Sameday orders")}${t(busy?esc(busy[0]):"–",`Busiest time slot${busy?` (${busy[1]} order${busy[1]===1?"":"s"})`:""}`)}
+    </div>
+    <h3 style="margin:16px 0 6px;font-size:15px">Top customers</h3>
+    ${top.length?`<ol class="rank">${top.map((c,i)=>`<li><span class="rk-n">${i+1}</span><span class="rk-l">${esc(c.name)} <small class="note">(${c.n} order${c.n===1?"":"s"})</small></span><span class="rk-v">${money(c.spent)}</span></li>`).join("")}</ol>`:`<div class="empty">Nothing in this period.</div>`}
+    <p class="note" style="margin:10px 0 0">Repeat customers have 2 or more paid orders in total. Discounts are flash sales plus coupons. Top customers are ranked by what they spent after refunds.</p></section>`;
+}
 function viewDashSales(){
   const [a,b]=srRange(),inR=ms=>ms>=a&&ms<b;
   const when=o=>o.completedAt||(o.refund&&o.refund.at)||o.paidAt||o.createdAt||0;
@@ -1496,19 +1517,34 @@ function viewDashSales(){
     <section class="panel"><h2>Most picked box</h2><p class="sub">Number of orders for each box size, top selling first.</p>${rankList(sizes,"orders")}</section>
     <section class="panel"><h2>Total order random</h2><p class="sub">Orders where the customer used Random fill, Shuffle or "fill the rest for me".</p>
       <div class="db-kpis" style="margin-top:8px">${kpiTile(shuf,"Orders using random",n?Math.round(shuf/n*100)+"% of orders":"")}</div></section>
-    <section class="panel"><h2>Best seller item</h2><p class="sub">Cookies sold per flavor, top selling first.</p>${rankList(best,"cookies")}</section></div>`;
+    <section class="panel"><h2>Best seller item</h2><p class="sub">Cookies sold per flavor, top selling first.</p>${rankList(best,"cookies")}</section>
+    ${moreInsights(set)}</div>`;
 }
 function viewDashPerf(){
   const [a,b]=srRange(),inR=ms=>ms>=a&&ms<b;
-  const placed=DB.orders.filter(o=>inR(o.createdAt)).length;
-  const sys=DB.orders.filter(o=>o.status==="cancelled"&&o.cancelBy==="system"&&inR(o.cancelledAt||o.createdAt)).length;
-  const cps=DB.orders.filter(o=>o.complaint&&inR(o.complaint.at||o.createdAt)).length;
+  const pct=(x,y)=>y?(Math.round(x/y*1000)/10)+"%":"–";
+  const placedL=DB.orders.filter(o=>inR(o.createdAt));
+  const placed=placedL.length,paid=placedL.filter(o=>o.paidAt||PAID_ST.includes(o.status)||o.refund).length,done=placedL.filter(o=>o.status==="completed").length;
+  const sys=placedL.filter(o=>o.status==="cancelled"&&o.cancelBy==="system").length;
+  const ownerC=placedL.filter(o=>o.status==="cancelled"&&(o.cancelBy==="owner"||o.cancelBy==="staff")).length;
+  const refunded=placedL.filter(o=>o.refund).length;
+  const prog=placedL.filter(o=>["new","baking","ready"].includes(o.status)).length;
+  const cpL=DB.orders.filter(o=>o.complaint&&inR(o.complaint.at||o.createdAt));
+  const cpDone=cpL.filter(o=>o.complaint.status==="resolved").length,cpOpen=cpL.filter(o=>o.complaint.status==="open"||o.complaint.status==="review").length;
+  const revs=DB.products.flatMap(p=>(p.reviews||[]).filter(r=>!r.example&&inR(r.at||0)));
+  const avg=revs.length?(revs.reduce((x,r)=>x+(+r.stars||0),0)/revs.length).toFixed(1)+" ★":"–";
+  const t=(n,l,cls)=>`<div class="db-k${cls?" "+cls:""}" style="cursor:default"><strong>${n}</strong><small>${l}</small></div>`;
   return head("Dashboard","How the shop is doing right now, and what needs you.")+dashTabs()+MOCK+srFilter()+`<div class="stack"><section class="panel"><h2>Performance</h2>
-    <div class="db-kpis" style="margin-top:12px">
-      ${kpiTile(placed,"Total placed orders","every order placed in this period")}
-      ${kpiTile(sys,"Total cancelled by system","not paid in time")}
-      ${kpiTile(cps,"Total complaints",placed?Math.round(cps/placed*100)+"% of placed orders":"")}
-    </div></section></div>`;
+    <div class="db-kpis perf" style="margin-top:12px">
+      ${t(placed,"Total placed orders")}${t(sys,"Cancelled by system<br>no payment in time","warn")}
+      ${t(cpL.length,"Total complaints","warn")}${t(paid,"Paid orders")}
+      ${t(pct(paid,placed),"Payment rate")}${t(done,"Delivered / picked up")}
+      ${t(pct(done,placed),"Completion rate")}${t(ownerC,"Cancelled by owner")}
+      ${t(refunded,"Refunded")}${t(prog,"Still in progress")}
+      ${t(pct(cpL.length,done),"Complaint rate")}${t(cpDone,"Complaints resolved","good")}
+      ${t(cpOpen,"Complaints not resolved")}${t(avg,`Average rating (${revs.length} review${revs.length===1?"":"s"})`)}
+    </div>
+    <p class="note" style="margin:12px 0 0">Orders by order date · complaints and reviews by the date they were sent. Payment rate = paid ÷ placed. Completion rate = delivered or picked up ÷ placed. Complaint rate = complaints ÷ delivered or picked up.</p></section></div>`;
 }
 function viewDashboard(){
   if(A.dt==="sales")return viewDashSales();if(A.dt==="perf")return viewDashPerf();

@@ -892,3 +892,7 @@ body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
 .rank li{position:relative;display:grid;grid-template-columns:28px 1fr auto;gap:8px;align-items:center;padding:10px 12px;border-radius:12px;background:var(--ice);overflow:hidden;isolation:isolate}
 .rank .rk-b{position:absolute;left:0;top:0;bottom:0;background:rgba(0,0,150,.10);z-index:-1;border-radius:12px}
 .rank .rk-n{font-weight:800;color:var(--blue)}.rank .rk-l{font-weight:600;overflow-wrap:anywhere}.rank .rk-v{font-variant-numeric:tabular-nums;color:var(--blue);font-weight:700}
+.db-kpis.perf{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (min-width:760px){.db-kpis.perf{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.db-k.warn{background:#FCECEE;border-color:#F2B8C0}.db-k.warn strong{color:#C8102E}
+.db-k.good{background:#E6F6EC;border-color:#9AD3AE}.db-k.good strong{color:#0a7a3b}
