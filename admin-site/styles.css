@@ -836,3 +836,10 @@ textarea.in{resize:vertical;border-radius:10px}
 .apprbox{border:2px solid #F5C400!important;background:#FFFBEA!important}
 .apprrow{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;background:var(--white);border-radius:14px;padding:10px 12px}
 .oc-b.off{opacity:.4}
+
+.oc-alert.appr.rej{background:#FFE9EC;color:#B0001A;border-color:#D0001F;animation-name:rejBlink}
+.blinky{animation-name:apprBlink}
+.apprbox.rej{border-color:#D0001F!important;background:#FFF3F4!important}
+.apprbox.rej .blinky{color:#D0001F!important;animation-name:rejBlink}
+@keyframes rejBlink{0%,100%{opacity:1}50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.oc-alert.appr.rej,.apprbox.rej .blinky{animation:none}}
