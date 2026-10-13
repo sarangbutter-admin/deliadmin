@@ -652,18 +652,18 @@ function removeAt(i){
 function removeOne(id,card){const i=S.box.lastIndexOf(id);if(i<0)return;removeAt(i);if(card&&!RM)tag(card.querySelector(".stepper"),"−1")}
 const randomId = () => {const a=pickable();return a.length?a[Math.floor(Math.random()*a.length)].id:null};
 function fillBox(base){
-  let k=0;while(!full()){const id=randomId();if(!id)break;S.box.push(id);pop.set(S.box.length-1,base+k++*80)}
+  let k=0;while(!full()){const id=randomId();if(!id)break;S.box.push(id);S.shuf=1;pop.set(S.box.length-1,base+k++*80)}
   if(!full())toast("Not enough stock to fill the whole box");
 }
 function fillRest(){if(!pickable().length){toast("Every flavor is out of stock right now");return}fillBox(0);renderStore();if(full())celebrate()}
 function randomFill(){
   if(!availProducts().length){toast("Every flavor is out of stock right now");return}let base=0;
-  if(full()){S.box.forEach((_,i)=>ghostOut(i));S.box=[];base=180}
+  if(full()){S.box.forEach((_,i)=>ghostOut(i));S.box=[];S.shuf=0;base=180}
   fillBox(base);
   renderStore();if(full())celebrate();
   if(!RM)$("#randBtn svg").animate([{transform:"rotate(0)"},{transform:"rotate(360deg)"}],{duration:500,easing:"ease-out"});
 }
-function clearBox(){if(!S.box.length)return;S.box.forEach((_,i)=>ghostOut(i));S.box=[];S.step=1;renderStore()}
+function clearBox(){if(!S.box.length)return;S.shuf=0;S.box.forEach((_,i)=>ghostOut(i));S.box=[];S.step=1;renderStore()}
 function scrollToEl(el){
   const go=()=>{const fl=$("#flash"),head=$(".top").getBoundingClientRect().height+(fl.hidden||fl.parentNode===$(".top")?0:fl.getBoundingClientRect().height);
     const y=el.getBoundingClientRect().top+window.scrollY-head-16;
@@ -791,7 +791,7 @@ $("#coForm").addEventListener("submit",e=>{
     base:q.base,discount:q.discount,coupon:q.coupon?q.coupon.code:"",couponDisc:q.couponDisc,surcharge:q.surcharge,addonsTotal:q.addons,fee:q.fee,total:q.total,customer:cust};
   if(SBH.on){
     const btn=f.querySelector("button[type=submit]");if(btn)btn.disabled=true;
-    SBH.place({notify,size:S.size,items:fields.items,mode:S.mode,speed:S.speed,day:S.day,time:S.time,note:S.note,addons:[...S.addons],coupon:fields.coupon,expectTotal:q.total,customer:cust},ed).then(o=>{
+    SBH.place({notify,shuffled:!!S.shuf,size:S.size,items:fields.items,mode:S.mode,speed:S.speed,day:S.day,time:S.time,note:S.note,addons:[...S.addons],coupon:fields.coupon,expectTotal:q.total,customer:cust},ed).then(o=>{
       addMine(o.id);S.editId=null;saveCart();renderDone(o,!!ed);
       S=fresh();$("#coForm").reset();saveCart();sanitizeCart();renderStoreStatic();renderStore();renderEditBar();renderBag();
     }).catch(err=>{$("#coErr").textContent=err.message;$("#coErr").hidden=false;SBH.loadShop(true)}).finally(()=>{if(btn)btn.disabled=false});

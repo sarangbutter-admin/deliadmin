@@ -885,3 +885,10 @@ body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
 .step:active{background:var(--blue);border-color:var(--blue);color:var(--white)}
 .step:active i{background:var(--white);color:var(--blue)}
 @media (prefers-reduced-motion:reduce){.pill,.pill b{transition:none}.pill:active{transform:none}}
+
+/* dashboard sections + ranked lists */
+.dt-tabs{display:flex;gap:6px;flex-wrap:wrap}
+.rank{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:8px}
+.rank li{position:relative;display:grid;grid-template-columns:28px 1fr auto;gap:8px;align-items:center;padding:10px 12px;border-radius:12px;background:var(--ice);overflow:hidden;isolation:isolate}
+.rank .rk-b{position:absolute;left:0;top:0;bottom:0;background:rgba(0,0,150,.10);z-index:-1;border-radius:12px}
+.rank .rk-n{font-weight:800;color:var(--blue)}.rank .rk-l{font-weight:600;overflow-wrap:anywhere}.rank .rk-v{font-variant-numeric:tabular-nums;color:var(--blue);font-weight:700}

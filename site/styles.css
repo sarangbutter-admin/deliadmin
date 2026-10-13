@@ -698,3 +698,5 @@ body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
 .step:active{background:var(--blue);border-color:var(--blue);color:var(--white)}
 .step:active i{background:var(--white);color:var(--blue)}
 @media (prefers-reduced-motion:reduce){.pill,.pill b{transition:none}.pill:active{transform:none}}
+
+/* dashboard sections + ranked lists */

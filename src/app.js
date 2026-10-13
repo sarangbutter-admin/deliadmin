@@ -665,18 +665,18 @@ function removeAt(i){
 function removeOne(id,card){const i=S.box.lastIndexOf(id);if(i<0)return;removeAt(i);if(card&&!RM)tag(card.querySelector(".stepper"),"−1")}
 const randomId = () => {const a=pickable();return a.length?a[Math.floor(Math.random()*a.length)].id:null};
 function fillBox(base){
-  let k=0;while(!full()){const id=randomId();if(!id)break;S.box.push(id);pop.set(S.box.length-1,base+k++*80)}
+  let k=0;while(!full()){const id=randomId();if(!id)break;S.box.push(id);S.shuf=1;pop.set(S.box.length-1,base+k++*80)}
   if(!full())toast("Not enough stock to fill the whole box");
 }
 function fillRest(){if(!pickable().length){toast("Every flavor is out of stock right now");return}fillBox(0);renderStore();if(full())celebrate()}
 function randomFill(){
   if(!availProducts().length){toast("Every flavor is out of stock right now");return}let base=0;
-  if(full()){S.box.forEach((_,i)=>ghostOut(i));S.box=[];base=180}
+  if(full()){S.box.forEach((_,i)=>ghostOut(i));S.box=[];S.shuf=0;base=180}
   fillBox(base);
   renderStore();if(full())celebrate();
   if(!RM)$("#randBtn svg").animate([{transform:"rotate(0)"},{transform:"rotate(360deg)"}],{duration:500,easing:"ease-out"});
 }
-function clearBox(){if(!S.box.length)return;S.box.forEach((_,i)=>ghostOut(i));S.box=[];S.step=1;renderStore()}
+function clearBox(){if(!S.box.length)return;S.shuf=0;S.box.forEach((_,i)=>ghostOut(i));S.box=[];S.step=1;renderStore()}
 function scrollToEl(el){
   const go=()=>{const fl=$("#flash"),head=$(".top").getBoundingClientRect().height+(fl.hidden||fl.parentNode===$(".top")?0:fl.getBoundingClientRect().height);
     const y=el.getBoundingClientRect().top+window.scrollY-head-16;
@@ -806,7 +806,7 @@ $("#coForm").addEventListener("submit",e=>{
     base:q.base,discount:q.discount,coupon:q.coupon?q.coupon.code:"",couponDisc:q.couponDisc,surcharge:q.surcharge,addonsTotal:q.addons,fee:q.fee,total:q.total,customer:cust};
   if(SBH.on){
     const btn=f.querySelector("button[type=submit]");if(btn)btn.disabled=true;
-    SBH.place({notify,size:S.size,items:fields.items,mode:S.mode,speed:S.speed,day:S.day,time:S.time,note:S.note,addons:[...S.addons],coupon:fields.coupon,expectTotal:q.total,customer:cust},ed).then(o=>{
+    SBH.place({notify,shuffled:!!S.shuf,size:S.size,items:fields.items,mode:S.mode,speed:S.speed,day:S.day,time:S.time,note:S.note,addons:[...S.addons],coupon:fields.coupon,expectTotal:q.total,customer:cust},ed).then(o=>{
       addMine(o.id);S.editId=null;saveCart();renderDone(o,!!ed);
       S=fresh();$("#coForm").reset();saveCart();sanitizeCart();renderStoreStatic();renderStore();renderEditBar();renderBag();
     }).catch(err=>{$("#coErr").textContent=err.message;$("#coErr").hidden=false;SBH.loadShop(true)}).finally(()=>{if(btn)btn.disabled=false});
@@ -1455,7 +1455,63 @@ function dashRange(k){
   const d=fromYmd(k).getTime();return [d,d+864e5];
 }
 const dashSig=()=>DB.orders.map(o=>o.status+(o.proof?1:0)+(o.complaint?o.complaint.status:"")).join(",")+"|"+DB.orders.length+"|"+VIS.length;
+/* --- Dashboard: Sales and Performance tabs --- */
+A.dt="overview";A.sr="today";A.sf="";A.st="";
+const DT_TABS=[["overview","Overview"],["sales","Sales"],["perf","Performance"]];
+function srRange(){
+  if(A.sr==="custom"){const f=A.sf?fromYmd(A.sf).getTime():0,t=A.st?fromYmd(A.st).getTime()+864e5:Infinity;return [f,Math.max(t,f+864e5)]}
+  return dashRange(A.sr);
+}
+function dashTabs(){return `<div class="seg dt-tabs" role="tablist" aria-label="Dashboard sections" style="margin:0 0 14px">${DT_TABS.map(([k,l])=>`<button type="button" role="tab" data-dt="${k}" aria-pressed="${A.dt===k}">${l}</button>`).join("")}</div>`}
+function srFilter(){
+  const [a,b]=srRange(),one=ms=>new Date(ms).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});
+  const span=A.sr==="custom"?(A.sf||A.st?`${A.sf?one(a):"Start"} to ${A.st?one(b-864e5):"today"}`:"Pick dates"):A.sr==="today"?"Today":`${one(a)} to ${one(b-864e5)}`;
+  return `<section class="panel"><div class="chips">${[["today","Today"],["week","This week"],["month","This month"],["custom","Custom dates"]].map(([k,l])=>`<button class="fchip" type="button" data-srk="${k}" aria-pressed="${A.sr===k}">${l}</button>`).join("")}</div>
+    ${A.sr==="custom"?`<div class="grid2" style="margin-top:10px"><label class="af">From<input class="in" type="date" data-srf value="${esc(A.sf)}"></label><label class="af">To<input class="in" type="date" data-srt value="${esc(A.st)}"></label></div>`:""}
+    <p class="note" style="margin:10px 0 0">Showing: <b>${esc(span)}</b>. "This week" is the last 7 days and "This month" is the last 30 days. The shop keeps the last 180 days of orders on this screen.</p></section>`;
+}
+const kpiTile=(n,l,sub,hot)=>`<div class="db-k${hot?" hot":""}" style="cursor:default"><strong>${n}</strong><small>${l}</small>${sub?`<small style="opacity:.75">${sub}</small>`:""}</div>`;
+const rankList=(rows,unit)=>rows.length?`<ol class="rank">${rows.map(([n,v],i)=>{const mx=rows[0][1]||1;return `<li><span class="rk-n">${i+1}</span><span class="rk-l">${esc(n)}</span><span class="rk-v">${v} ${v===1?unit.replace(/s$/,""):unit}</span><i class="rk-b" style="width:${Math.max(4,v/mx*100)}%"></i></li>`}).join("")}</ol>`:`<div class="empty">Nothing in this period.</div>`;
+function viewDashSales(){
+  const [a,b]=srRange(),inR=ms=>ms>=a&&ms<b;
+  const when=o=>o.completedAt||(o.refund&&o.refund.at)||o.paidAt||o.createdAt||0;
+  const set=DB.orders.filter(o=>(o.status==="completed"||o.refund)&&inR(when(o)));
+  const n=set.length,sum=f=>set.reduce((x,o)=>x+(f(o)||0),0);
+  const items=sum(o=>Object.values(o.items||{}).reduce((q,v)=>q+v,0)),gross=sum(o=>o.total),fee=sum(o=>o.fee);
+  const dels=set.filter(o=>o.mode==="delivery").length,refs=set.filter(o=>o.refund),refund=refs.reduce((x,o)=>x+o.refund.amount,0),net=gross-fee-refund;
+  const ownerCancel=DB.orders.filter(o=>o.status==="cancelled"&&(o.cancelBy==="owner"||o.cancelBy==="staff")&&inR(o.cancelledAt||o.createdAt)).length;
+  const bySize={},byItem={};let shuf=0;
+  set.forEach(o=>{bySize[o.size]=(bySize[o.size]||0)+1;if(o.shuffled)shuf++;Object.entries(o.items||{}).forEach(([id,q])=>{const p=prod(id),nm=p?p.name:"Removed flavor";byItem[nm]=(byItem[nm]||0)+q})});
+  const sizes=Object.entries(bySize).sort((x,y)=>y[1]-x[1]||x[0]-y[0]).map(([k,v])=>[`Box of ${k}`,v]);
+  const best=Object.entries(byItem).sort((x,y)=>y[1]-x[1]||x[0].localeCompare(y[0]));
+  return head("Dashboard","How the shop is doing right now, and what needs you.")+dashTabs()+MOCK+srFilter()+`<div class="stack">
+    <section class="panel"><h2>Sales</h2><p class="sub">Only orders that were delivered or picked up, plus refunded orders. Each order counts on the day it was delivered or picked up (or refunded).</p>
+      <div class="db-kpis" style="margin-top:12px">
+        ${kpiTile(n,"Total orders")}${kpiTile(items,"Total items sold")}${kpiTile(money(gross),"Total gross sales")}
+        ${kpiTile(money(n?gross/n:0),"Average per order")}${kpiTile(money(fee),"Total delivery fee")}${kpiTile(money(dels?fee/dels:0),"Average delivery fee",`per delivery order (${dels})`)}
+        ${kpiTile(money(refund),"Total refund",`${refs.length} order${refs.length===1?"":"s"}`)}${kpiTile(money(refs.length?refund/refs.length:0),"Average refund per order")}
+        ${kpiTile(money(net),"Total net sales","gross − delivery fee − refund",true)}
+        ${kpiTile(ownerCancel,"Total owner cancelled orders","cancelled by the owner or staff")}
+      </div></section>
+    <section class="panel"><h2>Most picked box</h2><p class="sub">Number of orders for each box size, top selling first.</p>${rankList(sizes,"orders")}</section>
+    <section class="panel"><h2>Total order random</h2><p class="sub">Orders where the customer used Random fill, Shuffle or "fill the rest for me".</p>
+      <div class="db-kpis" style="margin-top:8px">${kpiTile(shuf,"Orders using random",n?Math.round(shuf/n*100)+"% of orders":"")}</div></section>
+    <section class="panel"><h2>Best seller item</h2><p class="sub">Cookies sold per flavor, top selling first.</p>${rankList(best,"cookies")}</section></div>`;
+}
+function viewDashPerf(){
+  const [a,b]=srRange(),inR=ms=>ms>=a&&ms<b;
+  const placed=DB.orders.filter(o=>inR(o.createdAt)).length;
+  const sys=DB.orders.filter(o=>o.status==="cancelled"&&o.cancelBy==="system"&&inR(o.cancelledAt||o.createdAt)).length;
+  const cps=DB.orders.filter(o=>o.complaint&&inR(o.complaint.at||o.createdAt)).length;
+  return head("Dashboard","How the shop is doing right now, and what needs you.")+dashTabs()+MOCK+srFilter()+`<div class="stack"><section class="panel"><h2>Performance</h2>
+    <div class="db-kpis" style="margin-top:12px">
+      ${kpiTile(placed,"Total placed orders","every order placed in this period")}
+      ${kpiTile(sys,"Total cancelled by system","not paid in time")}
+      ${kpiTile(cps,"Total complaints",placed?Math.round(cps/placed*100)+"% of placed orders":"")}
+    </div></section></div>`;
+}
 function viewDashboard(){
+  if(A.dt==="sales")return viewDashSales();if(A.dt==="perf")return viewDashPerf();
   A.dsig=dashSig();
   const [s0,s1]=dashRange(A.dd),inR=(ms,a=s0,b=s1)=>ms>=a&&ms<b;
   const lbl=A.dd==="all"?"all dates":A.dd==="today"?"today":fmtDay(A.dd);
@@ -1489,7 +1545,7 @@ function viewDashboard(){
   const apprHTML=appr.length?`<section class="panel apprbox"><h2 class="blinky">⏳ Waiting for your approval (${appr.length})</h2><p class="sub">Staff checked these payments. They only become "Payment confirmed" after you approve.</p>
     <div style="display:grid;gap:8px;margin-top:10px">${appr.map(o=>`<div class="apprrow"><div><b>#${esc(o.code)}</b> · ${esc(o.customer.name)} · ${money(o.total)}<br><small>Checked by ${esc(o.payReq.by)} · ${fmtAgo(o.payReq.at)}</small></div>
       <div class="oc-sts" style="margin:0">${o.proof?`<button class="oc-b" type="button" data-oproof="${o.id}">View proof</button>`:""}<button class="btn btn-blue btn-sm" type="button" data-papprove="${o.id}">✓ Approve</button><button class="oc-b" type="button" data-preject="${o.id}">Turn down</button></div></div>`).join("")}</div></section>`:"";
-  return head("Dashboard","How the shop is doing right now, and what needs you.")+MOCK+rejHTML+apprHTML+`
+  return head("Dashboard","How the shop is doing right now, and what needs you.")+dashTabs()+MOCK+rejHTML+apprHTML+`
   <div class="stack">
     <section class="panel">
       <div class="db-top"><button class="fchip" type="button" data-dd="all" aria-pressed="${A.dd==="all"}">All dates</button><button class="fchip" type="button" data-dd="today" aria-pressed="${A.dd==="today"}">Today</button><input class="oc-date" type="date" data-dddate value="${A.dd!=="all"&&A.dd!=="today"?A.dd:""}" aria-label="Show a single date"></div>
@@ -2370,14 +2426,17 @@ am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
 am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
   if(b.dataset.bakeprint!==undefined)printBake(A.bakeDay);else if(b.dataset.bakedl!==undefined)downloadBake(A.bakeDay)});
 am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;const d=b.dataset;
-  if(d.dd){A.dd=d.dd;renderAdmin()}
+  if(d.dt){A.dt=d.dt;renderAdmin();window.scrollTo(0,0)}
+  else if(d.srk){A.sr=d.srk;renderAdmin()}
+  else if(d.dd){A.dd=d.dd;renderAdmin()}
   else if(d.vr){A.vr=d.vr;renderAdmin()}
   else if(d.dashgo){A.tab=d.dashgo;if(d.dfilter)A.filter=d.dfilter;renderAdmin();window.scrollTo(0,0)}
   else if(d.dashsound!==undefined){DB.alerts.sound=!DB.alerts.sound;saveDB();renderAdmin()}
   else if(d.dproof)showProof(d.dproof);
   else if(d.dconfirm)setOrderStatus(d.dconfirm,"new");
 });
-am.addEventListener("change",e=>{const el=e.target;if(el.dataset.dddate!==undefined){A.dd=el.value||"today";renderAdmin()}});
+am.addEventListener("change",e=>{const el=e.target;if(el.dataset.dddate!==undefined){A.dd=el.value||"today";renderAdmin()}
+  else if(el.dataset.srf!==undefined){A.sf=el.value;renderAdmin()}else if(el.dataset.srt!==undefined){A.st=el.value;renderAdmin()}});
 function alPath(path,val){const p=path.split("."),k=p.pop();let o=DB.alerts;p.forEach(x=>o=o[x]);o[k]=val}
 am.addEventListener("input",e=>{const el=e.target;if(el.dataset.alr!==undefined){DB.alerts.vol=+el.value;saveSoon()}});
 am.addEventListener("change",async e=>{const el=e.target;
