@@ -675,7 +675,7 @@ function openCheckout(){
   $("#sheetTitle").textContent=eo?"Review changes":"Checkout";$("#placeBtn").textContent=eo?"Save changes":"Place order";
   $("#coNote").textContent=eo?`Your original payment deadline stays the same (${fmtLeft(eo.expiresAt-Date.now())} left).`:`You'll have ${DB.settings.payWindowH} hours to pay after placing your order. Unpaid orders are cancelled automatically.`+(S.mode==="delivery"?" Your box may be split into smaller or bigger boxes for delivery safety.":"");
   $("#coErr").hidden=true;$("#checkoutView").hidden=false;$("#doneView").hidden=true;
-  $("#sheet").hidden=false;document.body.style.overflow="hidden";setTimeout(()=>$("#coEmail").focus(),50);
+  $("#sheet").hidden=false;document.body.style.overflow="hidden";setTimeout(()=>$("#coName").focus(),50);
 }
 function closeSheet(){$("#sheet").hidden=true;document.body.style.overflow="";$("#sheet .sheet-card").style.background="";$("#dnFx")&&($("#dnFx").innerHTML="");endPreview()}
 
