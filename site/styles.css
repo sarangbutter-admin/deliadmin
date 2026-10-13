@@ -685,3 +685,6 @@ body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
 
 /* unpublished-changes bar (shop settings, marquee banner, landing page) */
 .draftbar .btn{min-height:44px}.draftbar .ghost{min-height:44px;background:#fff}
+
+/* refunds */
+.st-refunded,.mo-chip.st-refunded{background:#DDF3E5;color:#0a6b34}

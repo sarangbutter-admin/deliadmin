@@ -875,7 +875,8 @@ const addMine=id=>{if(!MINE.includes(id))MINE.unshift(id);try{localStorage.setIt
 const mineOrders=()=>MINE.map(id=>DB.orders.find(o=>o.id===id)).filter(Boolean);
 function fmtLeft(ms){ms=Math.max(0,ms);const t=Math.floor(ms/1000),h=Math.floor(t/3600),m=Math.floor(t%3600/60),sec=t%60;return [h,m,sec].map(n=>String(n).padStart(2,"0")).join(":")}
 const CUS={awaiting:"Awaiting payment",review:"Checking payment",new:"Confirmed",baking:"Baking",cancelled:"Cancelled"};
-const cusLabel=o=>CUS[o.status]||stLabel(o.status,o.mode);
+const refundTxt=o=>o.refund?(o.refund.full?"Refunded":"Partly refunded"):"";
+const cusLabel=o=>(CUS[o.status]||stLabel(o.status,o.mode))+(o.refund?" · "+refundTxt(o):"");
 function releaseHold(o){if(SBH.on)return;if(o.tracked&&o.holds){Object.entries(o.items).forEach(([pid,n])=>{const p=prod(pid);if(p&&p.track)p.stock+=n});o.holds=false}}
 function takeHold(o){if(SBH.on)return;if(o.tracked&&!o.holds){Object.entries(o.items).forEach(([pid,n])=>{const p=prod(pid);if(p&&p.track)p.stock=Math.max(0,p.stock-n)});o.holds=true}}
 function expireOrders(){
@@ -887,7 +888,7 @@ function expireOrders(){
 const SEEN_KEY="delidome-seen-v1";let SEEN=0,SEENV=0;try{SEEN=+localStorage.getItem(SEEN_KEY)||0}catch(e){}
 function notifs(){
   const map=new Map();
-  mineOrders().forEach(o=>(o.msgs||[]).forEach(m=>{const k=o.id+"|"+m.at+"|"+m.text;const e=map.get(k);if(e){if(!e.ch.includes(m.channel))e.ch.push(m.channel)}else map.set(k,{o,m,ch:[m.channel]})}));
+  mineOrders().forEach(o=>(o.msgs||[]).filter(m=>m.status!=="refunded").forEach(m=>{const k=o.id+"|"+m.at+"|"+m.text;const e=map.get(k);if(e){if(!e.ch.includes(m.channel))e.ch.push(m.channel)}else map.set(k,{o,m,ch:[m.channel]})}));
   return [...map.values()].sort((a,b)=>b.m.at-a.m.at);
 }
 // a friendly nudge to rate orders that were delivered / picked up
@@ -905,22 +906,26 @@ function rnDone(id,forGood){RN_SEEN[id]=forGood?-1:Date.now();RN_SEEN._last=Date
   if(b.dataset.rnrate){rnDone(b.dataset.rnrate,true);openMO(b.dataset.rnrate);setTimeout(()=>{const r=$("#moCard .rstars");r&&r.scrollIntoView({block:"center"})},80)}
   else if(b.dataset.rnlater)rnDone(b.dataset.rnlater)})}
 // orders still waiting for payment: the bell tells the customer to pay before the time runs out
+const refundsNew=()=>mineOrders().filter(o=>o.refund&&o.refund.at>SEEN);
+const refundList=()=>mineOrders().filter(o=>o.refund);
 const payDue=()=>mineOrders().filter(o=>o.status==="awaiting"&&o.expiresAt&&o.expiresAt>Date.now());
 function renderBell(){
   applyCdLook();
   try{rateNudge()}catch(e){}
-  const list=notifs(),n=list.filter(x=>x.m.at>SEEN).length+activeBroadcasts().filter(x=>x.at>SEEN).length+payDue().length,b=$("#bellCount"),btn=$("#bellBtn");
+  const list=notifs(),n=list.filter(x=>x.m.at>SEEN).length+activeBroadcasts().filter(x=>x.at>SEEN).length+payDue().length+refundsNew().length,b=$("#bellCount"),btn=$("#bellBtn");
   if(!b)return;b.hidden=!n;b.textContent=n>9?"9+":n;btn.classList.toggle("ring",n>0);
   btn.setAttribute("aria-label",n?`Notifications, ${n} new`:"Notifications");
   if(!$("#bellPop").hidden)drawBell(list);
 }
 let BELLF="all";
-const ST_ICON={awaiting:"⏳",review:"🔎",new:"✅",baking:"🍪",ready:"🚚",completed:"🎉",cancelled:"❌"};
+const ST_ICON={refunded:"💸",awaiting:"⏳",review:"🔎",new:"✅",baking:"🍪",ready:"🚚",completed:"🎉",cancelled:"❌"};
 function drawBell(list){
   $("#bellTabs").innerHTML=[["all","All"],["orders","My orders"],["deals","News & deals"]].map(([k,l])=>`<button type="button" role="tab" data-belltab="${k}" aria-selected="${BELLF===k}">${l}</button>`).join("");
   const items=[];
   if(BELLF!=="deals")payDue().forEach(o=>{
     items.push({at:Infinity,h:`<button class="bell-it bell-pay" type="button" data-bellgo="${o.id}"><span class="bell-ic" aria-hidden="true">⏰</span><span class="bell-tx"><small>Order #${esc(o.code)} · waiting for payment</small><b>Pay now or you'll miss your cookies!</b><span class="bell-cdrow">Time left: <span class="cd" data-exp="${o.expiresAt}">${fmtLeft(o.expiresAt-Date.now())}</span></span></span><span class="bell-ch" aria-hidden="true">›</span></button>`})});
+  if(BELLF!=="deals")refundList().forEach(o=>{
+    items.push({at:o.refund.at,h:`<button class="bell-it${o.refund.at>SEENV?" new":""}" type="button" data-bellgo="${o.id}"><span class="bell-ic" aria-hidden="true">💸</span><span class="bell-tx"><small>Order #${esc(o.code)} · ${fmtAgo(o.refund.at)}</small><b>${o.refund.full?"Your order was refunded":"Part of your order was refunded"}: ${money(o.refund.amount)}</b><span>${o.refund.note?esc(o.refund.note)+" · ":""}It can take a few days to show in your account.</span></span><span class="bell-ch" aria-hidden="true">›</span></button>`})});
   if(BELLF!=="deals")list.forEach(x=>{const st=x.m.status,o=x.o,lab=st?stLabel(st,o.mode):"Update";
     items.push({at:x.m.at,h:`<button class="bell-it${x.m.at>SEENV?" new":""}" type="button" data-bellgo="${o.id}"><span class="bell-ic" aria-hidden="true">${ST_ICON[st]||"📦"}</span><span class="bell-tx"><small>Order · ${fmtAgo(x.m.at)}</small><b>Order #${esc(o.code)} · ${esc(lab)}</b><span>${esc(x.m.text)}</span></span><span class="bell-ch" aria-hidden="true">›</span></button>`})});
   if(BELLF!=="orders")DB.sales.filter(s=>saleStatus(s)!=="ended").forEach(s=>{const live=saleStatus(s)==="live";
@@ -931,7 +936,7 @@ function drawBell(list){
   $("#bellList").innerHTML=items.length?items.map(i=>i.h).join(""):`<div class="bell-empty">${BELLF==="deals"?"No news or deals right now.":"No notifications yet. Updates about your orders will show up here."}</div>`;
 }
 function openBell(){SEENV=SEEN;const list=notifs();drawBell(list);const pop=$("#bellPop");pop.hidden=false;$("#bellBtn").setAttribute("aria-expanded","true");
-  const latest=Math.max(list.reduce((a,x)=>Math.max(a,x.m.at),SEEN),...activeBroadcasts().map(x=>x.at));SEEN=latest;try{localStorage.setItem(SEEN_KEY,String(SEEN))}catch(e){}
+  const latest=Math.max(list.reduce((a,x)=>Math.max(a,x.m.at),SEEN),...refundList().map(o=>o.refund.at),...activeBroadcasts().map(x=>x.at));SEEN=latest;try{localStorage.setItem(SEEN_KEY,String(SEEN))}catch(e){}
   $("#bellCount").hidden=true;$("#bellBtn").classList.remove("ring")}
 function closeBell(){const p=$("#bellPop");if(p.hidden)return;p.hidden=true;$("#bellBtn").setAttribute("aria-expanded","false");renderBell()}
 $("#bellBtn").addEventListener("click",e=>{e.stopPropagation();$("#bellPop").hidden?openBell():closeBell()});
@@ -1033,7 +1038,7 @@ function renderMO(){
     MO.id=null;
     card.innerHTML=`<div class="sheet-top"><h3>My orders</h3><button class="x" type="button" data-moclose aria-label="Close">✕</button></div>
     ${list.length?`<div class="mo-list">${list.map(x=>`<button class="mo-card" type="button" data-moopen="${x.id}"><div class="mo-row"><span class="mo-code">${esc(x.code)}</span><span class="mo-chip st-${x.status}">${cusLabel(x)}</span></div>
-      <div class="mo-row"><span>Box of ${x.size} · ${money(x.total)}</span><span class="mo-sub">${fmtDay(x.day)}, ${esc(x.time)}</span></div>
+      <div class="mo-row"><span>Box of ${x.size} · ${money(x.total)}${x.refund?` · <b style="color:#0a7a3b">${refundTxt(x)} ${money(x.refund.amount)}</b>`:""}</span><span class="mo-sub">${fmtDay(x.day)}, ${esc(x.time)}</span></div>
       ${x.status==="completed"&&x.complaint?`<div class="mo-sub">Complaint: ${CP_STATUS[x.complaint.status]}</div>`:cwinOpen(x)?`<div class="mo-sub">Complaint window: <span class="cd" data-cexp="${cwinEnd(x)}">${fmtLeft(cwinEnd(x)-Date.now())}</span></div>`:""}${x.status==="completed"&&Object.keys(x.items).some(id=>prod(id)&&!(x.rated||{})[id])?`<div class="mo-sub">Tap to rate your cookies</div>`:""}
       ${x.status==="awaiting"?`<div class="mo-sub">Pay within <span class="cd" data-exp="${x.expiresAt}">${fmtLeft(x.expiresAt-Date.now())}</span></div>`:""}</button>`).join("")}</div>`:`<p class="hint">No orders yet in this browser. Build a box and it will show up here.</p>`}
     <details class="mo-find" ${list.length?"":"open"}><summary>Find an order</summary>
@@ -1046,6 +1051,7 @@ function renderMO(){
   const total=Math.max(1,(o.expiresAt||0)-(o.createdAt||0)||DB.settings.payWindowH*3600e3);
   card.innerHTML=`<div class="sheet-top"><div><button class="mo-back" type="button" data-moback>← All orders</button><h3 style="margin-top:6px">${esc(o.code)}</h3></div><button class="x" type="button" data-moclose aria-label="Close">✕</button></div>
   <div class="mo-row" style="margin:6px 0 14px"><span class="mo-chip st-${o.status}">${cusLabel(o)}</span><span class="mo-sub">${modeName(o)} · ${esc(whenTxt(o))}</span></div>
+  ${o.refund?`<div class="mo-pay" style="background:#E6F6EC;border-color:#9AD3AE"><b>💸 ${o.refund.full?"Refunded":"Partly refunded"}: ${money(o.refund.amount)}</b><span>${fmtDT(o.refund.at)}${o.refund.note?" · "+esc(o.refund.note):""}</span><span class="mo-sub">It can take a few days to show in your account.</span></div>`:""}
   ${o.status==="cancelled"?`<div class="mo-pay" style="background:#FCE3E8"><b>This order was cancelled.</b><span>${esc(o.cancelReason||"It was cancelled.")}</span><button class="btn btn-blue btn-sm" type="button" data-monew>Build a new box</button></div>`:""}
   ${awaiting?`<div class="mo-pay"><div><div class="mo-sub">Time left to pay</div><div class="mo-big cd" data-exp="${o.expiresAt}">${fmtLeft(o.expiresAt-Date.now())}</div><div class="mo-bar" style="margin-top:8px"><i data-expbar="${o.expiresAt}" data-expfrom="${o.createdAt||0}" style="width:${Math.max(0,Math.min(100,(o.expiresAt-Date.now())/total*100))}%"></i></div><p class="mo-sub" style="margin:8px 0 0">If it isn't paid in time, the order is cancelled automatically.</p></div>
     ${o.rejected?`<p class="err" style="margin:0">Your last proof couldn't be verified${o.rejected.reason?`: ${esc(o.rejected.reason)}`:""}. Please send it again.</p>`:""}
@@ -1058,7 +1064,7 @@ function renderMO(){
       <p class="err" id="mpErr" hidden></p>
       <button class="btn btn-blue" type="submit">I've paid, send proof</button></form></div>`:""}
   ${o.status==="review"&&o.proof?`<div class="mo-pay"><b>We're checking your payment.</b><span class="mo-sub">Sent ${fmtDT(o.proof.at)} by ${esc(o.proof.name)}. This page updates when it's confirmed.</span><img class="proofimg" src="${esc(imgOk(o.proof.img))}" alt="Your payment proof"></div>`:""}
-  <div class="dsec" style="margin-top:18px"><h4>Track your order</h4>${o.status==="cancelled"?`<p class="hint" style="margin:0">Cancelled ${o.cancelReason?"":""}</p>`:moSteps(o)}</div>
+  <div class="dsec" style="margin-top:18px"><h4>Track your order</h4>${o.status==="cancelled"?`<p class="hint" style="margin:0">Cancelled ${o.cancelReason?"":""}</p>`:moSteps(o)}${o.refund?`<ol class="track-l" style="margin-top:6px"><li class="done"><span class="dot">✓</span><span>${o.refund.full?"Refunded":"Partly refunded"} · ${money(o.refund.amount)}<small>${esc(fmtDT(o.refund.at))}</small></span></li></ol>`:""}</div>
   <div class="dsec"><h4>Your box of ${o.size}</h4><div class="summary" style="margin:0">${items}
     ${o.discount>0?`<div class="sl"><span>${esc(o.sale||"Flash sale")}</span><span class="num">−${money(o.discount)}</span></div>`:""}
     ${o.couponDisc>0?`<div class="sl"><span>Coupon ${esc(o.coupon)}</span><span class="num">−${money(o.couponDisc)}</span></div>`:""}
@@ -1174,7 +1180,7 @@ function toast(msg){if(typeof toastHook==="function")msg=toastHook(msg);const t=
 let saveTimer;function saveSoon(){clearTimeout(saveTimer);saveTimer=setTimeout(()=>{saveDB();toast("Saved")},500)}
 function armed(btn,fn){if(btn.dataset.armed){fn();return}btn.dataset.armed="1";const t=btn.textContent;btn.textContent="Tap again to confirm";btn.classList.add("armed");
   setTimeout(()=>{if(btn.isConnected){delete btn.dataset.armed;btn.textContent=t;btn.classList.remove("armed")}},3000)}
-const stLabel=(k,mode)=>k==="ready"?(mode==="delivery"?"Out for delivery":"Ready for pickup"):k==="completed"?(mode==="delivery"?"Delivered":"Picked up"):STATUSES.find(x=>x[0]===k)[1];
+const stLabel=(k,mode)=>k==="refunded"?"Refunded":k==="ready"?(mode==="delivery"?"Out for delivery":"Ready for pickup"):k==="completed"?(mode==="delivery"?"Delivered":"Picked up"):STATUSES.find(x=>x[0]===k)[1];
 const statusSel = o => `<select class="st st-${o.status}" data-status-for="${o.id}" aria-label="Status for ${o.code}">${STATUSES.map(([k])=>`<option value="${k}" ${k===o.status?"selected":""}>${stLabel(k,o.mode)}</option>`).join("")}</select>`;
 const miniPlate = p => p?`<div class="mini">${plateHTML(p)}</div>`:`<div class="mini"></div>`;
 const head = (title,sub) => `<div class="ahead"><div><h1>${title}</h1><p>${sub}</p></div></div>`;
@@ -1455,7 +1461,7 @@ function viewDashboard(){
   const lbl=A.dd==="all"?"all dates":A.dd==="today"?"today":fmtDay(A.dd);
   const ordersIn=DB.orders.filter(o=>o.status!=="cancelled"&&inR(o.createdAt)).sort((a,b)=>b.createdAt-a.createdAt);
   const paidIn=DB.orders.filter(o=>canLabel(o)&&inR(o.paidAt||o.createdAt));
-  const rev=paidIn.reduce((a,o)=>a+o.total,0);
+  const rev=paidIn.reduce((a,o)=>a+o.total-((o.refund&&o.refund.amount)||0),0);
   const review=DB.orders.filter(o=>o.status==="review").sort((a,b)=>((a.proof&&a.proof.at)||0)-((b.proof&&b.proof.at)||0));
   const prog=DB.orders.filter(o=>["new","baking","ready"].includes(o.status)).length;
   const cps=DB.orders.filter(o=>o.complaint&&o.complaint.status==="open").length;
@@ -1496,14 +1502,14 @@ function viewDashboard(){
         <button class="db-k" type="button" data-dashgo="complaints"><strong>${cps}</strong><small>Open complaints</small></button>
       </div>
     </section>
-    <section class="panel">
+    ${ROLE()==="owner"?`<section class="panel">
       <h2>👥 Visitors</h2>
       <div class="chips" style="margin-top:10px">${[["today","Today"],["week","This week"],["month","This month"]].map(([k,l])=>`<button class="fchip" type="button" data-vr="${k}" aria-pressed="${A.vr===k}">${l}</button>`).join("")}</div>
       <div class="db-vis"><div><strong>${vs.length}</strong><small>Visits</small></div><div><strong>${uniq}</strong><small>Unique visitors</small></div><div><strong>${placed}</strong><small>Orders placed</small></div><div><strong>${conv}%</strong><small>Visitors who ordered</small></div></div>
       <div class="db-chart" role="img" aria-label="${esc(note)} Total ${vs.length}.">${cnt.map((c,i)=>`<i class="${c?"":"z"}" style="height:${c&&mx?Math.max(4,c/mx*100):0}%" title="${c} visit${c===1?"":"s"}"></i>`).join("")}</div>
       <div class="db-axis" aria-hidden="true">${axis.map(([p,l])=>`<span style="left:${p}%">${l}</span>`).join("")}</div>
       <p class="note" style="margin:6px 0 0">${esc(note)}</p>
-    </section>
+    </section>`:""}
     <section class="panel">
       <div class="db-top"><button class="ghost" type="button" data-dashgo="orders" data-dfilter="all">Open all orders</button><button class="ghost" type="button" data-dashsound>${DB.alerts.sound?"🔔 Sound on":"🔕 Sound off"}</button></div>
       <p class="note" style="margin:10px 0 0"><span class="db-live"></span>Live: new orders, payments and complaints appear here and as a pop-up while this page is open.</p>
@@ -1591,6 +1597,7 @@ function openOrder(id){
       ${(o.msgs||[]).length?`<div class="ditems">${o.msgs.slice().reverse().map(m=>`<div style="display:grid;gap:2px"><span class="note"><b>${CHANNELS[m.channel]}</b> · ${fmtDT(m.at)} · ${m.by==="system"?"automatic":"staff"}</span><span style="font-size:14px">${esc(m.text)}</span>${m.channel==="whatsapp"?`<a href="${esc(waLink(o,m.text))}" target="_blank" rel="noopener" class="note">Send again on WhatsApp</a>`:`<a href="${esc(mailLink(o,m.text))}" class="note">Send again by email</a>`}</div>`).join("")}</div>`:`<p class="hint" style="margin:0">No messages yet. They're logged when you change the status.</p>`}</div>
     ${o.complaint?`<div class="dsec"><h4>Complaint</h4><p class="hint" style="margin:0 0 8px">${esc(o.complaint.reason)} · ${CP_STATUS[o.complaint.status]}</p><button class="btn btn-blue btn-sm" type="button" data-cpgo>View complaint</button></div>`:""}
     ${o.cancelReason?`<div class="dsec"><h4>Cancelled</h4><p class="hint" style="margin:0">${esc(o.cancelReason)}</p></div>`:""}
+    ${o.refund?`<div class="dsec"><h4>Refund</h4><dl class="dl"><dt>Status</dt><dd><b>${o.refund.full?"Refunded":"Partly refunded"}</b></dd><dt>Amount</dt><dd>${money(o.refund.amount)} of ${money(o.total)}</dd><dt>When</dt><dd>${fmtDT(o.refund.at)}${o.refund.by?` · by ${esc(o.refund.by)}`:""}</dd>${o.refund.note?`<dt>Note</dt><dd>${esc(o.refund.note)}</dd>`:""}</dl></div>`:canRefund(o)?`<div class="dsec"><h4>Refund</h4><p class="hint" style="margin:0 0 8px">Paid orders can be refunded in full or in part. The customer is told in the shop.</p><button class="btn btn-blue btn-sm" type="button" data-refund="${o.id}">💸 Refund this order</button></div>`:""}
     <div class="dsec"><h4>Shipping label</h4>${o.mode==="delivery"?`<div class="grid2"><label class="af">Courier<input class="in" data-ship="courier" maxlength="30" value="${esc(o.courier||"")}" placeholder="e.g. JNE"></label><label class="af">Airway bill / tracking no.<input class="in" data-ship="awb" maxlength="40" value="${esc(o.awb||"")}" placeholder="e.g. JP1234567890"></label></div>`:`<p class="hint" style="margin:0 0 8px">Pickup order: the label shows the pickup time.</p>`}<button class="btn btn-blue btn-sm" type="button" data-printone="${o.id}" style="margin-top:10px">Print label</button></div>
     <div class="dsec"><h4>Customer</h4><dl class="dl"><dt>Name</dt><dd>${esc(o.customer.name)}</dd><dt>WhatsApp</dt><dd>${esc(o.customer.phone)}</dd><dt>Email</dt><dd>${esc(o.customer.email)}</dd>${o.customer.address?`<dt>Address</dt><dd>${esc(o.customer.address)}</dd>`:""}</dl></div>
     <div class="dsec"><h4>When</h4><dl class="dl"><dt>${modeName(o)}</dt><dd>${esc(whenTxt(o))}</dd>${o.note?`<dt>Note</dt><dd>${esc(o.note)}</dd>`:""}</dl></div>
@@ -1645,6 +1652,7 @@ function orderCard(o){
   const lbl=paid?(o.labelAt?`<div class="oc-lbl ok">✓ Label printed ${fmtAgo(o.labelAt)}</div>`:`<div class="oc-lbl warn">⚠ Label not printed yet</div>`):(o.status==="cancelled"?"":`<div class="oc-lbl off">Label can be printed after payment is confirmed</div>`);
   return `<article class="oc-card" aria-label="Order ${esc(o.code)}">
     <div class="oc-h"><span>#${esc(o.code)} · ${esc(c.name)}${o.example?`<span class="ex">Example</span>`:""}${o.complaint?`<span class="ex oc-cp">Complaint</span>`:""}</span><b class="num">${money(o.total)}</b></div>
+    ${o.refund?`<div class="oc-alert ref">💸 ${o.refund.full?"Refunded":"Partly refunded"}: ${money(o.refund.amount)} · ${fmtAgo(o.refund.at)}${o.refund.note?" · "+esc(o.refund.note):""}</div>`:""}
     ${o.status==="review"&&o.payReq?`<div class="oc-alert appr">⏳ ${own?`${esc(o.payReq.by)} confirmed this payment – needs your approval`:`Payment checked – waiting for owner approval`}</div>${own?`<div class="oc-sts"><button class="btn btn-blue btn-sm" type="button" data-papprove="${o.id}">✓ Approve payment</button><button class="oc-b" type="button" data-preject="${o.id}">Turn down</button></div>`:""}`
       :o.status==="review"&&o.rejReq?`<div class="oc-alert appr rej">⏳ ${own?`${esc(o.rejReq.by)} wants to REJECT this payment proof${o.rejReq.reason?` ("${esc(o.rejReq.reason)}")`:""} – needs your approval`:`Proof rejection sent – waiting for owner approval`}</div>${own?`<div class="oc-sts"><button class="danger" type="button" data-rapprove="${o.id}">✓ Approve rejection</button><button class="oc-b" type="button" data-rdeny="${o.id}">Keep payment (turn down)</button></div>`:""}`
       :o.status==="review"?`<div class="oc-alert pay">💰 Payment submitted – needs your confirmation</div>`:""}
@@ -1655,7 +1663,7 @@ function orderCard(o){
     ${payLine?`<div class="oc-info">${payLine}</div>`:""}
     ${o.cancelReason?`<div class="oc-info">Cancel reason: ${esc(o.cancelReason)}</div>`:""}
     <div class="oc-sts" role="group" aria-label="Order status">${keys.map(k=>{const why=stepWhy(o,k);return `<button class="oc-b${why&&o.status!==k?" off":""}" type="button" data-ostatus="${o.id}:${k}" aria-pressed="${o.status===k}" ${why&&o.status!==k?`aria-disabled="true" title="${esc(why)}"`:""}>${k==="new"?"✓ ":""}${k==="new"&&o.status==="review"&&!own&&!o.payReq?"Confirm payment (owner approves)":stLabel(k,o.mode)}</button>`}).join("")}</div>
-    <div class="oc-sts">${canEdit?`<button class="oc-b" type="button" data-osub="${o.id}">✎ Edit / substitute</button>`:""}${canCancelOrder(o)?`<button class="oc-b" type="button" data-ocancel="${o.id}">✕ Cancel order</button>`:""}<button class="oc-b" type="button" data-order="${o.id}">Details</button></div>
+    <div class="oc-sts">${canEdit?`<button class="oc-b" type="button" data-osub="${o.id}">✎ Edit / substitute</button>`:""}${canCancelOrder(o)?`<button class="oc-b" type="button" data-ocancel="${o.id}">✕ Cancel order</button>`:""}${canRefund(o)?`<button class="oc-b" type="button" data-refund="${o.id}">💸 Refund</button>`:""}<button class="oc-b" type="button" data-order="${o.id}">Details</button></div>
     ${lbl}
     ${paid&&del?`<div class="grid2"><label class="af" style="font-size:12px">Courier<input class="in" data-oship="courier" data-oid="${o.id}" ${!own&&["ready","completed"].includes(o.status)&&String(o.awb||"").trim()?"disabled":""} maxlength="30" value="${esc(o.courier||"")}" placeholder="e.g. JNE"></label><label class="af" style="font-size:12px">Airway bill<input class="in" data-oship="awb" data-oid="${o.id}" ${!own&&["ready","completed"].includes(o.status)&&String(o.awb||"").trim()?"disabled":""} maxlength="40" value="${esc(o.awb||"")}" placeholder="Tracking no."></label></div>`:""}
     ${paid&&del&&["new","baking"].includes(o.status)?`<p class="note" style="margin:0">${o.status==="baking"?"Type the courier and airway bill: the order moves to <b>Out for delivery</b> by itself.":"After baking, type the courier and airway bill to send it out."}</p>`:""}
@@ -1704,6 +1712,7 @@ function msgText(o,st){
     baking:`Hi ${nm}, your order ${o.code} is being baked now.`,
     ready:o.mode==="delivery"?`Hi ${nm}, your order ${o.code} is out for delivery.${o.courier||o.awb?` ${o.courier?"Courier: "+o.courier+". ":""}${o.awb?"Airway bill: "+o.awb+".":""}`:""} Please keep your phone close.`:`Hi ${nm}, your order ${o.code} is ready for pickup. Address: ${DB.settings.address}`,
     completed:o.mode==="delivery"?`Hi ${nm}, your order ${o.code} was delivered. Enjoy! Please keep your unboxing video, rate your cookies, and tell us within ${DB.settings.complaintWindowH} hours if anything is wrong.`:`Hi ${nm}, thanks for picking up order ${o.code}. Enjoy! You can rate your cookies in My orders and tell us within ${DB.settings.complaintWindowH} hours if anything is wrong.`,
+    refunded:`Hi ${nm}, your order ${o.code} was refunded${o.refund?": "+money(o.refund.amount):""}.${o.refund&&o.refund.note?" "+o.refund.note:""} It can take a few days to show in your account.`,
     cancelled:`Hi ${nm}, your order ${o.code} was cancelled.${o.cancelReason?" "+o.cancelReason:""} Contact us if you have questions.`
   };
   return t[st]||`Hi ${nm}, your order ${o.code} is now: ${stLabel(st,o.mode)}.`;
@@ -1773,6 +1782,44 @@ $("#modal").addEventListener("click",e=>{
     saveDB();SC.done=true;SC.text=text;SC.channels=channels;renderStatusDialog();renderAdmin();if(A.openOrder===SC.id)openOrder(SC.id);
   }
 },true);
+
+/* --- refunds (owner only) --- */
+const canRefund=o=>ROLE()==="owner"&&!!o.paidAt&&!o.refund;
+let RF=null;
+function refundMsgText(o,amt,note){const full=amt>=o.total-.005,nm=(o.customer.name.split(" ")[0]||"there");return `Hi ${nm}, your order ${o.code} was ${full?"refunded":"partly refunded"}: ${money(amt)}.${note?" "+note:""} It can take a few days to show in your account.`}
+function renderRefund(){
+  const o=DB.orders.find(x=>x.id===RF.id);if(!o)return;const c=o.customer,pref=o.notify||"both";
+  if(RF.done){
+    const t=RF.text,ch=RF.channels;
+    $("#modalCard").innerHTML=`<div class="sheet-top"><h3 id="modalTitle">Refund saved</h3><button class="x" type="button" data-mclose aria-label="Close">✕</button></div>
+    <p><b>${esc(o.code)}</b> is marked <b>${o.refund&&o.refund.full?"refunded":"partly refunded"}</b>. The customer sees it in their bell and order history.</p>
+    ${ch.length?`<p class="hint" style="margin:0 0 10px">You can also message ${esc(c.name)} now. Tap a button to send it from your own WhatsApp or email app.</p><div class="mo-row" style="gap:10px;justify-content:flex-start">${ch.includes("whatsapp")?`<a class="btn btn-blue btn-sm" href="${esc(waLink(o,t))}" target="_blank" rel="noopener">Send on WhatsApp</a>`:""}${ch.includes("email")?`<a class="btn btn-blue btn-sm" href="${esc(mailLink(o,t))}">Send email</a>`:""}</div>`:""}
+    <div style="margin-top:16px"><button class="btn btn-ghost-blue btn-sm" type="button" data-mclose>Done</button></div>`;return}
+  const opt=(v,label,sub)=>`<label class="chk" style="align-items:flex-start"><input type="radio" name="rfNotify" value="${v}" ${pref===v?"checked":""}><span>${label}${sub?`<small class="note" style="display:block">${esc(sub)}</small>`:""}</span></label>`;
+  $("#modalCard").innerHTML=`<div class="sheet-top"><h3 id="modalTitle">Refund order</h3><button class="x" type="button" data-mclose aria-label="Close">✕</button></div>
+  <p style="margin:0 0 12px"><b>${esc(o.code)}</b> · ${esc(c.name)} · paid ${money(o.total)}</p>
+  <div class="grid2"><label class="af">Refund amount<div class="money-in"><span>${esc(DB.settings.currency)}</span><input class="in" id="rfAmt" type="number" min="0.01" step="0.01" max="${o.total}" value="${o.total}"></div></label>
+    <label class="af">Note for the customer (optional)<input class="in" id="rfNote" maxlength="120" placeholder="e.g. sent back to your bank"></label></div>
+  <p class="note" style="margin:6px 0 0">Make the bank or e-wallet transfer yourself first. This only records it. A refund can't be undone here.</p>
+  <div class="af" style="gap:8px;margin-top:12px">Also message the customer by<div class="stack" style="gap:8px">${opt("whatsapp","WhatsApp",c.phone)}${opt("email","Email",c.email)}${opt("both","Both")}${opt("none","Don't send a message")}</div><p class="note" style="margin:0">The shop bell and order history are updated either way.</p></div>
+  <p class="err" id="rfErr" hidden></p>
+  <div class="mo-row" style="margin-top:16px;gap:10px;justify-content:flex-end"><button class="ghost" type="button" data-mclose>Cancel</button><button class="btn btn-blue btn-sm" type="button" data-rfok>Mark as refunded</button></div>`;
+}
+document.addEventListener("click",async e=>{
+  const rb=e.target.closest("[data-refund]");
+  if(rb){const o=DB.orders.find(x=>x.id===rb.dataset.refund);if(!o||!canRefund(o))return;RF={id:o.id,done:false};openModal("","refund");renderRefund();return}
+  if(A.modal!=="refund"||!RF||!e.target.closest("[data-rfok]"))return;
+  const o=DB.orders.find(x=>x.id===RF.id),er=$("#rfErr"),btn=e.target.closest("[data-rfok]");if(!o)return;
+  const amt=Math.round((+$("#rfAmt").value||0)*100)/100,note=$("#rfNote").value.trim();
+  if(!(amt>0&&amt<=o.total+.005)){er.textContent=`Enter an amount from 0.01 up to ${money(o.total)}.`;er.hidden=false;return}
+  const chv=(document.querySelector('input[name="rfNotify"]:checked')||{value:"none"}).value,channels=chanList(chv),text=refundMsgText(o,amt,note);
+  btn.disabled=true;btn.textContent="Saving…";
+  try{
+    if(SBH.on)await SBH.refundOrder(o.id,amt,note,channels.map(ch=>({channel:ch,text})));
+    else{o.refund={amount:amt,full:amt>=o.total-.005,at:Date.now(),note,by:"Owner"};logMsg(o,channels,"refunded",text,"staff");saveDB()}
+    RF.done=true;RF.text=text;RF.channels=channels;renderRefund();renderAdmin();if(A.openOrder===o.id)openOrder(o.id);
+  }catch(err){er.textContent=err.message||"Couldn't save the refund.";er.hidden=false;btn.disabled=false;btn.textContent="Mark as refunded"}
+});
 
 /* --- Flash sales --- */
 function viewSales(){
@@ -3263,7 +3310,7 @@ new MutationObserver(()=>hexify()).observe(document.body,{childList:true,subtree
 
 /* --- Customers + team --- */
 const ROLE=()=>SBH.on?(SBH.role||"owner"):"owner";
-const PERMS=[["dashboard","Dashboard","sales numbers and visits"],["orders","Orders","confirm payments, change status, edit orders"],["complaints","Complaints","reply and resolve"],
+const PERMS=[["dashboard","Dashboard","sales numbers (visitor numbers are for owners only)"],["orders","Orders","confirm payments, change status, edit orders"],["complaints","Complaints","reply and resolve"],
   ["customers","Customers","see, add and edit"],["labels","Shipping labels","print labels"],["products","Flavors & stock","edit flavors and stock (prices need the owner password)"],
   ["badges","Badges","design badges"],["boxes","Boxes & extras","sizes and extras (prices need the owner password)"],["sales","Flash sales",""],["coupons","Coupons",""],
   ["notify","Notifications","messages to all customers"],["design","Shop look","top banner, landing page, marquee, announcer"],["settings","Shop settings","settings and payment methods"]];
@@ -3279,7 +3326,7 @@ function demoCustomers(){   // demo mode only: customers come from this browser'
   (DB.customers||[]).forEach(c=>m.set(normPhone(c.phone),Object.assign({},c)));
   DB.orders.forEach(o=>{const k=normPhone(o.customer.phone);if(k&&!m.has(k))m.set(k,{id:"o"+k,name:o.customer.name,phone:o.customer.phone,email:o.customer.email||"",note:"",source:"order",createdAt:o.createdAt||0})});
   return [...m.values()].map(c=>{const os=DB.orders.filter(o=>normPhone(o.customer.phone)===normPhone(c.phone));
-    return Object.assign({},c,{orders:os.length,spent:os.filter(o=>PAID_ST.includes(o.status)).reduce((a,o)=>a+(o.total||0),0),lastOrder:os.reduce((a,o)=>Math.max(a,o.createdAt||0),0)||null})}).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+    return Object.assign({},c,{orders:os.length,spent:os.filter(o=>PAID_ST.includes(o.status)).reduce((a,o)=>a+(o.total||0)-((o.refund&&o.refund.amount)||0),0),lastOrder:os.reduce((a,o)=>Math.max(a,o.createdAt||0),0)||null})}).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
 }
 async function loadCustomers(){
   if(!SBH.on){CU.list=demoCustomers();CU.stale=false;return renderAdmin()}

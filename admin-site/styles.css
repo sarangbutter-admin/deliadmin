@@ -871,3 +871,7 @@ body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
 .draftbar .db-act{display:flex;gap:8px;flex-wrap:wrap}
 .draftbar .btn{min-height:44px}.draftbar .ghost{min-height:44px;background:#fff}
 [data-tab].pend .nl::after{content:"";display:inline-block;width:9px;height:9px;border-radius:50%;background:#E0A800;margin-left:8px;vertical-align:middle}
+
+/* refunds */
+.st-refunded,.mo-chip.st-refunded{background:#DDF3E5;color:#0a6b34}
+.oc-alert.ref{background:#E6F6EC;border:1px solid #9AD3AE;color:#0a5a2d}

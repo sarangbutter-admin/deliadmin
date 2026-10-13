@@ -469,6 +469,13 @@
     return d;
   };
   H.flush = flush;
+  // owner records a refund (full or part) on a paid order
+  H.refundOrder = async function (id, amount, note, msgs) {
+    var d = await K.rpc("admin_refund_order", { p_id: id, p_amount: amount, p_note: note || "", p_msgs: msgs || [] }, true);
+    setOrderIn(DB.orders, d);
+    var o = DB.orders.find(function (x) { return x.id === id; }); if (o) SN.orders[id] = snapOrder(o);
+    return d;
+  };
   /* drafts: these screens only go live when the owner presses Publish */
   H.pending = function () { return H.admin ? Object.keys(HELD).filter(function (k) { return DB[k] !== undefined && SN.docs[k] !== undefined && J(DB[k]) !== SN.docs[k]; }) : []; };
   H.publish = function (keys) {

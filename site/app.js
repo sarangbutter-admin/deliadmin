@@ -858,7 +858,8 @@ const addMine=id=>{if(!MINE.includes(id))MINE.unshift(id);try{localStorage.setIt
 const mineOrders=()=>MINE.map(id=>DB.orders.find(o=>o.id===id)).filter(Boolean);
 function fmtLeft(ms){ms=Math.max(0,ms);const t=Math.floor(ms/1000),h=Math.floor(t/3600),m=Math.floor(t%3600/60),sec=t%60;return [h,m,sec].map(n=>String(n).padStart(2,"0")).join(":")}
 const CUS={awaiting:"Awaiting payment",review:"Checking payment",new:"Confirmed",baking:"Baking",cancelled:"Cancelled"};
-const cusLabel=o=>CUS[o.status]||stLabel(o.status,o.mode);
+const refundTxt=o=>o.refund?(o.refund.full?"Refunded":"Partly refunded"):"";
+const cusLabel=o=>(CUS[o.status]||stLabel(o.status,o.mode))+(o.refund?" · "+refundTxt(o):"");
 function releaseHold(o){if(SBH.on)return;if(o.tracked&&o.holds){Object.entries(o.items).forEach(([pid,n])=>{const p=prod(pid);if(p&&p.track)p.stock+=n});o.holds=false}}
 function takeHold(o){if(SBH.on)return;if(o.tracked&&!o.holds){Object.entries(o.items).forEach(([pid,n])=>{const p=prod(pid);if(p&&p.track)p.stock=Math.max(0,p.stock-n)});o.holds=true}}
 function expireOrders(){
@@ -870,7 +871,7 @@ function expireOrders(){
 const SEEN_KEY="delidome-seen-v1";let SEEN=0,SEENV=0;try{SEEN=+localStorage.getItem(SEEN_KEY)||0}catch(e){}
 function notifs(){
   const map=new Map();
-  mineOrders().forEach(o=>(o.msgs||[]).forEach(m=>{const k=o.id+"|"+m.at+"|"+m.text;const e=map.get(k);if(e){if(!e.ch.includes(m.channel))e.ch.push(m.channel)}else map.set(k,{o,m,ch:[m.channel]})}));
+  mineOrders().forEach(o=>(o.msgs||[]).filter(m=>m.status!=="refunded").forEach(m=>{const k=o.id+"|"+m.at+"|"+m.text;const e=map.get(k);if(e){if(!e.ch.includes(m.channel))e.ch.push(m.channel)}else map.set(k,{o,m,ch:[m.channel]})}));
   return [...map.values()].sort((a,b)=>b.m.at-a.m.at);
 }
 // a friendly nudge to rate orders that were delivered / picked up
@@ -888,22 +889,26 @@ function rnDone(id,forGood){RN_SEEN[id]=forGood?-1:Date.now();RN_SEEN._last=Date
   if(b.dataset.rnrate){rnDone(b.dataset.rnrate,true);openMO(b.dataset.rnrate);setTimeout(()=>{const r=$("#moCard .rstars");r&&r.scrollIntoView({block:"center"})},80)}
   else if(b.dataset.rnlater)rnDone(b.dataset.rnlater)})}
 // orders still waiting for payment: the bell tells the customer to pay before the time runs out
+const refundsNew=()=>mineOrders().filter(o=>o.refund&&o.refund.at>SEEN);
+const refundList=()=>mineOrders().filter(o=>o.refund);
 const payDue=()=>mineOrders().filter(o=>o.status==="awaiting"&&o.expiresAt&&o.expiresAt>Date.now());
 function renderBell(){
   applyCdLook();
   try{rateNudge()}catch(e){}
-  const list=notifs(),n=list.filter(x=>x.m.at>SEEN).length+activeBroadcasts().filter(x=>x.at>SEEN).length+payDue().length,b=$("#bellCount"),btn=$("#bellBtn");
+  const list=notifs(),n=list.filter(x=>x.m.at>SEEN).length+activeBroadcasts().filter(x=>x.at>SEEN).length+payDue().length+refundsNew().length,b=$("#bellCount"),btn=$("#bellBtn");
   if(!b)return;b.hidden=!n;b.textContent=n>9?"9+":n;btn.classList.toggle("ring",n>0);
   btn.setAttribute("aria-label",n?`Notifications, ${n} new`:"Notifications");
   if(!$("#bellPop").hidden)drawBell(list);
 }
 let BELLF="all";
-const ST_ICON={awaiting:"⏳",review:"🔎",new:"✅",baking:"🍪",ready:"🚚",completed:"🎉",cancelled:"❌"};
+const ST_ICON={refunded:"💸",awaiting:"⏳",review:"🔎",new:"✅",baking:"🍪",ready:"🚚",completed:"🎉",cancelled:"❌"};
 function drawBell(list){
   $("#bellTabs").innerHTML=[["all","All"],["orders","My orders"],["deals","News & deals"]].map(([k,l])=>`<button type="button" role="tab" data-belltab="${k}" aria-selected="${BELLF===k}">${l}</button>`).join("");
   const items=[];
   if(BELLF!=="deals")payDue().forEach(o=>{
     items.push({at:Infinity,h:`<button class="bell-it bell-pay" type="button" data-bellgo="${o.id}"><span class="bell-ic" aria-hidden="true">⏰</span><span class="bell-tx"><small>Order #${esc(o.code)} · waiting for payment</small><b>Pay now or you'll miss your cookies!</b><span class="bell-cdrow">Time left: <span class="cd" data-exp="${o.expiresAt}">${fmtLeft(o.expiresAt-Date.now())}</span></span></span><span class="bell-ch" aria-hidden="true">›</span></button>`})});
+  if(BELLF!=="deals")refundList().forEach(o=>{
+    items.push({at:o.refund.at,h:`<button class="bell-it${o.refund.at>SEENV?" new":""}" type="button" data-bellgo="${o.id}"><span class="bell-ic" aria-hidden="true">💸</span><span class="bell-tx"><small>Order #${esc(o.code)} · ${fmtAgo(o.refund.at)}</small><b>${o.refund.full?"Your order was refunded":"Part of your order was refunded"}: ${money(o.refund.amount)}</b><span>${o.refund.note?esc(o.refund.note)+" · ":""}It can take a few days to show in your account.</span></span><span class="bell-ch" aria-hidden="true">›</span></button>`})});
   if(BELLF!=="deals")list.forEach(x=>{const st=x.m.status,o=x.o,lab=st?stLabel(st,o.mode):"Update";
     items.push({at:x.m.at,h:`<button class="bell-it${x.m.at>SEENV?" new":""}" type="button" data-bellgo="${o.id}"><span class="bell-ic" aria-hidden="true">${ST_ICON[st]||"📦"}</span><span class="bell-tx"><small>Order · ${fmtAgo(x.m.at)}</small><b>Order #${esc(o.code)} · ${esc(lab)}</b><span>${esc(x.m.text)}</span></span><span class="bell-ch" aria-hidden="true">›</span></button>`})});
   if(BELLF!=="orders")DB.sales.filter(s=>saleStatus(s)!=="ended").forEach(s=>{const live=saleStatus(s)==="live";
@@ -914,7 +919,7 @@ function drawBell(list){
   $("#bellList").innerHTML=items.length?items.map(i=>i.h).join(""):`<div class="bell-empty">${BELLF==="deals"?"No news or deals right now.":"No notifications yet. Updates about your orders will show up here."}</div>`;
 }
 function openBell(){SEENV=SEEN;const list=notifs();drawBell(list);const pop=$("#bellPop");pop.hidden=false;$("#bellBtn").setAttribute("aria-expanded","true");
-  const latest=Math.max(list.reduce((a,x)=>Math.max(a,x.m.at),SEEN),...activeBroadcasts().map(x=>x.at));SEEN=latest;try{localStorage.setItem(SEEN_KEY,String(SEEN))}catch(e){}
+  const latest=Math.max(list.reduce((a,x)=>Math.max(a,x.m.at),SEEN),...refundList().map(o=>o.refund.at),...activeBroadcasts().map(x=>x.at));SEEN=latest;try{localStorage.setItem(SEEN_KEY,String(SEEN))}catch(e){}
   $("#bellCount").hidden=true;$("#bellBtn").classList.remove("ring")}
 function closeBell(){const p=$("#bellPop");if(p.hidden)return;p.hidden=true;$("#bellBtn").setAttribute("aria-expanded","false");renderBell()}
 $("#bellBtn").addEventListener("click",e=>{e.stopPropagation();$("#bellPop").hidden?openBell():closeBell()});
@@ -1015,7 +1020,7 @@ function renderMO(){
     MO.id=null;
     card.innerHTML=`<div class="sheet-top"><h3>My orders</h3><button class="x" type="button" data-moclose aria-label="Close">✕</button></div>
     ${list.length?`<div class="mo-list">${list.map(x=>`<button class="mo-card" type="button" data-moopen="${x.id}"><div class="mo-row"><span class="mo-code">${esc(x.code)}</span><span class="mo-chip st-${x.status}">${cusLabel(x)}</span></div>
-      <div class="mo-row"><span>Box of ${x.size} · ${money(x.total)}</span><span class="mo-sub">${fmtDay(x.day)}, ${esc(x.time)}</span></div>
+      <div class="mo-row"><span>Box of ${x.size} · ${money(x.total)}${x.refund?` · <b style="color:#0a7a3b">${refundTxt(x)} ${money(x.refund.amount)}</b>`:""}</span><span class="mo-sub">${fmtDay(x.day)}, ${esc(x.time)}</span></div>
       ${x.status==="completed"&&x.complaint?`<div class="mo-sub">Complaint: ${CP_STATUS[x.complaint.status]}</div>`:cwinOpen(x)?`<div class="mo-sub">Complaint window: <span class="cd" data-cexp="${cwinEnd(x)}">${fmtLeft(cwinEnd(x)-Date.now())}</span></div>`:""}${x.status==="completed"&&Object.keys(x.items).some(id=>prod(id)&&!(x.rated||{})[id])?`<div class="mo-sub">Tap to rate your cookies</div>`:""}
       ${x.status==="awaiting"?`<div class="mo-sub">Pay within <span class="cd" data-exp="${x.expiresAt}">${fmtLeft(x.expiresAt-Date.now())}</span></div>`:""}</button>`).join("")}</div>`:`<p class="hint">No orders yet in this browser. Build a box and it will show up here.</p>`}
     <details class="mo-find" ${list.length?"":"open"}><summary>Find an order</summary>
@@ -1028,6 +1033,7 @@ function renderMO(){
   const total=Math.max(1,(o.expiresAt||0)-(o.createdAt||0)||DB.settings.payWindowH*3600e3);
   card.innerHTML=`<div class="sheet-top"><div><button class="mo-back" type="button" data-moback>← All orders</button><h3 style="margin-top:6px">${esc(o.code)}</h3></div><button class="x" type="button" data-moclose aria-label="Close">✕</button></div>
   <div class="mo-row" style="margin:6px 0 14px"><span class="mo-chip st-${o.status}">${cusLabel(o)}</span><span class="mo-sub">${modeName(o)} · ${esc(whenTxt(o))}</span></div>
+  ${o.refund?`<div class="mo-pay" style="background:#E6F6EC;border-color:#9AD3AE"><b>💸 ${o.refund.full?"Refunded":"Partly refunded"}: ${money(o.refund.amount)}</b><span>${fmtDT(o.refund.at)}${o.refund.note?" · "+esc(o.refund.note):""}</span><span class="mo-sub">It can take a few days to show in your account.</span></div>`:""}
   ${o.status==="cancelled"?`<div class="mo-pay" style="background:#FCE3E8"><b>This order was cancelled.</b><span>${esc(o.cancelReason||"It was cancelled.")}</span><button class="btn btn-blue btn-sm" type="button" data-monew>Build a new box</button></div>`:""}
   ${awaiting?`<div class="mo-pay"><div><div class="mo-sub">Time left to pay</div><div class="mo-big cd" data-exp="${o.expiresAt}">${fmtLeft(o.expiresAt-Date.now())}</div><div class="mo-bar" style="margin-top:8px"><i data-expbar="${o.expiresAt}" data-expfrom="${o.createdAt||0}" style="width:${Math.max(0,Math.min(100,(o.expiresAt-Date.now())/total*100))}%"></i></div><p class="mo-sub" style="margin:8px 0 0">If it isn't paid in time, the order is cancelled automatically.</p></div>
     ${o.rejected?`<p class="err" style="margin:0">Your last proof couldn't be verified${o.rejected.reason?`: ${esc(o.rejected.reason)}`:""}. Please send it again.</p>`:""}
@@ -1040,7 +1046,7 @@ function renderMO(){
       <p class="err" id="mpErr" hidden></p>
       <button class="btn btn-blue" type="submit">I've paid, send proof</button></form></div>`:""}
   ${o.status==="review"&&o.proof?`<div class="mo-pay"><b>We're checking your payment.</b><span class="mo-sub">Sent ${fmtDT(o.proof.at)} by ${esc(o.proof.name)}. This page updates when it's confirmed.</span><img class="proofimg" src="${esc(imgOk(o.proof.img))}" alt="Your payment proof"></div>`:""}
-  <div class="dsec" style="margin-top:18px"><h4>Track your order</h4>${o.status==="cancelled"?`<p class="hint" style="margin:0">Cancelled ${o.cancelReason?"":""}</p>`:moSteps(o)}</div>
+  <div class="dsec" style="margin-top:18px"><h4>Track your order</h4>${o.status==="cancelled"?`<p class="hint" style="margin:0">Cancelled ${o.cancelReason?"":""}</p>`:moSteps(o)}${o.refund?`<ol class="track-l" style="margin-top:6px"><li class="done"><span class="dot">✓</span><span>${o.refund.full?"Refunded":"Partly refunded"} · ${money(o.refund.amount)}<small>${esc(fmtDT(o.refund.at))}</small></span></li></ol>`:""}</div>
   <div class="dsec"><h4>Your box of ${o.size}</h4><div class="summary" style="margin:0">${items}
     ${o.discount>0?`<div class="sl"><span>${esc(o.sale||"Flash sale")}</span><span class="num">−${money(o.discount)}</span></div>`:""}
     ${o.couponDisc>0?`<div class="sl"><span>Coupon ${esc(o.coupon)}</span><span class="num">−${money(o.couponDisc)}</span></div>`:""}
@@ -1150,7 +1156,7 @@ setInterval(()=>{tickCountdowns();if(Math.round(Date.now()/1000)%10===0)sweepOrd
 function toast(msg){if(typeof toastHook==="function")msg=toastHook(msg);const t=$("#toast");t.textContent=msg;t.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>t.hidden=true,Math.max(1600,msg.length*45))}
 function armed(btn,fn){if(btn.dataset.armed){fn();return}btn.dataset.armed="1";const t=btn.textContent;btn.textContent="Tap again to confirm";btn.classList.add("armed");
   setTimeout(()=>{if(btn.isConnected){delete btn.dataset.armed;btn.textContent=t;btn.classList.remove("armed")}},3000)}
-const stLabel=(k,mode)=>k==="ready"?(mode==="delivery"?"Out for delivery":"Ready for pickup"):k==="completed"?(mode==="delivery"?"Delivered":"Picked up"):STATUSES.find(x=>x[0]===k)[1];
+const stLabel=(k,mode)=>k==="refunded"?"Refunded":k==="ready"?(mode==="delivery"?"Out for delivery":"Ready for pickup"):k==="completed"?(mode==="delivery"?"Delivered":"Picked up"):STATUSES.find(x=>x[0]===k)[1];
 const NF_TYPES=[["news","📣","News"],["deal","🎁","Deal"],["flash","🔥","Flash sale"],["info","ℹ️","Info"]];
 const nfIcon=t=>(NF_TYPES.find(x=>x[0]===t)||NF_TYPES[0])[1],nfName=t=>(NF_TYPES.find(x=>x[0]===t)||NF_TYPES[0])[2];
 const bcActive=b=>!b.until||b.until>=ymd(today0());
@@ -1176,6 +1182,7 @@ function msgText(o,st){
     baking:`Hi ${nm}, your order ${o.code} is being baked now.`,
     ready:o.mode==="delivery"?`Hi ${nm}, your order ${o.code} is out for delivery.${o.courier||o.awb?` ${o.courier?"Courier: "+o.courier+". ":""}${o.awb?"Airway bill: "+o.awb+".":""}`:""} Please keep your phone close.`:`Hi ${nm}, your order ${o.code} is ready for pickup. Address: ${DB.settings.address}`,
     completed:o.mode==="delivery"?`Hi ${nm}, your order ${o.code} was delivered. Enjoy! Please keep your unboxing video, rate your cookies, and tell us within ${DB.settings.complaintWindowH} hours if anything is wrong.`:`Hi ${nm}, thanks for picking up order ${o.code}. Enjoy! You can rate your cookies in My orders and tell us within ${DB.settings.complaintWindowH} hours if anything is wrong.`,
+    refunded:`Hi ${nm}, your order ${o.code} was refunded${o.refund?": "+money(o.refund.amount):""}.${o.refund&&o.refund.note?" "+o.refund.note:""} It can take a few days to show in your account.`,
     cancelled:`Hi ${nm}, your order ${o.code} was cancelled.${o.cancelReason?" "+o.cancelReason:""} Contact us if you have questions.`
   };
   return t[st]||`Hi ${nm}, your order ${o.code} is now: ${stLabel(st,o.mode)}.`;
