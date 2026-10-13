@@ -32,7 +32,7 @@
       categories: res.categories || [], broadcasts: res.broadcasts || [],
       coupons: (res.coupons || []).map(function (c) { return Object.assign({}, c, { startsAt: "", endsAt: "", maxUses: 0 }); }),
       payMethods: Array.isArray(d.payMethods) ? d.payMethods : [],
-      proofpop: d.proofpop, page: d.page, marquee: d.marquee, announcer: d.announcer, thanks: d.thanks, orders: []
+      proofpop: d.proofpop, page: d.page, marquee: d.marquee, announcer: d.announcer, thanks: d.thanks, badges: d.badges, sold: res.sold || {}, orders: []
     };
     // coupons the visitor typed in earlier stay usable until the page is reloaded
     (DB.coupons || []).forEach(function (c) { if (c._srv && !raw.coupons.some(function (x) { return x.code === c.code; })) raw.coupons.push(c); });
@@ -125,7 +125,6 @@
   H.proof = async function (id, name, img) { var d = await K.rpc("submit_proof", { p_id: id, p_token: tk(id), p_name: name, p_img: img }); setOrderIn(DB.orders, d); var o = DB.orders.find(function (x) { return x.id === id; }); if (o && o.proof) o.proof.img = img; lastOrdSig = ""; };
   H.complain = async function (id, c) { var d = await K.rpc("submit_complaint", { p_id: id, p_token: tk(id), p: c }); setOrderIn(DB.orders, d); var o = DB.orders.find(function (x) { return x.id === id; }); if (o && o.complaint) o.complaint.photos = (c.photos || []).slice(); lastOrdSig = ""; };
   H.rate = async function (id, ratings) { var d = await K.rpc("submit_rating", { p_id: id, p_token: tk(id), p_ratings: ratings }); setOrderIn(DB.orders, d); lastOrdSig = ""; shopSig = ""; H.loadShop(true); };
-  H.review = async function (pid, user, stars, text) { await K.rpc("submit_review", { p_pid: pid, p_user: user, p_stars: stars, p_text: text, p_vid: localStorage.getItem(VID_KEY) || "" }); shopSig = ""; H.loadShop(true); };
   H.checkCoupon = async function (code, size, phone, editId) {
     var r = await K.rpc("check_coupon", { p_code: code, p_size: size, p_phone: phone || "", p_edit_id: editId || null });
     if (r && r.ok && r.coupon) {

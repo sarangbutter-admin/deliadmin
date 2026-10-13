@@ -140,6 +140,9 @@ function migrate(db){
   db.thanks=Object.assign(defaultThanks(),db.thanks||{});
   if(!Array.isArray(db.broadcasts))db.broadcasts=[];
   if(!Array.isArray(db.customers))db.customers=[];
+  if(!db.badges||!Array.isArray(db.badges.list))db.badges=defaultBadges();
+  if(db.badges.autoBest===undefined)db.badges.autoBest=true;if(!db.badges.bestTop)db.badges.bestTop=3;
+  if(db.settings&&db.settings.menuSort===undefined)db.settings.menuSort="popular";
   if(!Array.isArray(db.coupons))db.coupons=[{id:"cp1",code:"WELCOME10",desc:"10% off your box",type:"percent",value:10,minSpend:0,appliesTo:"all",startsAt:"",endsAt:"",maxUses:0,onePerPhone:true,stack:true,show:true,on:true}];
   db.alerts=deepFill(defaultAlerts(),db.alerts);
   if(!Array.isArray(db.payMethods))db.payMethods=[{id:"pm1",name:"Bank transfer",details:(db.settings&&db.settings.payBank)||"Example Bank\nAccount 123 456 7890\nName: Delidome Cookies",img:"",on:true}];
@@ -307,6 +310,32 @@ function dayOptions(){
 
 let shopCat="all";
 const catName = id => (DB.categories.find(c=>c.id===id)||{}).name||"";
+/* --- badges, best sellers and menu order --- */
+const BADGE_FONTS={display:["Bold display","var(--display)"],body:["Clean","var(--body)"],serif:["Serif",'Georgia,"Times New Roman",serif'],mono:["Typewriter",'ui-monospace,Menlo,Consolas,monospace'],hand:["Handwritten",'"Segoe Script","Bradley Hand","Comic Sans MS",cursive']};
+const BADGE_FX={shine:"Shine",pulse:"Pulse",bounce:"Bounce",glow:"Glow",wiggle:"Wiggle",none:"No effect"};
+function defaultBadges(){return {autoBest:true,bestTop:3,list:[
+  {id:"best",text:"🔥 Best seller",font:"display",color:"#FFFFFF",bg:"#C8102E",fx:"shine"},
+  {id:"wanted",text:"💛 Most wanted",font:"display",color:"#3B2200",bg:"#FFC53D",fx:"pulse"},
+  {id:"seasonal",text:"🍂 Seasonal",font:"display",color:"#FFFFFF",bg:"#B5541B",fx:"glow"},
+  {id:"new",text:"✨ New flavor",font:"display",color:"#FFFFFF",bg:"#000096",fx:"bounce"},
+  {id:"limited",text:"⏳ Limited",font:"display",color:"#FFFFFF",bg:"#6B2BD9",fx:"wiggle"}]}}
+const PAID_SET=["new","baking","ready","completed"];
+// how many of each flavor were bought (last 90 days). Visitors get the totals from the server.
+function soldMap(){
+  if(DB.sold)return DB.sold;   // shop visitors get the totals from the server
+  const m={},since=Date.now()-90*864e5;
+  DB.orders.forEach(o=>{if(!PAID_SET.includes(o.status)||(o.createdAt||0)<since)return;Object.entries(o.items||{}).forEach(([k,n])=>m[k]=(m[k]||0)+n)});
+  return m;
+}
+function bestIds(){const b=DB.badges;if(!b||!b.autoBest||!b.list.some(x=>x.id==="best"))return [];const sold=soldMap();
+  return DB.products.filter(p=>p.status!=="hidden"&&(sold[p.id]||0)>0).sort((a,c)=>(sold[c.id]||0)-(sold[a.id]||0)).slice(0,Math.max(1,Math.min(10,+b.bestTop||3))).map(p=>p.id)}
+function badgesOf(p,best){const ids=[...(p.badges||[])];if((best||bestIds()).includes(p.id)&&!ids.includes("best"))ids.unshift("best");
+  return ids.map(id=>(DB.badges.list||[]).find(b=>b.id===id)).filter(Boolean)}
+function badgeHTML(b){const f=(BADGE_FONTS[b.font]||BADGE_FONTS.display)[1],fx=BADGE_FX[b.fx]?b.fx:"shine";
+  const css=`color:${HEX6.test(b.color||"")?b.color:"#FFFFFF"};background:${HEX6.test(b.bg||"")?b.bg:"#C8102E"};font-family:${f}`;
+  return `<span class="bdg fx-${fx}" style="${esc(css)}">${esc(String(b.text||"").slice(0,24))}</span>`}
+function menuOrder(list){const by=DB.settings.menuSort||"popular",sold=soldMap(),pos=new Map(DB.products.map((p,i)=>[p.id,i]));
+  return list.slice().sort((a,b)=>(isOut(a)-isOut(b))||(by==="popular"?(sold[b.id]||0)-(sold[a.id]||0):0)||(pos.get(a.id)-pos.get(b.id)))}
 function renderMenu(){
   const vis=DB.products.filter(p=>p.status!=="hidden");
   const groups=DB.categories.map(c=>({id:c.id,name:c.name,n:vis.filter(p=>p.cat===c.id).length})).filter(g=>g.n);
@@ -315,13 +344,13 @@ function renderMenu(){
   if(shopCat!=="all"&&!groups.some(g=>g.id===shopCat))shopCat="all";
   $("#catBar").hidden=groups.length<2;
   $("#catBar").innerHTML=`<button class="fchip" type="button" data-scat="all" aria-pressed="${shopCat==="all"}">All</button>`+groups.map(g=>`<button class="fchip" type="button" data-scat="${g.id}" aria-pressed="${shopCat===g.id}">${esc(g.name)}</button>`).join("");
-  const prods=shopCat==="all"||groups.length<2?vis:vis.filter(p=>shopCat==="none"?!catName(p.cat):p.cat===shopCat);
-  $("#menuGrid").innerHTML = prods.map((p,i)=>{
+  const prods=menuOrder(shopCat==="all"||groups.length<2?vis:vis.filter(p=>shopCat==="none"?!catName(p.cat):p.cat===shopCat)),best=bestIds();
+  $("#menuGrid").innerHTML = prods.map((p,i)=>{const bd=badgesOf(p,best).slice(0,2);
     const out=isOut(p),img=true,badge=p.surcharge>0?`<span class="xtra">+${money(p.surcharge)}</span>`:"",
       low=!out&&p.track&&p.stock<=DB.settings.lowStockAt?`<span class="stk">Only ${p.stock} left</span>`:"";
     return `<div class="card${out?" out":""}${img?"":" noimg"}" data-id="${p.id}" style="--i:${i}">
-      ${img?`<div class="pwrap">${plateHTML(p)}${badge}${low}</div>`:""}
-      <h4>${esc(p.name)}${img?"":badge}</h4>${(()=>{const r=ratingOf(p);return `<button class="rate${r.n?"":" none"}" type="button" data-reviews="${p.id}" aria-label="${r.n?`${r.avg.toFixed(1)} out of 5 stars, ${r.n} reviews. Read or write a review for ${esc(p.name)}`:`Write the first review for ${esc(p.name)}`}">${r.n?`<span class="stars">★</span> ${r.avg.toFixed(1)} <span class="cnt">(${r.n})</span>`:"Write a review"}</button>`})()}<p>${esc(p.desc)}</p>
+      ${img?`<div class="pwrap">${plateHTML(p)}${badge}${low}${bd.length?`<div class="bdgs">${bd.map(badgeHTML).join("")}</div>`:""}</div>`:""}
+      <h4>${esc(p.name)}${img?"":badge}</h4>${(()=>{const r=ratingOf(p);return `<button class="rate${r.n?"":" none"}" type="button" data-reviews="${p.id}" aria-label="${r.n?`${r.avg.toFixed(1)} out of 5 stars, ${r.n} reviews. Read or write a review for ${esc(p.name)}`:`No reviews yet for ${esc(p.name)}`}">${r.n?`<span class="stars">★</span> ${r.avg.toFixed(1)} <span class="cnt">(${r.n})</span>`:"No reviews yet"}</button>`})()}<p>${esc(p.desc)}</p>
       ${out?`<span class="sold">${p.status==="soldout"?"Sold out today":"Out of stock"}</span>`:`<div class="stepper"><button type="button" data-act="dec" aria-label="Remove one ${esc(p.name)}">−</button><output aria-live="polite">0</output><button type="button" data-act="inc" aria-label="Add one ${esc(p.name)}">+</button></div>`}
     </div>`}).join("");
   $("#xtraHint").hidden=!prods.some(p=>p.surcharge>0&&!isOut(p));
@@ -581,18 +610,28 @@ function closeSheet(){$("#sheet").hidden=true;document.body.style.overflow="";$(
 /* --- shop wiring --- */
 /* --- shop reviews --- */
 const RV={pid:null,stars:0};
+function rvEligible(pid){return mineOrders().filter(o=>o.status==="completed"&&o.items&&o.items[pid]&&!(o.rated||{})[pid])}
 function renderReviews(){
   const p=prod(RV.pid);if(!p){closeReviews();return}
-  const {n,avg}=ratingOf(p),rs=p.reviews.slice().sort((a,b)=>b.at-a.at);
-  $("#rvCard").innerHTML=`<div class="sheet-top"><div><h3>${esc(p.name)}</h3><span class="note">${n?`<span class="stars">${starStr(Math.round(avg))}</span> ${avg.toFixed(1)} · ${n} review${n>1?"s":""}`:"No reviews yet. Be the first."}</span></div><button class="x" type="button" data-rvclose aria-label="Close">✕</button></div>
-  <div class="rvlist">${rs.map(r=>`<article class="rv"><div class="rv-h"><b>${esc(r.user)}</b>${r.example?`<span class="ex">Sample</span>`:""}<span class="stars" role="img" aria-label="${r.stars} out of 5 stars">${starStr(r.stars)}</span><small>${fmtShort(r.at)}</small></div><p>${esc(r.text)}</p></article>`).join("")}</div>
-  <form class="form" id="rvForm" novalidate style="margin-top:${n?18:10}px"><h4 style="margin:0">Write a review</h4>
-    <div class="field"><label for="rvName">Your name</label><input id="rvName" maxlength="30" autocomplete="name" placeholder="e.g. Sari W."></div>
+  const {n,avg}=ratingOf(p),rs=p.reviews.slice().sort((a,b)=>b.at-a.at),el=rvEligible(p.id);
+  if(!el.some(o=>o.id===RV.oid))RV.oid=el[0]?el[0].id:null;
+  $("#rvCard").innerHTML=`<div class="sheet-top"><div><h3>${esc(p.name)}</h3><span class="note">${n?`<span class="stars">${starStr(Math.round(avg))}</span> ${avg.toFixed(1)} · ${n} review${n>1?"s":""}`:"No reviews yet."}</span></div><button class="x" type="button" data-rvclose aria-label="Close">✕</button></div>
+  <div class="rvlist">${rs.map(r=>`<article class="rv"><div class="rv-h"><b>${esc(r.user)}</b>${r.example?`<span class="ex">Sample</span>`:""}${r.verified||r.orderId?`<span class="vf">✓ Bought it</span>`:""}<span class="stars" role="img" aria-label="${r.stars} out of 5 stars">${starStr(r.stars)}</span><small>${fmtShort(r.at)}</small></div><p>${esc(r.text)}</p></article>`).join("")}</div>
+  ${el.length?`<form class="form" id="rvForm" novalidate style="margin-top:${n?18:10}px"><h4 style="margin:0">Review your ${esc(p.name)}</h4>
+    ${el.length>1?`<div class="field"><label for="rvOrder">From order</label><select class="in" id="rvOrder">${el.map(o=>`<option value="${o.id}" ${o.id===RV.oid?"selected":""}>${esc(o.code)} · ${fmtDay(o.day)}</option>`).join("")}</select></div>`:`<p class="note" style="margin:0">From your order ${esc(el[0].code)}. One review per flavor per order.</p>`}
     <div class="field"><span class="lblx" id="rvRateLbl">Rating</span><div class="starpick" role="radiogroup" aria-labelledby="rvRateLbl">${[1,2,3,4,5].map(i=>`<button type="button" class="sp${i<=RV.stars?" on":""}" data-sp="${i}" role="radio" aria-checked="${i===RV.stars}" aria-label="${i} star${i>1?"s":""}">★</button>`).join("")}</div></div>
-    <div class="field"><label for="rvText">Your review</label><textarea id="rvText" rows="3" maxlength="280" placeholder="What did you think?"></textarea></div>
-    <p class="err" id="rvErr" hidden></p><button class="btn btn-blue" type="submit">Post review</button></form>`;
+    <div class="field"><label for="rvText">Your review (optional)</label><textarea id="rvText" rows="3" maxlength="200" placeholder="What did you think?"></textarea></div>
+    <p class="err" id="rvErr" hidden></p><button class="btn btn-blue" type="submit">Post review</button></form>`
+  :`<div class="rvlock"><b>Only customers who bought ${esc(p.name)} can review it.</b><span>You can review each flavor once per order, after it's delivered or picked up. Find it in My orders.</span></div>`}`;
 }
-function openReviews(id){RV.pid=id;RV.stars=0;renderReviews();$("#rvSheet").hidden=false;document.body.style.overflow="hidden"}
+// one rating per flavor per order, proven by the order's secret token on the server
+function rateOrder(o,rt){
+  if(SBH.on)return SBH.rate(o.id,rt);
+  o.rated=o.rated||{};Object.entries(rt).forEach(([pid,r])=>{const p=prod(pid);if(!p||o.rated[pid]||!o.items[pid])return;
+    p.reviews.push({id:uid(),user:(o.customer.name.split(' ')[0]||'Customer').slice(0,30),text:(r.comment||'').trim()||'Rated '+r.n+' out of 5',stars:r.n,at:Date.now(),src:'customer',orderId:o.id});o.rated[pid]=r.n});
+  saveDB();return Promise.resolve();
+}
+function openReviews(id){RV.pid=id;RV.stars=0;RV.oid=null;renderReviews();$("#rvSheet").hidden=false;document.body.style.overflow="hidden"}
 function closeReviews(){const m=$("#rvSheet");if(!m||m.hidden)return;m.hidden=true;document.body.style.overflow=""}
 $("#menuGrid").addEventListener("click",e=>{const b=e.target.closest("[data-reviews]");if(b)openReviews(b.dataset.reviews)});
 $("#rvSheet").addEventListener("click",e=>{
@@ -600,16 +639,15 @@ $("#rvSheet").addEventListener("click",e=>{
   const sp=e.target.closest("[data-sp]");
   if(sp){RV.stars=+sp.dataset.sp;document.querySelectorAll("#rvForm .sp").forEach(b=>{const i=+b.dataset.sp;b.classList.toggle("on",i<=RV.stars);b.setAttribute("aria-checked",i===RV.stars)})}
 });
+$("#rvSheet").addEventListener("change",e=>{if(e.target.id==="rvOrder")RV.oid=e.target.value});
 $("#rvSheet").addEventListener("submit",e=>{
   if(e.target.id!=="rvForm")return;e.preventDefault();
-  const p=prod(RV.pid),user=$("#rvName").value.trim(),text=$("#rvText").value.trim(),err=$("#rvErr");
+  const o=DB.orders.find(x=>x.id===RV.oid),text=$("#rvText").value.trim(),err=$("#rvErr");
   const fail=m=>{err.textContent=m;err.hidden=false};
-  if(!user)return fail("Please add your name.");
+  if(!o)return fail("We couldn't find your order. Open My orders and try again.");
   if(!RV.stars)return fail("Tap a star rating.");
-  if(text.length<3)return fail("Write a few words about the cookie.");
-  if(SBH.on){SBH.review(RV.pid,user,RV.stars,text).then(()=>{RV.stars=0;renderReviews();toast("Thanks for your review");renderMenu();renderStore()}).catch(ex=>fail(ex.message));return}
-  p.reviews.push({id:uid(),user,text,stars:RV.stars,at:Date.now(),src:"customer"});
-  saveDB();RV.stars=0;renderReviews();toast("Thanks for your review");renderMenu();renderStore();
+  const btn=e.target.querySelector("button[type=submit]");btn.disabled=true;
+  rateOrder(o,{[RV.pid]:{n:RV.stars,comment:text}}).then(()=>{RV.stars=0;renderReviews();toast("Thanks for your review");renderMenu();renderStore()}).catch(ex=>{btn.disabled=false;fail(ex.message)});
 });
 $("#catBar").addEventListener("click",e=>{const b=e.target.closest("[data-scat]");if(!b)return;shopCat=b.dataset.scat;renderMenu();renderStore()});
 function setCustom(n){S.cv=snapCustom(n);if(validCustom(S.size))setSize(S.cv);else renderStore()}
@@ -744,7 +782,21 @@ function notifs(){
   mineOrders().forEach(o=>(o.msgs||[]).forEach(m=>{const k=o.id+"|"+m.at+"|"+m.text;const e=map.get(k);if(e){if(!e.ch.includes(m.channel))e.ch.push(m.channel)}else map.set(k,{o,m,ch:[m.channel]})}));
   return [...map.values()].sort((a,b)=>b.m.at-a.m.at);
 }
+// a friendly nudge to rate orders that were delivered / picked up
+const RN_KEY="delidome-ratenudge-v1";let RN_SEEN={};try{RN_SEEN=JSON.parse(localStorage.getItem(RN_KEY)||"{}")||{}}catch(e){}
+function rateNudge(){
+  if(view!=="store"||!$("#rnPop")||!$("#rnPop").hidden||!$("#moSheet").hidden||!$("#sheet").hidden)return;
+  const o=mineOrders().find(o=>o.status==="completed"&&!(RN_SEEN[o.id]===-1||Date.now()-(RN_SEEN[o.id]||0)<864e5)&&Object.keys(o.items||{}).some(pid=>prod(pid)&&!(o.rated||{})[pid]));if(!o)return;
+  const left=Object.keys(o.items).filter(pid=>prod(pid)&&!(o.rated||{})[pid]).map(pid=>prod(pid).name);
+  $("#rnPop").innerHTML=`<div class="rn-ic" aria-hidden="true">⭐</div><div class="rn-tx"><b>How were your cookies?</b><span>Your order ${esc(o.code)} was ${o.mode==="delivery"?"delivered":"picked up"}. Rate ${esc(listJoin(left.slice(0,3)).replace(" or "," and "))}${left.length>3?" and more":""}.</span></div><div class="rn-act"><button class="btn btn-blue btn-sm" type="button" data-rnrate="${o.id}">Rate now</button><button class="linkbtn sm" type="button" data-rnlater="${o.id}">Later</button></div>`;
+  $("#rnPop").hidden=false;
+}
+function rnDone(id,forGood){RN_SEEN[id]=forGood?-1:Date.now();try{localStorage.setItem(RN_KEY,JSON.stringify(RN_SEEN))}catch(e){}$("#rnPop").hidden=true}
+{const rp=$("#rnPop");if(rp)rp.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
+  if(b.dataset.rnrate){rnDone(b.dataset.rnrate,true);openMO(b.dataset.rnrate);setTimeout(()=>{const r=$("#moCard .rstars");r&&r.scrollIntoView({block:"center"})},80)}
+  else if(b.dataset.rnlater)rnDone(b.dataset.rnlater)})}
 function renderBell(){
+  try{rateNudge()}catch(e){}
   const list=notifs(),n=list.filter(x=>x.m.at>SEEN).length+activeBroadcasts().filter(x=>x.at>SEEN).length,b=$("#bellCount"),btn=$("#bellBtn");
   if(!b)return;b.hidden=!n;b.textContent=n>9?"9+":n;btn.classList.toggle("ring",n>0);
   btn.setAttribute("aria-label",n?`Notifications, ${n} new`:"Notifications");
@@ -925,11 +977,8 @@ $("#moSheet").addEventListener("click",e=>{
   else if(d.rstar){MO.rate[d.rstar]=+d.n;b.parentElement.querySelectorAll('button').forEach(x=>x.classList.toggle('on',+x.dataset.n<=+d.n))}
   else if(d.rsubmit!==undefined){const o=DB.orders.find(x=>x.id===MO.id);if(!o)return;const picks=Object.entries(MO.rate);
     if(!picks.length){const er=$('#rtErr');er.textContent='Tap the stars to rate at least one flavor.';er.hidden=false;return}
-    if(SBH.on){const rt={};picks.forEach(([pid,n])=>{const c=($('#moCard').querySelector(`[data-rcomment="${pid}"]`)||{}).value||'';rt[pid]={n,comment:c.trim()}});
-      SBH.rate(o.id,rt).then(()=>{MO.rate={};toast('Thanks for your rating!');renderMO()}).catch(ex=>{const er=$('#rtErr');er.textContent=ex.message;er.hidden=false});return}
-    o.rated=o.rated||{};picks.forEach(([pid,n])=>{const p=prod(pid);if(!p||o.rated[pid])return;const c=($('#moCard').querySelector(`[data-rcomment="${pid}"]`)||{}).value||'';
-      p.reviews.push({id:uid(),user:(o.customer.name.split(' ')[0]||'Customer').slice(0,30),text:c.trim()||'Rated '+n+' out of 5',stars:n,at:Date.now(),src:'customer',orderId:o.id});o.rated[pid]=n});
-    MO.rate={};saveDB();toast('Thanks for your rating!');renderMO()}
+    const rt={};picks.forEach(([pid,n])=>{const c=($('#moCard').querySelector(`[data-rcomment="${pid}"]`)||{}).value||'';rt[pid]={n,comment:c.trim()}});
+    rateOrder(o,rt).then(()=>{MO.rate={};toast('Thanks for your rating!');renderMO();renderMenu()}).catch(ex=>{const er=$('#rtErr');er.textContent=ex.message;er.hidden=false})}
   else if(d.moedit)startEdit(d.moedit);
   else if(d.monew!==undefined){closeMO();scrollToEl($("#build"))}
   else if(d.mocancel){armed(b,()=>{const o=DB.orders.find(x=>x.id===d.mocancel);if(!o||o.status!=="awaiting")return;
@@ -1030,7 +1079,7 @@ function renderAdmin(){
   $("#cSales").textContent=nLive?nLive+" live":"";$("#cSales").hidden=!nLive;
   const lowN=DB.products.filter(isLow).length;
   $("#cProducts").textContent=lowN?lowN+" low":DB.products.filter(p=>p.status==="available").length;$("#cProducts").classList.toggle("live",!!lowN);
-  $("#amain").innerHTML=({notify:viewNotify,dashboard:viewDashboard,orders:viewOrders,sales:viewSales,products:viewProducts,complaints:viewComplaints,boxes:viewBoxes,marquee:viewMarquee,announcer:viewAnnouncer,coupons:viewCoupons,hero:viewHero,labels:viewLabels,landing:viewLanding,settings:viewSettings,customers:viewCustomers,team:viewTeam})[A.tab]();
+  $("#amain").innerHTML=({notify:viewNotify,dashboard:viewDashboard,orders:viewOrders,sales:viewSales,products:viewProducts,complaints:viewComplaints,boxes:viewBoxes,marquee:viewMarquee,announcer:viewAnnouncer,coupons:viewCoupons,hero:viewHero,labels:viewLabels,landing:viewLanding,settings:viewSettings,customers:viewCustomers,team:viewTeam,badges:viewBadges})[A.tab]();
   if(A.tab==="customers"&&(CU.list===null||CU.stale))loadCustomers();
   if(A.tab==="team"&&TM.list===null)loadTeam();
   tickAdmin();
@@ -1603,6 +1652,7 @@ function prow(p){return `<div class="prow" data-prow="${p.id}">
           <label class="af">Extra price per cookie<div class="money-in"><span>+${DB.settings.currency}</span><input class="in" type="number" min="0" step="0.25" data-k="products:${p.id}:surcharge" value="${p.surcharge}"></div></label>
         </div>
         <label class="af">Description<input class="in" data-k="products:${p.id}:desc" value="${esc(p.desc)}" maxlength="90"></label>
+        <div class="bdgpick"><span class="lblx">Badges</span>${(DB.badges.list||[]).map(b=>{const on=(p.badges||[]).includes(b.id),auto=b.id==="best"&&bestIds().includes(p.id)&&!on;return `<button type="button" class="bdgtog${on?" on":""}${auto?" auto":""}" data-pbadge="${p.id}:${esc(b.id)}" aria-pressed="${on}" title="${auto?"Added automatically (top seller)":on?"Tap to remove":"Tap to add"}">${badgeHTML(b)}${auto?"<small>auto</small>":""}</button>`}).join("")}<button type="button" class="linkbtn sm" data-gotab="badges">Edit badges</button></div>
         <div class="stockrow">
           <label class="sw"><input type="checkbox" data-k="products:${p.id}:track" ${p.track?"checked":""} aria-label="Track stock for ${esc(p.name)}"><span></span></label><span class="stlabel">Track stock</span>
           ${p.track?`<div class="stepin"><button class="ghost" type="button" data-stk="${p.id}:-1" aria-label="One less">−</button><input class="in" type="number" min="0" step="1" data-k="products:${p.id}:stock" value="${p.stock}" aria-label="Cookies in stock for ${esc(p.name)}"><button class="ghost" type="button" data-stk="${p.id}:1" aria-label="One more">+</button></div><button class="ghost" type="button" data-stk="${p.id}:12">+12</button>${p.stock<=0?`<span class="spill out">Out of stock</span>`:p.stock<=DB.settings.lowStockAt?`<span class="spill low">Low: ${p.stock} left</span>`:`<span class="spill ok">${p.stock} in stock</span>`}`:`<span class="note">Unlimited. Turn on to count cookies.</span>`}
@@ -2148,6 +2198,8 @@ am.addEventListener("click",e=>{
   else if(d.adel){armed(b,()=>{DB.addons=DB.addons.filter(a=>a.id!==d.adel);saveDB();toast("Extra deleted");renderAdmin()})}
   else if(d.closed){const i=+d.closed,c=DB.settings.closedWeekdays;DB.settings.closedWeekdays=c.includes(i)?c.filter(x=>x!==i):[...c,i];saveDB();toast("Saved");renderAdmin()}
   else if(d.pbg){openBg(d.pbg);return}
+  else if(d.pbadge){const [pid,bid]=d.pbadge.split(":"),p=prod(pid);if(!p)return;const l=p.badges||[];p.badges=l.includes(bid)?l.filter(x=>x!==bid):[...l,bid];if(!p.badges.length)delete p.badges;saveDB();renderAdmin();return}
+  else if(d.gotab){A.tab=d.gotab;renderAdmin();window.scrollTo(0,0);return}
   else if(d.rmimg){const p=prod(d.rmimg);delete p.img;delete p.cutout;delete p.tints;if(p.art==="photo")p.art="none";saveDB();toast("Photo removed. Look set to None.");renderAdmin()}
   else if(d.reset!==undefined){armed(b,()=>{DB=seedDB();saveDB();S=fresh();A.bakeDay=null;toast("Demo data restored");renderAdmin()})}
 });
@@ -2892,6 +2944,56 @@ $("#modal").addEventListener("change",async e=>{
     if(DB.categories.some(x=>x.id!==c.id&&x.name.toLowerCase()===v.toLowerCase())){el.value=c.name;err.textContent=`There's already a category called "${v}".`;err.hidden=false;return}
     err.hidden=true;c.name=v;saveDB();toast("Saved");renderAdmin();
   }
+});
+
+/* --- Badges (owner): design them, preview, save --- */
+const BD={edit:null};
+function bdSample(b){return `<div class="bdsample"><div class="pwrap">${plateHTML(DB.products.find(p=>p.status!=="hidden")||DB.products[0]||{id:"x",art:"bb"})}<div class="bdgs">${badgeHTML(b)}</div></div></div>`}
+function viewBadges(){
+  const B=DB.badges,E=BD.edit,sold=soldMap(),best=bestIds();
+  const used=id=>DB.products.filter(p=>(p.badges||[]).includes(id)).length+(id==="best"?best.filter(x=>!(prod(x).badges||[]).includes("best")).length:0);
+  const form=E?`<section class="panel"><h2>${E.isNew?"New badge":"Edit badge"}</h2><p class="sub">Nothing changes in the shop until you tap Save badge.</p>
+    <div class="bdprev" id="bdPrev">${bdSample(E)}<div class="bdprev-big">${badgeHTML(E)}</div></div>
+    <div class="grid2" style="margin-top:12px"><label class="af">Text (emoji welcome)<input class="in" id="bdText" maxlength="24" value="${esc(E.text)}" placeholder="🔥 Best seller"></label>
+      <label class="af">Font<select class="in" id="bdFont">${Object.entries(BADGE_FONTS).map(([k,[l]])=>`<option value="${k}" ${E.font===k?"selected":""}>${l}</option>`).join("")}</select></label></div>
+    <div class="grid3" style="margin-top:10px"><label class="af">Text colour<input type="color" id="bdColor" value="${E.color}"></label>
+      <label class="af">Badge colour<input type="color" id="bdBg" value="${E.bg}"></label>
+      <label class="af">Lively effect<select class="in" id="bdFx">${Object.entries(BADGE_FX).map(([k,l])=>`<option value="${k}" ${E.fx===k?"selected":""}>${l}</option>`).join("")}</select></label></div>
+    <p class="err" id="bdErr" hidden></p>
+    <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap"><button class="btn btn-blue" type="button" data-bdsave>Save badge</button><button class="btn btn-ghost-blue" type="button" data-bdcancel>Cancel</button></div></section>`:"";
+  return head("Badges","Small, eye-catching labels on flavor photos in the shop. Give flavors a badge from the Flavors tab.")+MOCK+`<div class="stack">${form}
+    <section class="panel"><div class="phead"><div><h2>Your badges</h2><p class="sub">Up to 2 badges show on each flavor.</p></div>${E?"":`<button class="btn btn-blue btn-sm" type="button" data-bdnew>+ New badge</button>`}</div>
+      <div style="display:grid;gap:10px;margin-top:10px">${B.list.length?B.list.map(b=>`<div class="pmcard bdrow"><div>${badgeHTML(b)}</div><span class="note" style="margin:0">${used(b.id)} flavor${used(b.id)===1?"":"s"}${b.id==="best"&&B.autoBest?" · automatic":""}</span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="ghost" type="button" data-bdedit="${esc(b.id)}">Edit</button><button class="danger" type="button" data-bddel="${esc(b.id)}">Delete</button></div></div>`).join(""):`<div class="empty">No badges. Tap + New badge.</div>`}</div></section>
+    <section class="panel"><h2>Best sellers</h2>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:10px"><label class="sw"><input type="checkbox" data-bdset="autoBest" ${B.autoBest?"checked":""}><span></span></label><span class="stlabel"><b>Give the "best" badge automatically</b><br><small style="color:var(--muted)">To the flavors bought most in the last 90 days.${B.list.some(x=>x.id==="best")?"":" (Needs a badge with the id \"best\": reset badges to get it back.)"}</small></span></div>
+      <label class="af" style="max-width:260px;margin-top:10px">How many top flavors<input class="in" type="number" min="1" max="10" step="1" data-bdset="bestTop" value="${B.bestTop}"></label>
+      <p class="note">Now: ${best.length?best.map(id=>`${esc(prod(id).name)} (${sold[id]})`).join(", "):"no paid orders yet"}</p></section>
+    <section class="panel"><h2>Menu order in the shop</h2>
+      <label class="af" style="max-width:420px;margin-top:8px">Sort flavors<select class="in" data-bdset="menuSort"><option value="popular" ${DB.settings.menuSort==="popular"?"selected":""}>Most picked first (out of stock always last)</option><option value="manual" ${DB.settings.menuSort==="manual"?"selected":""}>My order from the Flavors tab (out of stock always last)</option></select></label></section>
+    <div><button class="danger" type="button" data-bdreset>Reset badges to the starter set</button></div></div>`;
+}
+function bdRead(){const E=BD.edit;if(!E)return;const v=id=>{const el=$("#"+id);return el?el.value:""};
+  E.text=v("bdText");E.font=v("bdFont")||E.font;E.color=HEX6.test(v("bdColor"))?v("bdColor"):E.color;E.bg=HEX6.test(v("bdBg"))?v("bdBg"):E.bg;E.fx=v("bdFx")||E.fx;
+  const pv=$("#bdPrev");if(pv)pv.innerHTML=bdSample(E)+`<div class="bdprev-big">${badgeHTML(E)}</div>`}
+am.addEventListener("input",e=>{if(A.tab==="badges"&&/^bd/.test(e.target.id||""))bdRead()});
+am.addEventListener("change",e=>{const el=e.target;if(A.tab!=="badges")return;if(/^bd/.test(el.id||""))return bdRead();
+  const k=el.dataset.bdset;if(!k)return;
+  if(k==="autoBest")DB.badges.autoBest=el.checked;
+  else if(k==="bestTop")DB.badges.bestTop=Math.max(1,Math.min(10,Math.round(+el.value)||3));
+  else if(k==="menuSort")DB.settings.menuSort=el.value==="manual"?"manual":"popular";
+  saveDB();toast("Saved");renderAdmin()});
+am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b||A.tab!=="badges")return;const d=b.dataset;
+  if(d.bdnew!==undefined){BD.edit={isNew:true,id:"b"+uid().slice(0,6),text:"⭐ Chef's pick",font:"display",color:"#FFFFFF",bg:"#000096",fx:"shine"};renderAdmin();scrollTo(0,0)}
+  else if(d.bdedit){const x=DB.badges.list.find(y=>y.id===d.bdedit);if(x){BD.edit=Object.assign({},x);renderAdmin();scrollTo(0,0)}}
+  else if(d.bdcancel!==undefined){BD.edit=null;renderAdmin()}
+  else if(d.bdsave!==undefined){bdRead();const E=BD.edit,t=String(E.text||"").trim();
+    if(!t){const er=$("#bdErr");er.textContent="Type the badge text.";er.hidden=false;return}
+    const row={id:E.id,text:t.slice(0,24),font:BADGE_FONTS[E.font]?E.font:"display",color:E.color,bg:E.bg,fx:BADGE_FX[E.fx]?E.fx:"shine"};
+    const i=DB.badges.list.findIndex(x=>x.id===E.id);if(i>=0)DB.badges.list[i]=row;else DB.badges.list.push(row);
+    BD.edit=null;saveDB();renderAdmin();toast("Badge saved")}
+  else if(d.bddel){armed(b,()=>{const id=d.bddel;DB.badges.list=DB.badges.list.filter(x=>x.id!==id);DB.products.forEach(p=>{if(p.badges){p.badges=p.badges.filter(x=>x!==id);if(!p.badges.length)delete p.badges}});if(BD.edit&&BD.edit.id===id)BD.edit=null;saveDB();renderAdmin();toast("Badge deleted")})}
+  else if(d.bdreset!==undefined){armed(b,()=>{const keep=DB.badges;DB.badges=Object.assign(defaultBadges(),{autoBest:keep.autoBest,bestTop:keep.bestTop});const ids=DB.badges.list.map(x=>x.id);DB.products.forEach(p=>{if(p.badges){p.badges=p.badges.filter(x=>ids.includes(x));if(!p.badges.length)delete p.badges}});BD.edit=null;saveDB();renderAdmin();toast("Badges reset")})}
 });
 
 /* --- every colour picker also gets a hex code box (type #RRGGBB or pick) --- */

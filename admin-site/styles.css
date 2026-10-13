@@ -758,3 +758,40 @@ textarea.in{resize:vertical;border-radius:10px}
 .hexwrap input[type=color]{flex:0 0 52px;width:52px!important;height:42px!important;padding:2px;border:2px solid var(--line);border-radius:10px;background:var(--white)}
 .hexwrap .hexin{flex:1 1 auto;min-width:0;max-width:140px;font-family:ui-monospace,Menlo,Consolas,monospace;letter-spacing:.04em}
 .hexin.bad{border-color:var(--red);background:#FFF1F3}
+
+/* ---- flavor badges (small, noticeable, lively) ---- */
+.bdgs{position:absolute;left:50%;bottom:-6px;transform:translateX(-50%);z-index:2;display:flex;flex-direction:column;align-items:center;gap:3px;pointer-events:none;width:max-content;max-width:118%}
+.bdg{position:relative;display:inline-flex;align-items:center;gap:3px;overflow:hidden;font-weight:800;font-size:11px;line-height:1;letter-spacing:.01em;padding:4px 8px 4px;border-radius:999px;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,40,.25),inset 0 0 0 1.5px rgba(255,255,255,.35)}
+@media (max-width:420px){.bdg{font-size:10px;padding:3px 7px}}
+.bdg.fx-shine::after{content:"";position:absolute;top:0;left:-60%;width:40%;height:100%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.75),transparent);transform:skewX(-20deg);animation:bdgShine 2.6s ease-in-out infinite}
+@keyframes bdgShine{0%,55%{left:-60%}100%{left:130%}}
+.bdg.fx-pulse{animation:bdgPulse 1.6s ease-in-out infinite}
+@keyframes bdgPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.09)}}
+.bdg.fx-bounce{animation:bdgBounce 2.2s ease-in-out infinite}
+@keyframes bdgBounce{0%,60%,100%{transform:translateY(0)}70%{transform:translateY(-4px)}80%{transform:translateY(0)}88%{transform:translateY(-2px)}}
+.bdg.fx-glow{animation:bdgGlow 1.8s ease-in-out infinite}
+@keyframes bdgGlow{0%,100%{box-shadow:0 2px 6px rgba(0,0,40,.25),0 0 0 0 rgba(255,200,60,0)}50%{box-shadow:0 2px 6px rgba(0,0,40,.25),0 0 10px 3px rgba(255,200,60,.75)}}
+.bdg.fx-wiggle{animation:bdgWiggle 2.4s ease-in-out infinite}
+@keyframes bdgWiggle{0%,70%,100%{transform:rotate(0)}75%{transform:rotate(-6deg)}80%{transform:rotate(6deg)}85%{transform:rotate(-4deg)}90%{transform:rotate(3deg)}}
+@media (prefers-reduced-motion:reduce){.bdg,.bdg::after{animation:none!important}}
+/* review lock + verified tag + rate reminder */
+.rvlock{display:grid;gap:4px;margin-top:16px;background:var(--ice);border-radius:14px;padding:12px 14px;font-size:14px;color:var(--muted)}
+.rvlock b{color:var(--ink)}
+.rv-h .vf{font-size:11px;font-weight:700;color:#0A6B34;background:#E3F6EA;border-radius:999px;padding:1px 7px}
+.rnpop{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:60;width:min(440px,calc(100% - 24px));display:grid;grid-template-columns:auto 1fr;gap:4px 12px;align-items:center;background:var(--white);color:var(--ink);border:2px solid var(--blue);border-radius:20px;padding:12px 14px;box-shadow:0 12px 30px rgba(0,0,60,.25);animation:rnIn .35s ease-out}
+.rnpop[hidden]{display:none}
+.rnpop .rn-ic{font-size:26px;grid-row:span 2}
+.rnpop .rn-tx{display:grid;gap:2px;font-size:14px}.rnpop .rn-tx span{color:var(--muted);font-size:13px}
+.rnpop .rn-act{grid-column:2;display:flex;gap:12px;align-items:center;margin-top:4px}
+@keyframes rnIn{from{opacity:0;transform:translate(-50%,16px)}to{opacity:1;transform:translate(-50%,0)}}
+/* admin: badge picker + editor */
+.bdgpick{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px}
+.bdgpick .lblx{font-size:13px;font-weight:600;color:var(--muted);margin-right:2px}
+.bdgtog{border:2px dashed var(--line);background:transparent;border-radius:999px;padding:2px;opacity:.55;display:inline-flex;align-items:center;gap:4px;cursor:pointer}
+.bdgtog.on,.bdgtog.auto{opacity:1;border-style:solid;border-color:var(--blue)}
+.bdgtog small{font-size:10px;color:var(--muted);padding-right:6px}
+.bdprev{display:flex;gap:24px;align-items:center;justify-content:center;flex-wrap:wrap;background:var(--ice);border-radius:16px;padding:16px 16px 22px;margin-top:10px}
+.bdsample .pwrap{width:130px}
+.bdprev-big .bdg{font-size:15px;padding:6px 12px}
+.bdrow{display:grid!important;grid-template-columns:minmax(0,auto) 1fr auto;align-items:center;gap:10px}
+@media (max-width:520px){.bdrow{grid-template-columns:1fr}}
