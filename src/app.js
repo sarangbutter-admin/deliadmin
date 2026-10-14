@@ -123,6 +123,8 @@ function defaultAnnouncer(){return {on:true,sticky:true,size:"M",cdColor:"#C8102
   soon:{text:"Coming up: {name}, {off} {applies}.",label:"Starts in",bg:"#EEF0FF",ink:"#000096",img:""},
   fdlive:{text:"{name}: free delivery on {applies}.",label:"Ends in",bg:"#0A6B34",ink:"#FFFFFF",img:""},
   fdsoon:{text:"Coming up: {name}, free delivery on {applies}.",label:"Starts in",bg:"#E6F7EC",ink:"#0A6B34",img:""},
+  giftlive:{text:"🎁 {name}: free gifts with {applies}!",label:"Ends in",bg:"#FFE066",ink:"#000096",img:""},
+  giftsoon:{text:"Coming up: {name}, free gifts with {applies}.",label:"Starts in",bg:"#FFF7D6",ink:"#000096",img:""},
   mq:{bg:"#000096",ink:"#FFFFFF",font:"display",fontData:"",fontName:"",size:"M",speed:"medium",sepOn:true,sepImg:""},
   custom:{on:false,text:"Free delivery this weekend!",label:"Ends in",endsAt:"",bg:"#000096",ink:"#FFFFFF",img:""}}}
 function defaultMarquee(){return {on:true,texts:["Baked fresh every morning","Build a box your way","Pickup or local delivery","Order by 8pm for next-day cookies"],images:[],bg:"#000096",color:"#ffffff",font:"display",size:"M",speed:"medium",fontData:null,fontName:""}}
@@ -176,16 +178,38 @@ function saveDB(){const r=SBH.on?SBH.save():(()=>{try{localStorage.setItem(DB_KE
 /* --- pricing --- */
 const prod = (id,db=DB) => db.products.find(p=>p.id===id);
 const isFD=s=>s.type==="freedelivery";
+const isGift=s=>s.type==="gifts";
 function saleStatus(s,at=Date.now()){return at<s.start?"scheduled":at<s.end?"live":"ended"}
-function saleDiscount(s,base){if(isFD(s))return 0;return r2(s.type==="percent"?base*s.value/100:Math.min(s.value,base))}
+function saleDiscount(s,base){if(isFD(s)||isGift(s))return 0;return r2(s.type==="percent"?base*s.value/100:Math.min(s.value,base))}
 function validCustom(n,db=DB){const t=db.settings;return !!t.customOn&&Number.isInteger(n)&&n>=t.customMin&&n<=t.customMax&&(n-t.customMin)%t.customStep===0&&!db.sizes.some(s=>s.n===n)}
 function snapCustom(v,db=DB){const t=db.settings;v=Math.round(+v)||t.customMin;if(v<=t.customMin)return t.customMin;let n=t.customMin+Math.ceil((v-t.customMin)/t.customStep)*t.customStep;if(n>t.customMax)n=t.customMin+Math.floor((t.customMax-t.customMin)/t.customStep)*t.customStep;return n}
 function basePrice(n,db=DB){const sz=db.sizes.find(s=>s.n===n);return sz?sz.price:validCustom(n,db)?r2(n*db.settings.customPer):0}
 function bestSale(n,at=Date.now(),db=DB){
   const price=basePrice(n,db);if(!price)return null;
-  return db.sales.filter(s=>!isFD(s)&&saleStatus(s,at)==="live"&&(s.appliesTo==="all"||+s.appliesTo===n))
+  return db.sales.filter(s=>!isFD(s)&&!isGift(s)&&saleStatus(s,at)==="live"&&(s.appliesTo==="all"||+s.appliesTo===n))
     .sort((a,b)=>saleDiscount(b,price)-saleDiscount(a,price))[0]||null;
 }
+/* --- gifts: a "Gifts Day" promo gives free items with certain boxes (always-given ones, plus a random pick from a pool) --- */
+const giftQty=g=>Math.max(1,Math.min(10,Math.round(+g.qty)||1));
+function giftsOfSale(s,n){
+  const gs=(s.gifts||[]).filter(g=>g&&String(g.name||"").trim()&&(!(g.sizes&&g.sizes.length)||g.sizes.map(Number).includes(n)));
+  return {sale:s,fixed:gs.filter(g=>g.mode!=="random"),pool:gs.filter(g=>g.mode==="random"),pick:Math.max(1,Math.min(5,Math.round(+s.randomCount)||1))};
+}
+function giftPlan(n,at=Date.now(),db=DB){
+  return db.sales.filter(s=>isGift(s)&&saleStatus(s,at)==="live"&&(s.appliesTo==="all"||+s.appliesTo===n)).map(s=>giftsOfSale(s,n)).filter(x=>x.fixed.length||x.pool.length);
+}
+function giftPick(n,at=Date.now(),db=DB,rnd=Math.random){
+  const out=[];
+  giftPlan(n,at,db).forEach(pl=>{
+    pl.fixed.forEach(g=>out.push({id:g.id,name:g.name,qty:giftQty(g),promo:pl.sale.name}));
+    const pool=pl.pool.slice();
+    for(let i=0;i<pl.pick&&pool.length;i++){const g=pool.splice(Math.floor(rnd()*pool.length),1)[0];out.push({id:g.id,name:g.name,qty:giftQty(g),promo:pl.sale.name,random:true})}
+  });
+  return out;
+}
+const giftImg=id=>{for(const s of DB.sales||[])for(const g of s.gifts||[])if(g&&g.id===id&&g.img)return g.img;return ""};
+const giftChip=(g,extra="")=>{const im=g.img||giftImg(g.id);return `<span class="gc${extra}">${im?`<img src="${esc(imgOk(im))}" alt="" loading="lazy">`:`<i aria-hidden="true">🎁</i>`}<span>${esc(g.name)}${giftQty(g)>1?` ×${giftQty(g)}`:""}</span></span>`};
+const giftsHTML=o=>o.gifts&&o.gifts.length?`<div class="dsec"><h4>🎁 Your gifts</h4><div class="gl">${o.gifts.map(g=>giftChip(g,g.random?" rnd":"")).join("")}</div></div>`:"";
 const freeDelSale=(n,at=Date.now(),db=DB)=>db.sales.find(s=>isFD(s)&&saleStatus(s,at)==="live"&&(s.appliesTo==="all"||+s.appliesTo===n))||null;
 const cpNorm=v=>String(v||"").toUpperCase().replace(/[^A-Z0-9_-]/g,"").slice(0,20);
 const cpOff=c=>c.type==="percent"?`${c.value}% off`:c.type==="amount"?`${money(c.value)} off`:"Free delivery";
@@ -221,7 +245,7 @@ function quote(c,db=DB,{at=Date.now(),withDelivery=true}={}){
   const fee=withDelivery&&c.mode==="delivery"&&!fdSale&&!(cp&&cp.ok&&cp.freeDel)?(c.speed==="sameday"?(db.settings.samedayFee??db.settings.deliveryFee):db.settings.deliveryFee):0;
   return {base,sale,fdSale,discount,surcharge,addons,fee,coupon:cp&&cp.ok?cp.coupon:null,couponDisc,couponErr:cp&&!cp.ok?cp.err:"",total:r2(base-discount-couponDisc+surcharge+addons+fee)};
 }
-const saleOffText = s => isFD(s)?"Free delivery":s.type==="percent"?`${s.value}% off`:`${money(s.value)} off`;
+const saleOffText = s => isFD(s)?"Free delivery":isGift(s)?"Free gifts":s.type==="percent"?`${s.value}% off`:`${money(s.value)} off`;
 const saleAppliesText = s => s.appliesTo==="all"?"every box":`the box of ${s.appliesTo}`;
 
 /* --- cookie drawing --- */
@@ -501,7 +525,7 @@ function renderStore(){
     if(S.day)L+=`<div><dt>When</dt><dd>${S.mode!=="pickup"&&S.speed==="sameday"?"Today (sameday)":fmtDay(S.day)+(S.time?", "+esc(S.time):"")}</dd></div>`;
   }
   $("#lines").innerHTML=L;
-  renderCoupon(q);
+  renderCoupon(q);renderGiftBox();
   $("#total").textContent=money(total());
   const c=ctaState();
   for(const b of [$("#panelCta"),$("#barCta")]){b.textContent=c.label;b.disabled=c.dis;b.dataset.go=c.go||"";b.classList.toggle("ready",!c.dis&&c.go!=="when");b.classList.toggle("pickmore",c.go==="pick")}
@@ -527,8 +551,8 @@ function anCustomMs(c,now){if(!c.endsAt)return null;const t=new Date(c.endsAt).g
 function anFill(t,s){return t.replace(/\{name\}/g,s.name).replace(/\{off\}/g,saleOffText(s)).replace(/\{applies\}/g,saleAppliesText(s))}
 function anItems(now,AN){
   const items=[];
-  DB.sales.filter(s=>saleStatus(s,now)==="live").sort((a,b)=>a.end-b.end).forEach(s=>{const k=isFD(s)?"fdlive":"live";items.push({k,text:anFill(AN[k].text,s),end:s.end})});
-  DB.sales.filter(s=>saleStatus(s,now)==="scheduled"&&s.start-now<24*3600e3).sort((a,b)=>a.start-b.start).forEach(s=>{const k=isFD(s)?"fdsoon":"soon";items.push({k,text:anFill(AN[k].text,s),end:s.start})});
+  DB.sales.filter(s=>saleStatus(s,now)==="live").sort((a,b)=>a.end-b.end).forEach(s=>{const k=isFD(s)?"fdlive":isGift(s)?"giftlive":"live";items.push({k,text:anFill(AN[k].text,s),end:s.end})});
+  DB.sales.filter(s=>saleStatus(s,now)==="scheduled"&&s.start-now<24*3600e3).sort((a,b)=>a.start-b.start).forEach(s=>{const k=isFD(s)?"fdsoon":isGift(s)?"giftsoon":"soon";items.push({k,text:anFill(AN[k].text,s),end:s.start})});
   const cm=AN.custom.on&&AN.custom.text?anCustomMs(AN.custom,now):undefined;
   if(AN.custom.on&&AN.custom.text&&!(cm!==null&&cm!==undefined&&cm<=0))items.push({k:"custom",text:AN.custom.text,end:cm===undefined||cm===null?null:now+cm});
   return items;
@@ -630,6 +654,15 @@ function celebrate(){if(RM)return;const p=$(".boxpanel");
 function setSize(n){S.size=n;if(S.box.length>n)S.box=S.box.slice(0,n);if(!full())S.step=1;renderStore()}
 
 function cpMsg(t,ok){const m=$("#cpnMsg");if(!m)return;m.textContent=t||"";m.hidden=!t;m.classList.toggle("ok",!!ok);clearTimeout(cpMsg.t);if(t)cpMsg.t=setTimeout(()=>{m.hidden=true},6000)}
+function renderGiftBox(){
+  const el=$("#giftBox");if(!el)return;const pl=giftPlan(S.size);
+  if(!pl.length){el.hidden=true;el.innerHTML="";return}
+  const cl=(v,d)=>/^(#[0-9a-f]{6}|transparent)$/i.test(v||"")?v:d;
+  el.hidden=false;
+  el.innerHTML=pl.map(x=>{const t=x.sale;
+    return `<div class="gb fx-${["shine","pulse","none"].includes(t.fx)?t.fx:"shine"}" style="--gb:${cl(t.bg,"#FFE066")};--gi:${cl(t.ink,"#000096")}"><span class="gtag">${esc(t.tag||"Gifts")}</span><b class="gt">${esc(t.name)}</b>
+      <p class="gs">Free with your box of ${S.size}:</p><div class="gl">${x.fixed.map(g=>giftChip(g)).join("")}${x.pool.length?`<span class="gc rnd"><i aria-hidden="true">🎲</i><span>${x.pick>1?x.pick+" surprise gifts":"1 surprise gift"}</span></span><div class="gpool">${x.pool.map(g=>giftChip(g," sm")).join("")}</div>`:""}</div></div>`}).join("");
+}
 function renderCoupon(q){
   const ap=$("#cpnAp"),f=$("#cpnForm"),ch=$("#cpnCh");if(!ap)return;
   const on=!!(S.coupon&&q.coupon);
@@ -834,7 +867,7 @@ $("#coForm").addEventListener("submit",e=>{
   const cust={name:$("#coName").value.trim(),email:$("#coEmail").value.trim(),phone:$("#coPhone").value.trim(),
     address:del?$("#coAddr").value.trim():""};
   const fields={notify,size:S.size,items:countItems(S.box),mode:S.mode,speed:S.mode==="pickup"?"pickup":S.speed,day:S.day,time:S.time,note:S.note,addons:[...S.addons],sale:q.sale?`${q.sale.name} (${saleOffText(q.sale)})`:"",
-    base:q.base,discount:q.discount,coupon:q.coupon?q.coupon.code:"",couponDisc:q.couponDisc,surcharge:q.surcharge,addonsTotal:q.addons,fee:q.fee,total:q.total,customer:cust};
+    base:q.base,discount:q.discount,coupon:q.coupon?q.coupon.code:"",couponDisc:q.couponDisc,surcharge:q.surcharge,addonsTotal:q.addons,fee:q.fee,total:q.total,customer:cust,gifts:ed&&ed.size===S.size&&ed.gifts?ed.gifts:giftPick(S.size)};
   if(SBH.on){
     const btn=f.querySelector("button[type=submit]");if(btn)btn.disabled=true;
     SBH.place({notify,shuffled:!!S.shuf,size:S.size,items:fields.items,mode:S.mode,speed:S.speed,day:S.day,time:S.time,note:S.note,addons:[...S.addons],coupon:fields.coupon,expectTotal:q.total,customer:cust},ed).then(o=>{
@@ -961,7 +994,7 @@ function drawBell(list){
   if(BELLF!=="deals")list.forEach(x=>{const st=x.m.status,o=x.o,lab=st?stLabel(st,o.mode):"Update";
     items.push({at:x.m.at,h:`<button class="bell-it${x.m.at>SEENV?" new":""}" type="button" data-bellgo="${o.id}"><span class="bell-ic" aria-hidden="true">${ST_ICON[st]||"📦"}</span><span class="bell-tx"><small>Order · ${fmtAgo(x.m.at)}</small><b>Order #${esc(o.code)} · ${esc(lab)}</b><span>${esc(x.m.text)}</span></span><span class="bell-ch" aria-hidden="true">›</span></button>`})});
   if(BELLF!=="orders")DB.sales.filter(s=>saleStatus(s)!=="ended").forEach(s=>{const live=saleStatus(s)==="live";
-    items.push({at:live?s.start:Date.now()-3600e3,h:`<button class="bell-it" type="button" data-bellsale="1"><span class="bell-ic" aria-hidden="true">${isFD(s)?"🚚":"🔥"}</span><span class="bell-tx"><small>${isFD(s)?"Free delivery":"Flash sale"} · ${live?fmtAgo(s.start):"coming up"}</small><b>${isFD(s)?(live?"Free delivery now":"Free delivery soon"):(live?"Flash sale now":"Flash sale soon")}: ${esc(s.name)}</b><span>${esc(saleOffText(s))} · ${live?"ends":"starts"} ${fmtDT(live?s.end:s.start)}</span></span><span class="bell-ch" aria-hidden="true">›</span></button>`})});
+    items.push({at:live?s.start:Date.now()-3600e3,h:`<button class="bell-it" type="button" data-bellsale="1"><span class="bell-ic" aria-hidden="true">${isFD(s)?"🚚":isGift(s)?"🎁":"🔥"}</span><span class="bell-tx"><small>${isFD(s)?"Free delivery":isGift(s)?"Gifts":"Flash sale"} · ${live?fmtAgo(s.start):"coming up"}</small><b>${isFD(s)?(live?"Free delivery now":"Free delivery soon"):isGift(s)?(live?"Gifts now":"Gifts soon"):(live?"Flash sale now":"Flash sale soon")}: ${esc(s.name)}</b><span>${esc(saleOffText(s))} · ${live?"ends":"starts"} ${fmtDT(live?s.end:s.start)}</span></span><span class="bell-ch" aria-hidden="true">›</span></button>`})});
   if(BELLF!=="orders")activeBroadcasts().forEach(x=>{const p=x.pid&&prod(x.pid);
     items.push({at:x.at,h:`<button class="bell-it${x.at>SEENV?" new":""}" type="button" ${p?`data-bellprod="${p.id}"`:'data-bellnone="1"'}><span class="bell-ic" aria-hidden="true">${nfIcon(x.type)}</span><span class="bell-tx"><small>${nfName(x.type)} · ${fmtAgo(x.at)}</small><b>${esc(x.title)}</b>${x.text?`<span>${esc(x.text)}</span>`:""}${x.code?`<span class="bell-code" data-bellcode="${esc(x.code)}">🎟 ${esc(x.code)} · tap to copy</span>`:""}${p?`<span style="color:var(--blue);font-weight:600">View ${esc(p.name)}</span>`:""}</span>${p?`<span class="bell-ch" aria-hidden="true">›</span>`:"<span></span>"}</button>`})});
   items.sort((a,b)=>(b.at===Infinity)-(a.at===Infinity)||b.at-a.at);
@@ -1102,6 +1135,7 @@ function renderMO(){
     ${o.couponDisc>0?`<div class="sl"><span>Coupon ${esc(o.coupon)}</span><span class="num">−${money(o.couponDisc)}</span></div>`:""}
     <div><span>${modeName(o)}</span><span class="num">${o.fee?money(o.fee):"Free"}</span></div>
     <div class="t"><span>Total</span><span class="num">${money(o.total)}</span></div></div>${o.mode==="delivery"?`<p class="hint">Your box may be split into smaller or bigger boxes for delivery safety.</p>`:""}</div>
+  ${giftsHTML(o)}
   ${o.status==="completed"?ratingHTML(o):""}
   ${complaintHTML(o)}
   ${awaiting?`<div class="mo-row" style="margin-top:14px;gap:8px"><button class="btn btn-ghost-blue btn-sm" type="button" data-moedit="${o.id}">Edit order</button><button class="danger" type="button" data-mocancel="${o.id}">Cancel order</button></div><p class="hint">You can change your box until you've sent payment.</p>`:""}`;
@@ -1207,7 +1241,7 @@ setInterval(()=>{tickCountdowns();if(Math.round(Date.now()/1000)%10===0)sweepOrd
 
 /* ================= ADMIN ================= */
 const A={sel:new Set(),lbl:null,lblPrev:"sample",rvPid:null,tab:"dashboard",nf:{type:"news",title:"",text:"",pid:"",code:"",until:""},dd:"today",vr:"today",dsig:"",filter:"all",od:"all",q:"",pq:"",pcat:"all",modal:null,np:null,bakeDay:null,openOrder:null,
-  draft:{kind:"discount",name:"Flash sale",type:"percent",value:20,appliesTo:"all",startMode:"now",startAt:"",durH:1,durM:0}};
+  draft:{kind:"discount",name:"Flash sale",type:"percent",value:20,appliesTo:"all",startMode:"now",startAt:"",durH:1,durM:0,gifts:[],randomCount:1,tag:"Gifts",bg:"#FFE066",ink:"#000096",fx:"shine"}};
 function toast(msg){if(typeof toastHook==="function")msg=toastHook(msg);const t=$("#toast");t.textContent=msg;t.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>t.hidden=true,Math.max(1600,msg.length*45))}
 let saveTimer;function saveSoon(){clearTimeout(saveTimer);saveTimer=setTimeout(()=>{saveDB();toast("Saved")},500)}
 function armed(btn,fn){if(btn.dataset.armed){fn();return}btn.dataset.armed="1";const t=btn.textContent;btn.textContent="Tap again to confirm";btn.classList.add("armed");
@@ -1284,6 +1318,8 @@ function anSample(k,AN){
   if(k==="soon")return {text:fill(AN.soon.text),ms:A.anEnd-Date.now()};
   if(k==="fdlive")return {text:fdf(AN.fdlive.text),ms:A.anEnd-Date.now()};
   if(k==="fdsoon")return {text:fdf(AN.fdsoon.text),ms:A.anEnd-Date.now()};
+  if(k==="giftlive")return {text:fdf(AN.giftlive.text).replace("Free delivery weekend","Gifts Day"),ms:A.anEnd-Date.now()};
+  if(k==="giftsoon")return {text:fdf(AN.giftsoon.text).replace("Free delivery weekend","Gifts Day"),ms:A.anEnd-Date.now()};
   return {text:AN.custom.text||"Your announcement here",ms:anCustomMs(AN.custom,Date.now())};
 }
 // sample line-up for the marquee preview: a sale, a free delivery promo and the owner's note
@@ -1319,7 +1355,7 @@ function viewAnnouncer(){
   const AN=anDraft(),K=A.anK,c=AN[K];
   const col=(label,path,v)=>`<label class="af">${label}<input type="color" data-an="${path}" value="${v}" style="width:100%;height:42px"></label>`;
   const sw=(label,path,v,hint)=>`<div class="stockrow" style="display:flex;align-items:center;gap:10px;margin-top:10px"><label class="sw"><input type="checkbox" data-an="${path}" ${v?"checked":""} aria-label="${label}"><span></span></label><span class="stlabel"><b>${label}</b>${hint?`<br><small style="color:var(--muted)">${hint}</small>`:""}</span></div>`;
-  const tabs=[["live","Flash sale live"],["soon","Coming up"],["fdlive","Free delivery live"],["fdsoon","Free delivery coming up"],["custom","My announcement"],["mq","Running text (2 or more)"]].map(([k,l])=>`<button type="button" class="${K===k?"on":""}" data-ank="${k}" style="border:1.5px solid ${K===k?"var(--blue)":"var(--line)"};background:${K===k?"var(--blue)":"#fff"};color:${K===k?"#fff":"var(--ink)"};border-radius:99px;padding:7px 14px;font-weight:600;cursor:pointer">${l}</button>`).join("");
+  const tabs=[["live","Flash sale live"],["soon","Coming up"],["fdlive","Free delivery live"],["fdsoon","Free delivery coming up"],["giftlive","Gifts live"],["giftsoon","Gifts coming up"],["custom","My announcement"],["mq","Running text (2 or more)"]].map(([k,l])=>`<button type="button" class="${K===k?"on":""}" data-ank="${k}" style="border:1.5px solid ${K===k?"var(--blue)":"var(--line)"};background:${K===k?"var(--blue)":"#fff"};color:${K===k?"#fff":"var(--ink)"};border-radius:99px;padding:7px 14px;font-weight:600;cursor:pointer">${l}</button>`).join("");
   return head("Announcer","The banner pinned under the shop header. It stays visible while customers scroll. Changes appear in the preview only; nothing goes live until you press Save.")+MOCK+`
   <div class="stack">
     <section class="panel">
@@ -1338,7 +1374,7 @@ function viewAnnouncer(){
       ${sw("Lively countdown","cdFx",AN.cdFx,"The timer pulses and a shine sweeps across the banner.")}
     </section>
     ${K==="mq"?anMqPanel(AN):`<section class="panel">
-      <h2>${({live:"When a flash sale is live",soon:"When a sale is coming up (24 hours before)",fdlive:"When a free delivery promo is live",fdsoon:"When a free delivery promo is coming up (24 hours before)",custom:"Your own announcement"})[K]}</h2>
+      <h2>${({live:"When a flash sale is live",soon:"When a sale is coming up (24 hours before)",fdlive:"When a free delivery promo is live",fdsoon:"When a free delivery promo is coming up (24 hours before)",giftlive:"When a Gifts promo is live",giftsoon:"When a Gifts promo is coming up (24 hours before)",custom:"Your own announcement"})[K]}</h2>
       ${K==="custom"?sw("Show my announcement","custom.on",AN.custom.on,"Shows when no flash sale is live or coming up."):""}
       <label class="af" style="margin-top:10px">Message<input class="in" data-an="${K}.text" maxlength="140" value="${esc(c.text)}"></label>
       ${K!=="custom"?`<p class="note" style="margin:4px 0 0">Fill-ins: <b>{name}</b> sale name, <b>{off}</b> discount, <b>{applies}</b> what it covers.</p>`:""}
@@ -1775,6 +1811,7 @@ function openOrder(id){
     <div class="dsec"><h4>Customer</h4><dl class="dl"><dt>Name</dt><dd>${esc(o.customer.name)}</dd><dt>WhatsApp</dt><dd>${esc(o.customer.phone)}</dd><dt>Email</dt><dd>${esc(o.customer.email)}</dd>${o.customer.address?`<dt>Address</dt><dd>${esc(o.customer.address)}</dd>`:""}</dl></div>
     <div class="dsec"><h4>When</h4><dl class="dl"><dt>${modeName(o)}</dt><dd>${esc(whenTxt(o))}</dd>${o.note?`<dt>Note</dt><dd>${esc(o.note)}</dd>`:""}</dl></div>
     <div class="dsec"><h4>Box of ${o.size}</h4><div class="ditems">${Object.entries(o.items).map(([id,n])=>{const p=prod(id);return `<div>${miniPlate(p)}<span>${n} × ${esc(p?p.name:"Removed flavor")}</span><span class="num">${p&&p.surcharge>0?"+"+money(p.surcharge*n):""}</span></div>`}).join("")}</div></div>
+    ${giftsHTML(o)}
     <div class="dsec"><h4>Payment</h4><div class="summary" style="margin:0">
       <div><span>Box of ${o.size}</span><span class="num">${money(o.base)}</span></div>
       ${o.discount>0?`<div class="sl"><span>${esc(o.sale||"Flash sale")}</span><span class="num">−${money(o.discount)}</span></div>`:""}
@@ -2138,11 +2175,12 @@ function viewSales(){
   return head("Flash sales","Run a timed discount on the box price. The shop shows a banner with a live countdown and the sale price on each box.")+MOCK+`
   <div class="two">
     <section class="panel">
-      <h2>New flash sale or promo</h2><p class="sub">${D.kind==="freedelivery"?"A timed free delivery promo. While it is live, delivery and sameday shipment cost nothing. It shows in the announcer like a flash sale.":"Discounts apply to the box price. Premium flavors, extras and delivery are charged at full price."}</p>
+      <h2>New flash sale or promo</h2><p class="sub">${D.kind==="gifts"?"Customers who buy the box sizes you choose get free gifts with their order. Gifts can always be given, or picked at random from a pool. They show under the coupon box in the shop.":D.kind==="freedelivery"?"A timed free delivery promo. While it is live, delivery and sameday shipment cost nothing. It shows in the announcer like a flash sale.":"Discounts apply to the box price. Premium flavors, extras and delivery are charged at full price."}</p>
       <form id="saleForm" class="stack" style="gap:14px" novalidate>
-        <div class="af">What kind of promo<div class="seg"><button type="button" data-skind="discount" aria-pressed="${D.kind!=="freedelivery"}">Discount on the box</button><button type="button" data-skind="freedelivery" aria-pressed="${D.kind==="freedelivery"}">Free delivery</button></div></div>
-        <label class="af">${D.kind==="freedelivery"?"Promo name":"Sale name"}<input class="in" data-draft="name" value="${esc(D.name)}" maxlength="40"></label>
-        ${D.kind==="freedelivery"?"":`<div class="stack" style="gap:14px">
+        <div class="af">What kind of promo<div class="seg"><button type="button" data-skind="discount" aria-pressed="${D.kind!=="freedelivery"}">Discount on the box</button><button type="button" data-skind="freedelivery" aria-pressed="${D.kind==="freedelivery"}">Free delivery</button><button type="button" data-skind="gifts" aria-pressed="${D.kind==="gifts"}">Gifts</button></div></div>
+        <label class="af">${D.kind==="freedelivery"||D.kind==="gifts"?"Promo name":"Sale name"}<input class="in" data-draft="name" value="${esc(D.name)}" maxlength="40"></label>
+        ${D.kind==="gifts"?giftForm(D):""}
+        ${D.kind==="freedelivery"||D.kind==="gifts"?"":`<div class="stack" style="gap:14px">
           <div class="af">Discount<div class="seg"><button type="button" data-stype="percent" aria-pressed="${D.type==="percent"}">Percent off</button><button type="button" data-stype="amount" aria-pressed="${D.type==="amount"}">Amount off</button></div></div>
           <label class="af">${D.type==="percent"?"Percent":"Amount"}<div class="money-in"><span>${D.type==="percent"?"%":DB.settings.currency}</span><input class="in" type="number" min="1" step="${D.type==="percent"?1:.5}" data-draft="value" value="${D.value}"></div></label>
         </div>`}
@@ -2155,21 +2193,44 @@ function viewSales(){
         </div>
         <div class="preview" id="salePreview"></div>
         <p class="err" id="saleErr" hidden></p>
-        <button class="btn btn-blue" type="submit">${D.kind==="freedelivery"?"Create free delivery promo":"Create flash sale"}</button>
+        <button class="btn btn-blue" type="submit">${D.kind==="gifts"?"Create gifts promo":D.kind==="freedelivery"?"Create free delivery promo":"Create flash sale"}</button>
       </form>
     </section>
     <section class="panel">
       <h2>All sales and promos</h2><p class="sub">Live sales show in the shop now. Scheduled ones show a "coming up" banner in the last 24 hours before they start.</p>
       ${list.length?`<div class="sales">${list.map(s=>{const st=saleStatus(s,now);return `<div class="sale ${st}">
-        <div><span class="spill ${st}">${st==="live"?"Live":st==="scheduled"?"Scheduled":"Ended"}</span>${isFD(s)?` <span class="spill ${st}" style="background:#0A6B34;color:#fff">🚚 Free delivery</span>`:""}<h3>${esc(s.name)}</h3><p>${saleOffText(s)} ${saleAppliesText(s)} · ${fmtDT(s.start)} to ${fmtDT(s.end)}</p></div>
+        <div><span class="spill ${st}">${st==="live"?"Live":st==="scheduled"?"Scheduled":"Ended"}</span>${isFD(s)?` <span class="spill ${st}" style="background:#0A6B34;color:#fff">🚚 Free delivery</span>`:""}${isGift(s)?` <span class="spill ${st}" style="background:#C8102E;color:#fff">🎁 ${esc(s.tag||"Gifts")}</span>`:""}<h3>${esc(s.name)}</h3><p>${isGift(s)?`${(s.gifts||[]).length} gift${(s.gifts||[]).length===1?"":"s"} with`:saleOffText(s)} ${saleAppliesText(s)} · ${fmtDT(s.start)} to ${fmtDT(s.end)}</p></div>
         <div class="cd"><small>${st==="live"?"Ends in":st==="scheduled"?"Starts in":"Ended"}</small><span data-cd="${s.id}"></span></div>
         <div class="acts">${st==="live"?`<button class="ghost" type="button" data-sale-end="${s.id}">End now</button><button class="ghost" type="button" data-sale-extend="${s.id}">+30 min</button>`:""}${st==="scheduled"?`<button class="ghost" type="button" data-sale-start="${s.id}">Start now</button>`:""}<button class="danger" type="button" data-sale-del="${s.id}">Delete</button></div>
       </div>`}).join("")}</div>`:`<div class="empty">No flash sales yet.</div>`}
     </section>
   </div>`;
 }
+function giftForm(D){
+  const sizes=DB.sizes.slice().sort((a,b)=>a.n-b.n),col=(l,k)=>`<label class="af">${l}<input type="color" data-draft="${k}" value="${/^#[0-9a-f]{6}$/i.test(D[k])?D[k]:"#FFE066"}" style="width:100%;height:42px"></label>`;
+  return `<div class="stack" style="gap:14px">
+    <div class="grid2"><label class="af">Red tag text<input class="in" data-draft="tag" maxlength="14" value="${esc(D.tag)}"></label>
+      <label class="af">Effect<select class="in" data-draft="fx">${[["shine","Shimmer"],["pulse","Pulse glow"],["none","None"]].map(([k,l])=>`<option value="${k}" ${D.fx===k?"selected":""}>${l}</option>`).join("")}</select></label></div>
+    <div class="grid2">${col("Gift card background","bg")}${col("Gift card text color","ink")}</div>
+    <div class="af">Gifts<p class="note" style="margin:0">Add each free item. Tick the box sizes that get it (none ticked = every size in this promo). "Always" gifts are given to everyone. "Random" gifts go into a pool, and each order gets a random pick from it.</p></div>
+    <div class="stack" style="gap:10px">${D.gifts.map((g,i)=>`<div class="pmcard" style="gap:8px">
+      <div class="colin"><div style="width:56px;height:56px;border-radius:12px;background:#EEF0FF;display:grid;place-items:center;overflow:hidden;flex:none">${g.img?`<img src="${esc(g.img)}" alt="" style="width:100%;height:100%;object-fit:cover">`:`<span style="font-size:26px">🎁</span>`}</div>
+        <input class="in" data-gname="${i}" maxlength="40" placeholder="Gift name (e.g. Tote bag)" value="${esc(g.name)}" aria-label="Gift ${i+1} name">
+        <button class="danger" type="button" data-gdel="${i}" aria-label="Remove gift ${i+1}">×</button></div>
+      <div class="colin" style="flex-wrap:wrap"><label class="ghost mqbtn">${g.img?"Replace picture":"Upload picture"}<input type="file" accept="image/*" hidden data-gimg="${i}"></label>${g.img?`<button class="danger" type="button" data-gimgrm="${i}">Remove picture</button>`:""}
+        <div class="money-in" style="max-width:110px"><input class="in" type="number" min="1" max="10" step="1" data-gqty="${i}" value="${giftQty(g)}" aria-label="Quantity"><span style="padding-right:8px">pcs</span></div>
+        <div class="seg"><button type="button" data-gmode="${i}:fixed" aria-pressed="${g.mode!=="random"}">Always</button><button type="button" data-gmode="${i}:random" aria-pressed="${g.mode==="random"}">Random</button></div></div>
+      <div class="chips">${sizes.map(z=>`<button class="fchip" type="button" data-gsize="${i}:${z.n}" aria-pressed="${(g.sizes||[]).map(Number).includes(z.n)}">Box of ${z.n}</button>`).join("")}</div></div>`).join("")||`<p class="note">No gifts yet.</p>`}
+      <button class="ghost" type="button" data-gadd style="justify-self:start">+ Add gift</button></div>
+    ${D.gifts.some(g=>g.mode==="random")?`<label class="af">Random gifts each order gets<div class="money-in"><input class="in" type="number" min="1" max="5" step="1" data-draft="randomCount" value="${D.randomCount}"><span style="padding-right:10px">from the pool</span></div></label>`:""}
+  </div>`;
+}
 function updatePreview(){
   const el=$("#salePreview");if(!el)return;const D=A.draft;
+  if(D.kind==="gifts"){const mins0=(+D.durH||0)*60+(+D.durM||0),sizes=DB.sizes.slice().sort((a,b)=>a.n-b.n).filter(z=>D.appliesTo==="all"||String(z.n)===D.appliesTo);
+    el.innerHTML=sizes.map(z=>{const x=giftsOfSale(D,z.n),t=x.fixed.map(g=>g.name+(giftQty(g)>1?" ×"+giftQty(g):"")).concat(x.pool.length?[(x.pick>1?x.pick+" random gifts":"1 random gift")+" ("+x.pool.map(g=>g.name).join(", ")+")"]:[]);
+      return `<div><span>Box of ${z.n}</span><span>${t.length?esc(t.join(" + ")):"—"}</span></div>`}).join("")+`<div><span>Runs for</span><span>${mins0?(Math.floor(mins0/60)?Math.floor(mins0/60)+" hr ":"")+(mins0%60?mins0%60+" min":""):"—"}</span></div>`;
+    document.querySelectorAll("[data-dur]").forEach(b=>b.setAttribute("aria-pressed",+b.dataset.dur===mins0));return}
   if(D.kind==="freedelivery"){const mins0=(+D.durH||0)*60+(+D.durM||0);el.innerHTML=`<div><span>Delivery fee</span><span><s>${money(DB.settings.deliveryFee)}</s> → <b>Free</b></span></div><div><span>Runs for</span><span>${mins0?(Math.floor(mins0/60)?Math.floor(mins0/60)+" hr ":"")+(mins0%60?mins0%60+" min":""):"—"}</span></div>`;document.querySelectorAll("[data-dur]").forEach(b=>b.setAttribute("aria-pressed",+b.dataset.dur===mins0));return}
   const fake={type:D.type,value:+D.value||0};
   const sizes=DB.sizes.filter(s=>D.appliesTo==="all"||String(s.n)===D.appliesTo);
@@ -2182,13 +2243,17 @@ function createSale(){
   const D=A.draft,err=$("#saleErr"),mins=(+D.durH||0)*60+(+D.durM||0),val=+D.value;
   const fail=m=>{err.textContent=m;err.hidden=false},fd=D.kind==="freedelivery";
   if(!D.name.trim())return fail(fd?"Give the promo a name.":"Give the sale a name.");
-  if(!fd&&!(val>0))return fail("Set a discount above 0.");
-  if(!fd&&D.type==="percent"&&val>90)return fail("Percent off can be at most 90%.");
+  const gf=D.kind==="gifts";
+  if(gf){const gs=D.gifts.filter(g=>String(g.name||"").trim());if(!gs.length)return fail("Add at least one gift with a name.");if(DB.sizes.length&&!DB.sizes.some(z=>D.appliesTo==="all"||String(z.n)===D.appliesTo))return fail("Pick a box size.")}
+  if(!fd&&!gf&&!(val>0))return fail("Set a discount above 0.");
+  if(!fd&&!gf&&D.type==="percent"&&val>90)return fail("Percent off can be at most 90%.");
   if(mins<5)return fail("Make it run at least 5 minutes.");
   let start=Date.now();
   if(D.startMode==="later"){start=new Date(D.startAt).getTime();if(!D.startAt||isNaN(start))return fail("Pick a start date and time.");if(start<Date.now()-60e3)return fail("The start time is in the past.")}
-  DB.sales.push({id:uid(),name:D.name.trim(),type:fd?"freedelivery":D.type,value:fd?0:val,appliesTo:D.appliesTo,start,end:start+mins*60e3});
-  saveDB();toast(D.startMode==="now"?(fd?"Free delivery promo is live":"Flash sale is live"):(fd?"Free delivery promo scheduled":"Flash sale scheduled"));renderAdmin();
+  if(gf)DB.sales.push({id:uid(),name:D.name.trim(),type:"gifts",value:0,appliesTo:D.appliesTo,start,end:start+mins*60e3,tag:String(D.tag||"Gifts").trim().slice(0,14)||"Gifts",bg:D.bg,ink:D.ink,fx:D.fx,randomCount:Math.max(1,Math.min(5,Math.round(+D.randomCount)||1)),
+    gifts:D.gifts.filter(g=>String(g.name||"").trim()).map(g=>({id:g.id||uid(),name:String(g.name).trim().slice(0,40),img:g.img||"",qty:giftQty(g),mode:g.mode==="random"?"random":"fixed",sizes:(g.sizes||[]).map(Number)}))});
+  else DB.sales.push({id:uid(),name:D.name.trim(),type:fd?"freedelivery":D.type,value:fd?0:val,appliesTo:D.appliesTo,start,end:start+mins*60e3});
+  saveDB();toast(D.startMode==="now"?(gf?"Gifts promo is live":fd?"Free delivery promo is live":"Flash sale is live"):(gf?"Gifts promo scheduled":fd?"Free delivery promo scheduled":"Flash sale scheduled"));if(gf)A.draft.gifts=[];renderAdmin();
 }
 
 /* --- Flavors --- */
@@ -2803,7 +2868,7 @@ am.addEventListener("click",e=>{
   if(d.stk){const [id,delta]=d.stk.split(":"),p=prod(id);if(p){p.stock=Math.max(0,(p.stock||0)+(+delta));saveDB();toast(`${p.name}: ${p.stock} in stock`);renderAdmin()}return}
   if(d.filter){A.filter=d.filter;renderAdmin()}
   else if(d.bake){A.bakeDay=d.bake;renderAdmin()}
-  else if(d.skind){A.draft.kind=d.skind;if(d.skind==="freedelivery"&&/^Flash sale/.test(A.draft.name))A.draft.name="Free delivery weekend";if(d.skind==="discount"&&/^Free delivery/.test(A.draft.name))A.draft.name="Flash sale";renderAdmin()}
+  else if(d.skind){A.draft.kind=d.skind;if(d.skind==="freedelivery"&&/^Flash sale/.test(A.draft.name))A.draft.name="Free delivery weekend";if(d.skind==="discount"&&/^(Free delivery|Gifts)/.test(A.draft.name))A.draft.name="Flash sale";if(d.skind==="gifts"&&/^(Flash sale|Free delivery)/.test(A.draft.name))A.draft.name="Gifts Day";if(d.skind==="gifts"&&!A.draft.gifts.length)A.draft.gifts.push({id:uid(),name:"",img:"",qty:1,mode:"fixed",sizes:[]});if(d.skind!=="gifts"&&/^Gifts/.test(A.draft.name))A.draft.name="Flash sale";renderAdmin()}
   else if(d.stype){A.draft.type=d.stype;if(d.stype==="amount"&&A.draft.value>20)A.draft.value=5;renderAdmin()}
   else if(d.smode){A.draft.startMode=d.smode;if(d.smode==="later"&&!A.draft.startAt){const t=new Date(Date.now()+3600e3);t.setMinutes(0,0,0);A.draft.startAt=new Date(t.getTime()-t.getTimezoneOffset()*60e3).toISOString().slice(0,16)}renderAdmin()}
   else if(d.dur){A.draft.durH=Math.floor(+d.dur/60);A.draft.durM=+d.dur%60;document.querySelector('[data-draft="durH"]').value=A.draft.durH;document.querySelector('[data-draft="durM"]').value=A.draft.durM;updatePreview()}
@@ -3689,6 +3754,18 @@ function cpOpen(c){
       c.dispatchEvent(new Event("input",{bubbles:true}));c.dispatchEvent(new Event("change",{bubbles:true}));close()}});
   show();
 }
+/* --- gift editor (Flash sales tab, Gifts promo) --- */
+am.addEventListener("input",e=>{const el=e.target,D=A.draft;
+  if(el.dataset.gname!==undefined){D.gifts[+el.dataset.gname].name=el.value;updatePreview()}
+  else if(el.dataset.gqty!==undefined){D.gifts[+el.dataset.gqty].qty=Math.max(1,Math.min(10,Math.round(+el.value)||1));updatePreview()}});
+am.addEventListener("change",async e=>{const el=e.target;if(el.dataset.gimg===undefined)return;const f=el.files[0];if(!f)return;
+  try{A.draft.gifts[+el.dataset.gimg].img=await lpResize(f,320,true);renderAdmin();toast("Picture added")}catch(err){toast(err.message)}});
+am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;const d=b.dataset,D=A.draft;
+  if(d.gadd!==undefined){if(D.gifts.length>=8){toast("Up to 8 gifts per promo.");return}D.gifts.push({id:uid(),name:"",img:"",qty:1,mode:"fixed",sizes:[]});renderAdmin()}
+  else if(d.gdel!==undefined){D.gifts.splice(+d.gdel,1);renderAdmin()}
+  else if(d.gimgrm!==undefined){D.gifts[+d.gimgrm].img="";renderAdmin()}
+  else if(d.gmode!==undefined){const[i,m]=d.gmode.split(":");D.gifts[+i].mode=m;renderAdmin()}
+  else if(d.gsize!==undefined){const[i,n]=d.gsize.split(":"),g=D.gifts[+i],a=(g.sizes||[]).map(Number);g.sizes=a.includes(+n)?a.filter(x=>x!==+n):a.concat(+n);renderAdmin()}});
 /* --- every colour picker also gets a hex code box (type #RRGGBB or pick) --- */
 function hexify(){
   document.querySelectorAll('#adminView input[type=color]:not([data-hexed]),#modal input[type=color]:not([data-hexed])').forEach(c=>{

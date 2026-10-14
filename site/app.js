@@ -120,6 +120,8 @@ function defaultAnnouncer(){return {on:true,sticky:true,size:"M",cdColor:"#C8102
   soon:{text:"Coming up: {name}, {off} {applies}.",label:"Starts in",bg:"#EEF0FF",ink:"#000096",img:""},
   fdlive:{text:"{name}: free delivery on {applies}.",label:"Ends in",bg:"#0A6B34",ink:"#FFFFFF",img:""},
   fdsoon:{text:"Coming up: {name}, free delivery on {applies}.",label:"Starts in",bg:"#E6F7EC",ink:"#0A6B34",img:""},
+  giftlive:{text:"🎁 {name}: free gifts with {applies}!",label:"Ends in",bg:"#FFE066",ink:"#000096",img:""},
+  giftsoon:{text:"Coming up: {name}, free gifts with {applies}.",label:"Starts in",bg:"#FFF7D6",ink:"#000096",img:""},
   mq:{bg:"#000096",ink:"#FFFFFF",font:"display",fontData:"",fontName:"",size:"M",speed:"medium",sepOn:true,sepImg:""},
   custom:{on:false,text:"Free delivery this weekend!",label:"Ends in",endsAt:"",bg:"#000096",ink:"#FFFFFF",img:""}}}
 function defaultMarquee(){return {on:true,texts:["Baked fresh every morning","Build a box your way","Pickup or local delivery","Order by 8pm for next-day cookies"],images:[],bg:"#000096",color:"#ffffff",font:"display",size:"M",speed:"medium",fontData:null,fontName:""}}
@@ -171,16 +173,38 @@ function saveDB(){const r=SBH.on?SBH.save():(()=>{try{localStorage.setItem(DB_KE
 /* --- pricing --- */
 const prod = (id,db=DB) => db.products.find(p=>p.id===id);
 const isFD=s=>s.type==="freedelivery";
+const isGift=s=>s.type==="gifts";
 function saleStatus(s,at=Date.now()){return at<s.start?"scheduled":at<s.end?"live":"ended"}
-function saleDiscount(s,base){if(isFD(s))return 0;return r2(s.type==="percent"?base*s.value/100:Math.min(s.value,base))}
+function saleDiscount(s,base){if(isFD(s)||isGift(s))return 0;return r2(s.type==="percent"?base*s.value/100:Math.min(s.value,base))}
 function validCustom(n,db=DB){const t=db.settings;return !!t.customOn&&Number.isInteger(n)&&n>=t.customMin&&n<=t.customMax&&(n-t.customMin)%t.customStep===0&&!db.sizes.some(s=>s.n===n)}
 function snapCustom(v,db=DB){const t=db.settings;v=Math.round(+v)||t.customMin;if(v<=t.customMin)return t.customMin;let n=t.customMin+Math.ceil((v-t.customMin)/t.customStep)*t.customStep;if(n>t.customMax)n=t.customMin+Math.floor((t.customMax-t.customMin)/t.customStep)*t.customStep;return n}
 function basePrice(n,db=DB){const sz=db.sizes.find(s=>s.n===n);return sz?sz.price:validCustom(n,db)?r2(n*db.settings.customPer):0}
 function bestSale(n,at=Date.now(),db=DB){
   const price=basePrice(n,db);if(!price)return null;
-  return db.sales.filter(s=>!isFD(s)&&saleStatus(s,at)==="live"&&(s.appliesTo==="all"||+s.appliesTo===n))
+  return db.sales.filter(s=>!isFD(s)&&!isGift(s)&&saleStatus(s,at)==="live"&&(s.appliesTo==="all"||+s.appliesTo===n))
     .sort((a,b)=>saleDiscount(b,price)-saleDiscount(a,price))[0]||null;
 }
+/* --- gifts: a "Gifts Day" promo gives free items with certain boxes (always-given ones, plus a random pick from a pool) --- */
+const giftQty=g=>Math.max(1,Math.min(10,Math.round(+g.qty)||1));
+function giftsOfSale(s,n){
+  const gs=(s.gifts||[]).filter(g=>g&&String(g.name||"").trim()&&(!(g.sizes&&g.sizes.length)||g.sizes.map(Number).includes(n)));
+  return {sale:s,fixed:gs.filter(g=>g.mode!=="random"),pool:gs.filter(g=>g.mode==="random"),pick:Math.max(1,Math.min(5,Math.round(+s.randomCount)||1))};
+}
+function giftPlan(n,at=Date.now(),db=DB){
+  return db.sales.filter(s=>isGift(s)&&saleStatus(s,at)==="live"&&(s.appliesTo==="all"||+s.appliesTo===n)).map(s=>giftsOfSale(s,n)).filter(x=>x.fixed.length||x.pool.length);
+}
+function giftPick(n,at=Date.now(),db=DB,rnd=Math.random){
+  const out=[];
+  giftPlan(n,at,db).forEach(pl=>{
+    pl.fixed.forEach(g=>out.push({id:g.id,name:g.name,qty:giftQty(g),promo:pl.sale.name}));
+    const pool=pl.pool.slice();
+    for(let i=0;i<pl.pick&&pool.length;i++){const g=pool.splice(Math.floor(rnd()*pool.length),1)[0];out.push({id:g.id,name:g.name,qty:giftQty(g),promo:pl.sale.name,random:true})}
+  });
+  return out;
+}
+const giftImg=id=>{for(const s of DB.sales||[])for(const g of s.gifts||[])if(g&&g.id===id&&g.img)return g.img;return ""};
+const giftChip=(g,extra="")=>{const im=g.img||giftImg(g.id);return `<span class="gc${extra}">${im?`<img src="${esc(imgOk(im))}" alt="" loading="lazy">`:`<i aria-hidden="true">🎁</i>`}<span>${esc(g.name)}${giftQty(g)>1?` ×${giftQty(g)}`:""}</span></span>`};
+const giftsHTML=o=>o.gifts&&o.gifts.length?`<div class="dsec"><h4>🎁 Your gifts</h4><div class="gl">${o.gifts.map(g=>giftChip(g,g.random?" rnd":"")).join("")}</div></div>`:"";
 const freeDelSale=(n,at=Date.now(),db=DB)=>db.sales.find(s=>isFD(s)&&saleStatus(s,at)==="live"&&(s.appliesTo==="all"||+s.appliesTo===n))||null;
 const cpNorm=v=>String(v||"").toUpperCase().replace(/[^A-Z0-9_-]/g,"").slice(0,20);
 const cpOff=c=>c.type==="percent"?`${c.value}% off`:c.type==="amount"?`${money(c.value)} off`:"Free delivery";
@@ -216,7 +240,7 @@ function quote(c,db=DB,{at=Date.now(),withDelivery=true}={}){
   const fee=withDelivery&&c.mode==="delivery"&&!fdSale&&!(cp&&cp.ok&&cp.freeDel)?(c.speed==="sameday"?(db.settings.samedayFee??db.settings.deliveryFee):db.settings.deliveryFee):0;
   return {base,sale,fdSale,discount,surcharge,addons,fee,coupon:cp&&cp.ok?cp.coupon:null,couponDisc,couponErr:cp&&!cp.ok?cp.err:"",total:r2(base-discount-couponDisc+surcharge+addons+fee)};
 }
-const saleOffText = s => isFD(s)?"Free delivery":s.type==="percent"?`${s.value}% off`:`${money(s.value)} off`;
+const saleOffText = s => isFD(s)?"Free delivery":isGift(s)?"Free gifts":s.type==="percent"?`${s.value}% off`:`${money(s.value)} off`;
 const saleAppliesText = s => s.appliesTo==="all"?"every box":`the box of ${s.appliesTo}`;
 /* --- cookie drawing --- */
 let gid=0;
@@ -491,7 +515,7 @@ function renderStore(){
     if(S.day)L+=`<div><dt>When</dt><dd>${S.mode!=="pickup"&&S.speed==="sameday"?"Today (sameday)":fmtDay(S.day)+(S.time?", "+esc(S.time):"")}</dd></div>`;
   }
   $("#lines").innerHTML=L;
-  renderCoupon(q);
+  renderCoupon(q);renderGiftBox();
   $("#total").textContent=money(total());
   const c=ctaState();
   for(const b of [$("#panelCta"),$("#barCta")]){b.textContent=c.label;b.disabled=c.dis;b.dataset.go=c.go||"";b.classList.toggle("ready",!c.dis&&c.go!=="when");b.classList.toggle("pickmore",c.go==="pick")}
@@ -517,8 +541,8 @@ function anCustomMs(c,now){if(!c.endsAt)return null;const t=new Date(c.endsAt).g
 function anFill(t,s){return t.replace(/\{name\}/g,s.name).replace(/\{off\}/g,saleOffText(s)).replace(/\{applies\}/g,saleAppliesText(s))}
 function anItems(now,AN){
   const items=[];
-  DB.sales.filter(s=>saleStatus(s,now)==="live").sort((a,b)=>a.end-b.end).forEach(s=>{const k=isFD(s)?"fdlive":"live";items.push({k,text:anFill(AN[k].text,s),end:s.end})});
-  DB.sales.filter(s=>saleStatus(s,now)==="scheduled"&&s.start-now<24*3600e3).sort((a,b)=>a.start-b.start).forEach(s=>{const k=isFD(s)?"fdsoon":"soon";items.push({k,text:anFill(AN[k].text,s),end:s.start})});
+  DB.sales.filter(s=>saleStatus(s,now)==="live").sort((a,b)=>a.end-b.end).forEach(s=>{const k=isFD(s)?"fdlive":isGift(s)?"giftlive":"live";items.push({k,text:anFill(AN[k].text,s),end:s.end})});
+  DB.sales.filter(s=>saleStatus(s,now)==="scheduled"&&s.start-now<24*3600e3).sort((a,b)=>a.start-b.start).forEach(s=>{const k=isFD(s)?"fdsoon":isGift(s)?"giftsoon":"soon";items.push({k,text:anFill(AN[k].text,s),end:s.start})});
   const cm=AN.custom.on&&AN.custom.text?anCustomMs(AN.custom,now):undefined;
   if(AN.custom.on&&AN.custom.text&&!(cm!==null&&cm!==undefined&&cm<=0))items.push({k:"custom",text:AN.custom.text,end:cm===undefined||cm===null?null:now+cm});
   return items;
@@ -617,6 +641,15 @@ function celebrate(){if(RM)return;const p=$(".boxpanel");
 /* --- box actions --- */
 function setSize(n){S.size=n;if(S.box.length>n)S.box=S.box.slice(0,n);if(!full())S.step=1;renderStore()}
 function cpMsg(t,ok){const m=$("#cpnMsg");if(!m)return;m.textContent=t||"";m.hidden=!t;m.classList.toggle("ok",!!ok);clearTimeout(cpMsg.t);if(t)cpMsg.t=setTimeout(()=>{m.hidden=true},6000)}
+function renderGiftBox(){
+  const el=$("#giftBox");if(!el)return;const pl=giftPlan(S.size);
+  if(!pl.length){el.hidden=true;el.innerHTML="";return}
+  const cl=(v,d)=>/^(#[0-9a-f]{6}|transparent)$/i.test(v||"")?v:d;
+  el.hidden=false;
+  el.innerHTML=pl.map(x=>{const t=x.sale;
+    return `<div class="gb fx-${["shine","pulse","none"].includes(t.fx)?t.fx:"shine"}" style="--gb:${cl(t.bg,"#FFE066")};--gi:${cl(t.ink,"#000096")}"><span class="gtag">${esc(t.tag||"Gifts")}</span><b class="gt">${esc(t.name)}</b>
+      <p class="gs">Free with your box of ${S.size}:</p><div class="gl">${x.fixed.map(g=>giftChip(g)).join("")}${x.pool.length?`<span class="gc rnd"><i aria-hidden="true">🎲</i><span>${x.pick>1?x.pick+" surprise gifts":"1 surprise gift"}</span></span><div class="gpool">${x.pool.map(g=>giftChip(g," sm")).join("")}</div>`:""}</div></div>`}).join("");
+}
 function renderCoupon(q){
   const ap=$("#cpnAp"),f=$("#cpnForm"),ch=$("#cpnCh");if(!ap)return;
   const on=!!(S.coupon&&q.coupon);
@@ -819,7 +852,7 @@ $("#coForm").addEventListener("submit",e=>{
   const cust={name:$("#coName").value.trim(),email:$("#coEmail").value.trim(),phone:$("#coPhone").value.trim(),
     address:del?$("#coAddr").value.trim():""};
   const fields={notify,size:S.size,items:countItems(S.box),mode:S.mode,speed:S.mode==="pickup"?"pickup":S.speed,day:S.day,time:S.time,note:S.note,addons:[...S.addons],sale:q.sale?`${q.sale.name} (${saleOffText(q.sale)})`:"",
-    base:q.base,discount:q.discount,coupon:q.coupon?q.coupon.code:"",couponDisc:q.couponDisc,surcharge:q.surcharge,addonsTotal:q.addons,fee:q.fee,total:q.total,customer:cust};
+    base:q.base,discount:q.discount,coupon:q.coupon?q.coupon.code:"",couponDisc:q.couponDisc,surcharge:q.surcharge,addonsTotal:q.addons,fee:q.fee,total:q.total,customer:cust,gifts:ed&&ed.size===S.size&&ed.gifts?ed.gifts:giftPick(S.size)};
   if(SBH.on){
     const btn=f.querySelector("button[type=submit]");if(btn)btn.disabled=true;
     SBH.place({notify,shuffled:!!S.shuf,size:S.size,items:fields.items,mode:S.mode,speed:S.speed,day:S.day,time:S.time,note:S.note,addons:[...S.addons],coupon:fields.coupon,expectTotal:q.total,customer:cust},ed).then(o=>{
@@ -944,7 +977,7 @@ function drawBell(list){
   if(BELLF!=="deals")list.forEach(x=>{const st=x.m.status,o=x.o,lab=st?stLabel(st,o.mode):"Update";
     items.push({at:x.m.at,h:`<button class="bell-it${x.m.at>SEENV?" new":""}" type="button" data-bellgo="${o.id}"><span class="bell-ic" aria-hidden="true">${ST_ICON[st]||"📦"}</span><span class="bell-tx"><small>Order · ${fmtAgo(x.m.at)}</small><b>Order #${esc(o.code)} · ${esc(lab)}</b><span>${esc(x.m.text)}</span></span><span class="bell-ch" aria-hidden="true">›</span></button>`})});
   if(BELLF!=="orders")DB.sales.filter(s=>saleStatus(s)!=="ended").forEach(s=>{const live=saleStatus(s)==="live";
-    items.push({at:live?s.start:Date.now()-3600e3,h:`<button class="bell-it" type="button" data-bellsale="1"><span class="bell-ic" aria-hidden="true">${isFD(s)?"🚚":"🔥"}</span><span class="bell-tx"><small>${isFD(s)?"Free delivery":"Flash sale"} · ${live?fmtAgo(s.start):"coming up"}</small><b>${isFD(s)?(live?"Free delivery now":"Free delivery soon"):(live?"Flash sale now":"Flash sale soon")}: ${esc(s.name)}</b><span>${esc(saleOffText(s))} · ${live?"ends":"starts"} ${fmtDT(live?s.end:s.start)}</span></span><span class="bell-ch" aria-hidden="true">›</span></button>`})});
+    items.push({at:live?s.start:Date.now()-3600e3,h:`<button class="bell-it" type="button" data-bellsale="1"><span class="bell-ic" aria-hidden="true">${isFD(s)?"🚚":isGift(s)?"🎁":"🔥"}</span><span class="bell-tx"><small>${isFD(s)?"Free delivery":isGift(s)?"Gifts":"Flash sale"} · ${live?fmtAgo(s.start):"coming up"}</small><b>${isFD(s)?(live?"Free delivery now":"Free delivery soon"):isGift(s)?(live?"Gifts now":"Gifts soon"):(live?"Flash sale now":"Flash sale soon")}: ${esc(s.name)}</b><span>${esc(saleOffText(s))} · ${live?"ends":"starts"} ${fmtDT(live?s.end:s.start)}</span></span><span class="bell-ch" aria-hidden="true">›</span></button>`})});
   if(BELLF!=="orders")activeBroadcasts().forEach(x=>{const p=x.pid&&prod(x.pid);
     items.push({at:x.at,h:`<button class="bell-it${x.at>SEENV?" new":""}" type="button" ${p?`data-bellprod="${p.id}"`:'data-bellnone="1"'}><span class="bell-ic" aria-hidden="true">${nfIcon(x.type)}</span><span class="bell-tx"><small>${nfName(x.type)} · ${fmtAgo(x.at)}</small><b>${esc(x.title)}</b>${x.text?`<span>${esc(x.text)}</span>`:""}${x.code?`<span class="bell-code" data-bellcode="${esc(x.code)}">🎟 ${esc(x.code)} · tap to copy</span>`:""}${p?`<span style="color:var(--blue);font-weight:600">View ${esc(p.name)}</span>`:""}</span>${p?`<span class="bell-ch" aria-hidden="true">›</span>`:"<span></span>"}</button>`})});
   items.sort((a,b)=>(b.at===Infinity)-(a.at===Infinity)||b.at-a.at);
@@ -1084,6 +1117,7 @@ function renderMO(){
     ${o.couponDisc>0?`<div class="sl"><span>Coupon ${esc(o.coupon)}</span><span class="num">−${money(o.couponDisc)}</span></div>`:""}
     <div><span>${modeName(o)}</span><span class="num">${o.fee?money(o.fee):"Free"}</span></div>
     <div class="t"><span>Total</span><span class="num">${money(o.total)}</span></div></div>${o.mode==="delivery"?`<p class="hint">Your box may be split into smaller or bigger boxes for delivery safety.</p>`:""}</div>
+  ${giftsHTML(o)}
   ${o.status==="completed"?ratingHTML(o):""}
   ${complaintHTML(o)}
   ${awaiting?`<div class="mo-row" style="margin-top:14px;gap:8px"><button class="btn btn-ghost-blue btn-sm" type="button" data-moedit="${o.id}">Edit order</button><button class="danger" type="button" data-mocancel="${o.id}">Cancel order</button></div><p class="hint">You can change your box until you've sent payment.</p>`:""}`;

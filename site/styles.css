@@ -770,3 +770,25 @@ body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
 .pickmore::after{content:"↓";display:inline-block;margin-left:8px;animation:pickdn 1s ease-in-out infinite}
 @keyframes pickdn{0%,100%{transform:translateY(-2px)}50%{transform:translateY(3px)}}
 @media (prefers-reduced-motion:reduce){.pickmore::after{animation:none}}
+
+/* Gifts under the coupon box */
+.giftwrap{display:grid;gap:10px;margin-top:12px}
+.gb{position:relative;border-radius:16px;padding:14px 14px 12px;color:var(--gi);background:linear-gradient(110deg,var(--gb) 0%,color-mix(in srgb,var(--gb) 62%,#fff) 50%,var(--gb) 100%);background-size:220% 100%;overflow:hidden;box-shadow:0 6px 18px rgba(0,0,60,.25)}
+.gb.fx-shine{animation:gbsweep 3.2s linear infinite}
+.gb.fx-pulse{animation:gbpulse 1.8s ease-in-out infinite}
+@keyframes gbsweep{from{background-position:120% 0}to{background-position:-120% 0}}
+@keyframes gbpulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--gb) 70%,transparent),0 6px 18px rgba(0,0,60,.25)}50%{box-shadow:0 0 0 8px color-mix(in srgb,var(--gb) 0%,transparent),0 6px 18px rgba(0,0,60,.25)}}
+.gtag{display:inline-block;background:#C8102E;color:#fff;font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;border-radius:99px;padding:2px 9px;margin-right:8px;animation:gtagb 1.6s ease-in-out infinite}
+@keyframes gtagb{0%,100%{transform:rotate(-3deg) scale(1)}50%{transform:rotate(3deg) scale(1.08)}}
+.gb .gt{font-size:15px}
+.gb .gs{margin:6px 0 8px;font-size:13px;opacity:.85}
+.gl{display:flex;flex-wrap:wrap;gap:8px}
+.gc{display:inline-flex;align-items:center;gap:7px;background:rgba(255,255,255,.75);color:#000096;border-radius:99px;padding:4px 12px 4px 4px;font-weight:700;font-size:13px}
+.gc img{width:30px;height:30px;border-radius:50%;object-fit:cover}
+.gc i{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:#fff;font-style:normal}
+.gc.rnd i{animation:gdice 1.4s ease-in-out infinite}
+.gc.sm{font-size:11px;padding:2px 9px 2px 2px}.gc.sm img,.gc.sm i{width:22px;height:22px}
+.gpool{display:flex;flex-wrap:wrap;gap:6px;width:100%;margin-top:2px;opacity:.9}
+@keyframes gdice{0%,100%{transform:rotate(-12deg)}50%{transform:rotate(12deg) scale(1.1)}}
+.dsec .gl .gc{background:#EEF0FF}
+@media (prefers-reduced-motion:reduce){.gb,.gtag,.gc.rnd i{animation:none!important}}
