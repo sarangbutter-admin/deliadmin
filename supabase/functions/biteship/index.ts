@@ -3,7 +3,6 @@
 // The API key is saved by the owner in Shop settings -> Courier delivery (stored in a private table, never sent to the website).
 import { admin, bs, bsErr, cors, hmacHex, INSTANT, ipOf, json, kv, limited, settings, STATUS_TXT, teamRole } from "../_shared/common.ts";
 
-const NOMINATIM = "https://nominatim.openstreetmap.org/search";
 const num = (v: unknown, d = 0) => (Number.isFinite(+(v as number)) ? +(v as number) : d);
 const clean = (s: unknown, n: number) => String(s ?? "").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, n);
 
@@ -52,20 +51,33 @@ Deno.serve(async (req) => {
       }
 
       if (action === "geocode") {
-        // try the full address first, then just the area (less exact: we say so)
-        const find = async (q: string) => {
-          const r = await fetch(NOMINATIM + "?format=json&limit=1&countrycodes=id&q=" + encodeURIComponent(q), {
-            headers: { "User-Agent": "delidome-shop/1.0 (delivery quote)", "Accept-Language": "en" },
-          });
-          const j: any[] = r.ok ? await r.json().catch(() => []) : [];
-          console.log("geocode", r.status, j.length);
-          return j[0];
+        // Google Maps when the owner saved a key (most exact), otherwise the free Photon (OpenStreetMap) service
+        const gkey = (await kv(db, "google_key"))?.v as string | undefined;
+        type Hit = { lat: number; lng: number; label: string; rough: boolean };
+        const google = async (q: string): Promise<Hit | null> => {
+          const r = await fetch("https://maps.googleapis.com/maps/api/geocode/json?region=id&components=country:ID&language=id&address=" + encodeURIComponent(q) + "&key=" + encodeURIComponent(gkey!));
+          const j: any = r.ok ? await r.json().catch(() => ({})) : {};
+          console.log("geocode google", r.status, j.status, (j.results || []).length, j.error_message || "");
+          const x = (j.results || [])[0];
+          if (!x) return null;
+          return { lat: x.geometry.location.lat, lng: x.geometry.location.lng, label: clean(x.formatted_address, 200), rough: !["ROOFTOP", "RANGE_INTERPOLATED"].includes(x.geometry.location_type) };
         };
+        const photon = async (q: string): Promise<Hit | null> => {
+          const r = await fetch("https://photon.komoot.io/api/?limit=1&bbox=94.9,-11.1,141.1,6.1&q=" + encodeURIComponent(q), { headers: { "User-Agent": "delidome-shop/1.0 (delivery quote)" } });
+          const j: any = r.ok ? await r.json().catch(() => ({})) : {};
+          console.log("geocode photon", r.status, (j.features || []).length);
+          const f = (j.features || [])[0];
+          if (!f) return null;
+          const pr = f.properties || {};
+          return { lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0], label: clean([pr.name, pr.street, pr.district || pr.locality, pr.city, pr.state].filter(Boolean).join(", "), 200), rough: !pr.housenumber };
+        };
+        const find = gkey ? google : photon;
         const addr = clean(body.address, 200), area = clean(body.area, 160).replace(/\b\d{5}\b/g, "").trim();
-        let hit = await find([addr, area, "Indonesia"].filter(Boolean).join(", ")), approx = false;
-        if (!hit && area) { hit = await find(area + ", Indonesia"); approx = true; }
+        let hit = await find([addr, area].filter(Boolean).join(", ")), approx = false;
+        if (!hit && area) { hit = await find(area); approx = true; }
+        if (!hit && gkey) { hit = await photon([addr, area].filter(Boolean).join(", ")); }
         if (!hit) return json({ found: false });
-        return json({ found: true, approx, lat: (+hit.lat).toFixed(5), lng: (+hit.lon).toFixed(5), label: clean(hit.display_name, 200) });
+        return json({ found: true, approx: approx || hit.rough, lat: (+hit.lat).toFixed(5), lng: (+hit.lng).toFixed(5), label: hit.label });
       }
 
       // rates

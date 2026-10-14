@@ -2613,12 +2613,12 @@ function viewBoxes(){
 /* --- Settings --- */
 const SND_OPTS=[["register","Ka-ching"],["chime","Chime"],["bell","Bell"],["door","Doorbell"],["pop","Cookie pop"],["alarm","Alarm"]];
 /* --- Courier delivery with Biteship (owner, optional) --- */
-const BSA={loaded:false,loading:false,hasKey:false,mode:"",cfg:{},secret:"",msg:"",dirty:false};
+const BSA={loaded:false,loading:false,hasKey:false,hasGoogle:false,mode:"",cfg:{},secret:"",msg:"",dirty:false};
 const BS_COURIERS=[["gojek","Gojek"],["grab","Grab"],["lalamove","Lalamove"],["borzo","Borzo"],["jne","JNE"],["sicepat","SiCepat"],["jnt","J&T"],["anteraja","AnterAja"]];
 function bsAdminLoad(){
   if((BSA.loaded&&!BSA.failedAt)||BSA.loading||!SBH.on||ROLE()!=="owner")return;
   if(BSA.failedAt&&Date.now()-BSA.failedAt<10000)return;BSA.loading=true;
-  SBH.rpc("admin_biteship_get",{}).then(r=>{BSA.hasKey=!!r.hasKey;BSA.mode=r.mode||"";if(!BSA.dirty)BSA.cfg=r.cfg||{};BSA.secret=r.webhookSecret||"";BSA.loaded=true;BSA.loading=false;BSA.failedAt=0;BSA.msg="";if(A.tab==="settings")renderAdmin()})
+  SBH.rpc("admin_biteship_get",{}).then(r=>{BSA.hasKey=!!r.hasKey;BSA.hasGoogle=!!r.hasGoogle;BSA.mode=r.mode||"";if(!BSA.dirty)BSA.cfg=r.cfg||{};BSA.secret=r.webhookSecret||"";BSA.loaded=true;BSA.loading=false;BSA.failedAt=0;BSA.msg="";if(A.tab==="settings")renderAdmin()})
     .catch(e=>{BSA.loading=false;BSA.msg=/does not exist|Could not find/i.test(e.message)?"Run the latest database file (20260118000000_biteship.sql) first.":e.message;BSA.loaded=true;BSA.failedAt=Date.now();if(A.tab==="settings")renderAdmin()});
 }
 function bsPanel(){
@@ -2640,6 +2640,9 @@ function bsPanel(){
     <p class="note" style="margin:0 0 6px">${BSA.hasKey?`A key is saved${BSA.mode?` (${BSA.mode} mode)`:""}. It is stored privately and never shown on the website.`:"No key saved yet. Copy it from your Biteship dashboard (use the test key first)."}</p>
     <div class="colin" style="flex-wrap:wrap"><input class="in" id="bsKey" type="password" autocomplete="off" placeholder="biteship_test.…" style="flex:1;min-width:180px"><button class="btn btn-blue btn-sm" type="button" data-bsa="savekey">Save key</button>${BSA.hasKey?`<button class="ghost" type="button" data-bsa="test">Test connection</button><button class="danger" type="button" data-bsa="rmkey">Remove key</button>`:""}</div>
     <p class="note" id="bsTestMsg" ${BSA.test?"":"hidden"} style="margin:8px 0 0;font-weight:600;${BSA.test&&BSA.test.bad?"color:var(--red)":"color:#0A6B34"}">${esc(BSA.test?BSA.test.t:"")}</p>
+    <h3 style="margin:18px 0 4px;font-size:15px">Google Maps key (optional, for "Find my address on the map")</h3>
+    <p class="note" style="margin:0 0 6px">${BSA.hasGoogle?"A Google key is saved. Addresses are found with Google Maps.":"No Google key: addresses are found with a free map service (less exact). Add a key for Google Maps accuracy."}</p>
+    <div class="colin" style="flex-wrap:wrap"><input class="in" id="bsGKey" type="password" autocomplete="off" placeholder="AIza…" style="flex:1;min-width:180px"><button class="btn btn-blue btn-sm" type="button" data-bsa="savegkey">Save Google key</button>${BSA.hasGoogle?`<button class="danger" type="button" data-bsa="rmgkey">Remove</button>`:""}</div>
     <h3 style="margin:18px 0 4px;font-size:15px">2. Pickup details</h3>
     <div class="grid2">${inp("Business name","origin.business",o.business,"Delidome")}${inp("Contact name","origin.name",o.name,"Your name")}${inp("Contact phone","origin.phone",o.phone,"08123456789")}${inp("Postal code","origin.postal",o.postal,"12345")}</div>
     <div style="margin-top:10px">${inp("Pickup address","origin.address",o.address,"Street, number, area, city")}</div>
@@ -3899,6 +3902,8 @@ am.addEventListener("click",async e=>{const b=e.target.closest("button");if(!b)r
   if(!d.bsa)return;
   try{
     if(d.bsa==="savekey"){const k=($("#bsKey").value||"").trim();if(!k){bsAdmMsg("Paste your API key first.",true);return}b.disabled=true;await SBH.rpc("admin_biteship_save",{p:{key:k}});BSA.hasKey=true;BSA.mode=k.startsWith("biteship_test")?"test":k.startsWith("biteship_live")?"live":"unknown";BSA.test=null;BSA.loaded=false;BSA.failedAt=0;toast("Key saved");renderAdmin()}
+    else if(d.bsa==="savegkey"){const k=($("#bsGKey").value||"").trim();if(!k){bsAdmMsg("Paste your Google Maps key first.",true);return}b.disabled=true;await SBH.rpc("admin_biteship_save",{p:{gkey:k}});BSA.hasGoogle=true;toast("Google key saved");renderAdmin()}
+    else if(d.bsa==="rmgkey"){armed(b,async()=>{await SBH.rpc("admin_biteship_save",{p:{gkey:""}});BSA.hasGoogle=false;toast("Google key removed");renderAdmin()})}
     else if(d.bsa==="rmkey"){armed(b,async()=>{await SBH.rpc("admin_biteship_save",{p:{key:""}});BSA.hasKey=false;BSA.mode="";const s=DB.settings.biteship;if(s&&s.on){s.on=false;saveDB()}toast("Key removed. Courier prices are off.");renderAdmin()})}
     else if(d.bsa==="savecfg"){b.disabled=true;await SBH.rpc("admin_biteship_save",{p:{cfg:BSA.cfg}});BSA.dirty=false;toast("Courier settings saved");bsAdmMsg("Saved.");b.disabled=false}
     else if(d.bsa==="test"){b.disabled=true;b.textContent="Testing…";let r;try{r=await SBH.fn("biteship",{action:"test"},true)}catch(err){r={ok:false,error:err.message}}

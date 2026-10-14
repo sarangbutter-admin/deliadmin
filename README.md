@@ -156,6 +156,7 @@ Live courier prices at checkout, booking and tracking. It is **off by default**:
 3. Create a Biteship account and copy the **test** API key.
 4. On the team site: **Shop settings → Courier delivery (Biteship)**. Paste the key, press **Save key**, **Test connection**, fill in your pickup details, choose couriers, **Save courier settings**, then switch it on.
 5. In the Biteship dashboard add the webhook URL shown at the bottom of that panel.
+   Optional: run `20260119000000_google_geocode.sql` and paste a Google Maps key (Geocoding API) in the same panel for more exact "Find my address on the map". Without it a free map service is used.
 6. Test a delivery order with the test key. When happy, replace it with your live key.
 
 Customers pick a courier at checkout (the price is signed by the server and checked again when the order is placed). After you confirm payment, press **Book courier now** on the order. Status and tracking show on the order for you and the customer.
