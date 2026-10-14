@@ -1309,7 +1309,7 @@ function viewAnnouncer(){
   const tabs=[["live","Flash sale live"],["soon","Coming up"],["fdlive","Free delivery live"],["fdsoon","Free delivery coming up"],["custom","My announcement"],["mq","Running text (2 or more)"]].map(([k,l])=>`<button type="button" class="${K===k?"on":""}" data-ank="${k}" style="border:1.5px solid ${K===k?"var(--blue)":"var(--line)"};background:${K===k?"var(--blue)":"#fff"};color:${K===k?"#fff":"var(--ink)"};border-radius:99px;padding:7px 14px;font-weight:600;cursor:pointer">${l}</button>`).join("");
   return head("Announcer","The banner pinned under the shop header. It stays visible while customers scroll. Changes appear in the preview only; nothing goes live until you press Save.")+MOCK+`
   <div class="stack">
-    <section class="panel" style="position:sticky;top:8px;z-index:6">
+    <section class="panel">
       <div class="phead"><div><h2>Preview <span id="anDirty" hidden style="font-size:12px;background:var(--red);color:#fff;border-radius:99px;padding:2px 9px;margin-left:6px;vertical-align:middle">Not saved yet</span></h2><p class="sub">This is how it looks in the shop. The timer below is a sample.</p></div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 10px">${tabs}</div>
       <div style="border-radius:14px;overflow:hidden;border:1px solid var(--line)"><div class="flash" id="anPrev"></div></div>
