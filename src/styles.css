@@ -1061,3 +1061,10 @@ body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
 @keyframes bsblink{50%{opacity:.35}}
 .ctamsg{margin:10px 0 0;background:#C8102E;color:#fff;border-radius:12px;padding:8px 12px;font-weight:700;font-size:14px;text-align:center}
 @media (prefers-reduced-motion:reduce){.bscour.need .bscbtn,.bscour.nudge .bscbtn{animation:none}}
+
+/* checkout: chosen courier on one line */
+.bssumrow{display:flex;align-items:center;gap:10px;border:2px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:6px}
+.bssumrow>span:first-child{flex:1}
+.bssumrow small{display:block;color:var(--muted)}
+.bssumrow.need{border-color:#FFE066;background:#FFF9DB}
+#bsPop{z-index:1002}

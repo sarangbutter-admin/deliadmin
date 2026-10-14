@@ -758,8 +758,14 @@ function bsPopOpen(){
   $("#addrFields").hidden=false;$("#coAddr").required=false;bsBoxOpen();
   $("#bsPop").hidden=false;document.body.style.overflow="hidden";
 }
+// checkout form: one line with the chosen courier and a Change button (the full courier box lives in the pop-up)
+function bsSumDraw(){
+  const el=$("#bsSum");if(!el)return;const on=bsOn()&&S.mode==="delivery";el.hidden=!on;if(!on)return;const sh=bsShip(S);
+  el.innerHTML=`<span class="flbl" style="font-weight:600;font-size:14px">Courier</span><div class="bssumrow${sh||S.bsSkip?"":" need"}"><span>${sh?`<b>${esc(sh.courierName||sh.courier)}</b> ${esc(sh.serviceName||sh.service)}${sh.eta?` <small>${esc(sh.eta)}</small>`:""}`:S.bsSkip?"Standard delivery":"No courier chosen yet"}</span>${sh?`<span class="num">${money(sh.price)}</span>`:""}<button type="button" class="ghost" data-bscourier>${sh||S.bsSkip?"Change":"🛵 Choose courier"}</button></div>`;
+}
 function bsPopClose(){
-  const f=$("#coForm"),err=$("#coErr");f.insertBefore($("#addrFields"),err);f.insertBefore($("#bsBox"),err);
+  const f=$("#coForm"),err=$("#coErr");f.insertBefore($("#addrFields"),err);f.insertBefore($("#bsBox"),err);$("#bsBox").hidden=true;
+  if(!$("#sheet").hidden){$("#addrFields").hidden=S.mode!=="delivery";$("#coAddr").required=S.mode==="delivery";bsSumDraw();renderCoSummary()}
   $("#bsPop").hidden=true;if($("#sheet").hidden)document.body.style.overflow="";
   const m=$("#ctaMsg");if(m&&!bsPending(S))m.hidden=true;renderStore();
 }
@@ -868,7 +874,7 @@ function renderCoSummary(){
 }
 function openCheckout(){
   renderCoSummary();
-  const del=S.mode==="delivery";$("#addrFields").hidden=!del;bsBoxOpen();
+  const del=S.mode==="delivery";$("#addrFields").hidden=!del;$("#bsBox").hidden=true;bsSumDraw();
   $("#coAddr").required=del;
   const eo=S.editId&&DB.orders.find(x=>x.id===S.editId);
   if(!eo)prefillCust();
@@ -973,7 +979,7 @@ $("#coForm").addEventListener("submit",e=>{
     $("#coErr").hidden=false;sanitizeCart();renderStoreStatic();renderStore();return}
   const q=quote({...S,phone:$("#coPhone").value.trim()}),del=S.mode==="delivery",ed=S.editId?DB.orders.find(x=>x.id===S.editId&&x.status==="awaiting"):null;
   if(S.coupon&&q.couponErr){const m=q.couponErr;S.coupon="";$("#coErr").textContent=m+" The coupon was removed, so please check your new total.";$("#coErr").hidden=false;renderStore();openCheckout();return}
-  if(bsPending(S)){$("#coErr").textContent="Please choose a courier to see your delivery price.";$("#coErr").hidden=false;$("#bsBox").scrollIntoView({block:"center"});return}
+  if(bsPending(S)){$("#coErr").textContent="Please choose a courier to see your delivery price.";$("#coErr").hidden=false;bsSumDraw();$("#bsSum").scrollIntoView({block:"center"});return}
   const notify=(document.querySelector('input[name="coNotify"]:checked')||{value:"both"}).value;
   const cust={name:$("#coName").value.trim(),email:$("#coEmail").value.trim(),phone:$("#coPhone").value.trim(),
     address:del?$("#coAddr").value.trim():""};
