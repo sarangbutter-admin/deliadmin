@@ -181,6 +181,15 @@
         <div class="field"><span class="flbl" style="font-weight:600;font-size:14px">Send order updates by</span>
           <div style="display:flex;flex-wrap:wrap;gap:6px 18px"><label class="chk"><input type="radio" name="coNotify" value="whatsapp"> WhatsApp</label><label class="chk"><input type="radio" name="coNotify" value="email"> Email</label><label class="chk"><input type="radio" name="coNotify" value="both" checked> Both</label></div></div>
         <div class="field" id="addrFields" hidden><label for="coAddr">Delivery address</label><textarea id="coAddr" rows="3" autocomplete="street-address" placeholder="Street, number, area, city"></textarea></div>
+        <div class="field bsbox" id="bsBox" hidden>
+          <span class="flbl" style="font-weight:600;font-size:14px">Courier</span>
+          <p class="note" style="margin:2px 0 8px">Search your area, then pick a courier. The price is for this order only.</p>
+          <div class="bsrow"><input id="bsArea" placeholder="Area, sub-district or postal code" autocomplete="off" aria-label="Delivery area"><div class="bslist" id="bsAreaList" hidden></div></div>
+          <div class="bsbtns"><button type="button" class="ghost" id="bsFind">📍 Find my address on the map</button><button type="button" class="ghost" id="bsGeo">Use my current location</button></div>
+          <p class="note" id="bsPlace" hidden></p>
+          <div class="bsopts" id="bsOpts"></div>
+          <p class="err" id="bsErr" hidden></p>
+        </div>
         <p class="err" id="coErr" hidden></p>
         <button class="btn btn-blue" type="submit" id="placeBtn">Place order</button>
         <p class="note" id="coNote"></p>

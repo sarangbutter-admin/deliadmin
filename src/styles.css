@@ -1034,3 +1034,16 @@ body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
 @keyframes gdice{0%,100%{transform:rotate(-12deg)}50%{transform:rotate(12deg) scale(1.1)}}
 .dsec .gl .gc{background:#EEF0FF}
 @media (prefers-reduced-motion:reduce){.gb,.gtag,.gc.rnd i{animation:none!important}}
+
+/* checkout: courier choice */
+.bsbox{border:1.5px dashed var(--line);border-radius:14px;padding:12px}
+.bsrow{position:relative}
+.bsrow input{width:100%}
+.bslist{position:absolute;z-index:5;left:0;right:0;top:100%;background:var(--white);border:1.5px solid var(--line);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,60,.18);max-height:220px;overflow:auto}
+.bslist button{display:block;width:100%;text-align:left;padding:10px 12px;background:none;border:0;border-bottom:1px solid var(--ice-2);font:inherit;cursor:pointer}
+.bslist button:hover{background:var(--ice)}
+.bsbtns{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.bsopts{display:grid;gap:8px;margin-top:10px}
+.bsopt{display:flex;justify-content:space-between;align-items:center;gap:10px;text-align:left;padding:10px 12px;border:2px solid var(--line);border-radius:12px;background:var(--white);font:inherit;cursor:pointer}
+.bsopt small{display:block;color:var(--muted)}
+.bsopt[aria-pressed="true"]{border-color:var(--blue);background:var(--ice)}

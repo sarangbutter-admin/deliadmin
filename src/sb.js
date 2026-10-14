@@ -188,6 +188,7 @@
   var starting = false;
   H.adminReady = function () { return H.admin; };
   H.rpc = function (name, args) { return K.rpc(name, args, true); };
+  H.fn = function (name, body, admin) { return K.fn(name, body, !!admin); };
   H.enterAdmin = function () {
     if (H.admin) return;
     if (!K.signedIn()) { loginUI(); return; }

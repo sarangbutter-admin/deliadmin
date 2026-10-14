@@ -210,6 +210,17 @@ function giftPick(n,at=Date.now(),db=DB,rnd=Math.random){
 const giftImg=id=>{for(const s of DB.sales||[])for(const g of s.gifts||[])if(g&&g.id===id&&g.img)return g.img;return ""};
 const giftChip=(g,extra="")=>{const im=g.img||giftImg(g.id);return `<span class="gc${extra}">${im?`<img src="${esc(imgOk(im))}" alt="" loading="lazy">`:`<i aria-hidden="true">🎁</i>`}<span>${esc(g.name)}${giftQty(g)>1?` ×${giftQty(g)}`:""}</span></span>`};
 const giftsHTML=o=>o.gifts&&o.gifts.length?`<div class="dsec"><h4>🎁 Your gifts</h4><div class="gl">${o.gifts.map(g=>giftChip(g,g.random?" rnd":"")).join("")}</div></div>`:"";
+/* --- optional courier prices from Biteship (does nothing unless the owner switches it on in Shop settings) --- */
+const bsOn=(db=DB)=>!!(SBH.on&&db.settings&&db.settings.biteship&&db.settings.biteship.on);
+const bsFallback=(db=DB)=>!(db.settings&&db.settings.biteship&&db.settings.biteship.fallback===false);
+const bsShip=(c,at=Date.now(),db=DB)=>bsOn(db)&&c.mode==="delivery"&&c.ship&&c.ship.size===c.size&&+c.ship.exp>at?c.ship:null;
+const bsPending=(c,db=DB)=>bsOn(db)&&c.mode==="delivery"&&!c.bsSkip&&!bsShip(c,Date.now(),db);
+const BS_ST={confirmed:"Courier booked",scheduled:"Pickup scheduled",allocated:"Courier assigned",picking_up:"Courier is on the way to pick up",picked:"Picked up",dropping_off:"On the way to you",return_in_transit:"Returning",on_hold:"On hold",delivered:"Delivered",rejected:"Rejected by courier",disposed:"Disposed",courier_not_found:"No courier found",returned:"Returned",cancelled:"Booking cancelled"};
+const bsHTML=(o,adm)=>{const b=o.bship;if(!b||!b.courier||o.mode!=="delivery")return "";
+  const booked=!!b.biteshipId,st=b.status?(BS_ST[b.status]||b.status):"",nm=esc((b.courierName||b.courier)+" "+(b.serviceName||b.service));
+  const lines=`<dt>Courier</dt><dd>${nm}${b.eta?` · ${esc(b.eta)}`:""}</dd>${st?`<dt>Status</dt><dd><b>${esc(st)}</b></dd>`:booked?"":`<dt>Status</dt><dd>${adm?"Not booked yet":"We'll book your courier once your order is ready"}</dd>`}${b.waybill?`<dt>Waybill</dt><dd>${esc(b.waybill)}</dd>`:""}${b.link?`<dt>Tracking</dt><dd><a href="${esc(safeUrl(b.link))}" target="_blank" rel="noopener">Track the delivery</a></dd>`:""}${adm&&b.price!==undefined?`<dt>Quoted price</dt><dd>${money(b.price)}${b.bookedPrice!==undefined&&booked?` (booked at ${money(b.bookedPrice)})`:""}</dd>`:""}`;
+  const acts=adm?`<div class="colin" style="margin-top:10px;flex-wrap:wrap;gap:8px">${!booked?`<button class="btn btn-blue btn-sm" type="button" data-bsact="book" data-oid="${o.id}" ${PAID_ST.includes(o.status)?"":'disabled title="Confirm the payment first"'}>Book courier now</button>`:`<button class="ghost" type="button" data-bsact="refresh" data-oid="${o.id}">Refresh status</button><button class="danger" type="button" data-bsact="cancel" data-oid="${o.id}">Cancel booking</button>`}</div><p class="note" id="bsMsg" hidden></p>`:"";
+  return `<div class="dsec"><h4>🛵 Courier</h4><dl class="dl">${lines}</dl>${acts}</div>`};
 const freeDelSale=(n,at=Date.now(),db=DB)=>db.sales.find(s=>isFD(s)&&saleStatus(s,at)==="live"&&(s.appliesTo==="all"||+s.appliesTo===n))||null;
 const cpNorm=v=>String(v||"").toUpperCase().replace(/[^A-Z0-9_-]/g,"").slice(0,20);
 const cpOff=c=>c.type==="percent"?`${c.value}% off`:c.type==="amount"?`${money(c.value)} off`:"Free delivery";
@@ -242,8 +253,10 @@ function quote(c,db=DB,{at=Date.now(),withDelivery=true}={}){
   const cp=c.coupon?couponCheck(c.coupon,c,db,{base,saleDisc:discount,phone:c.phone,excl:c.editId}):null;
   const couponDisc=cp&&cp.ok?cp.discount:0;
   const fdSale=at&&c.mode==="delivery"?freeDelSale(c.size,at,db):null;
-  const fee=withDelivery&&c.mode==="delivery"&&!fdSale&&!(cp&&cp.ok&&cp.freeDel)?(c.speed==="sameday"?(db.settings.samedayFee??db.settings.deliveryFee):db.settings.deliveryFee):0;
-  return {base,sale,fdSale,discount,surcharge,addons,fee,coupon:cp&&cp.ok?cp.coupon:null,couponDisc,couponErr:cp&&!cp.ok?cp.err:"",total:r2(base-discount-couponDisc+surcharge+addons+fee)};
+  const shipQ=withDelivery?bsShip(c,at||Date.now(),db):null,noFee=!!fdSale||!!(cp&&cp.ok&&cp.freeDel);
+  const feePending=withDelivery&&c.mode==="delivery"&&!noFee&&!shipQ&&bsPending(c,db);
+  const fee=withDelivery&&c.mode==="delivery"&&!noFee?(shipQ?+shipQ.price:feePending?0:(c.speed==="sameday"?(db.settings.samedayFee??db.settings.deliveryFee):db.settings.deliveryFee)):0;
+  return {ship:shipQ,feePending,base,sale,fdSale,discount,surcharge,addons,fee,coupon:cp&&cp.ok?cp.coupon:null,couponDisc,couponErr:cp&&!cp.ok?cp.err:"",total:r2(base-discount-couponDisc+surcharge+addons+fee)};
 }
 const saleOffText = s => isFD(s)?"Free delivery":isGift(s)?"Free gifts":s.type==="percent"?`${s.value}% off`:`${money(s.value)} off`;
 const saleAppliesText = s => s.appliesTo==="all"?"every box":`the box of ${s.appliesTo}`;
@@ -303,7 +316,7 @@ function crumbColors(p){
 
 /* ================= SHOP ================= */
 loadDB();
-const fresh = () => ({size:6, box:[], step:1, mode:"pickup", speed:"scheduled", day:null, time:null, note:"", addons:[], coupon:""});
+const fresh = () => ({size:6, box:[], step:1, mode:"pickup", speed:"scheduled", day:null, time:null, note:"", addons:[], coupon:"", ship:null, bsSkip:false});
 let S = fresh(), hadCart=false;
 try{const s=JSON.parse(localStorage.getItem(CART_KEY)||"null");if(s&&Array.isArray(s.box)){S={...S,...s,step:s.step===2?2:1};hadCart=true;
   }}catch(e){}
@@ -317,6 +330,7 @@ const pickable = () => DB.products.filter(p=>p.status==="available"&&stockLeft(p
 const ratingOf = p => {const r=p.reviews||[],n=r.length;return {n,avg:n?r.reduce((a,x)=>a+x.stars,0)/n:0}};
 const isLow = p => p.track&&p.status!=="hidden"&&p.stock<=DB.settings.lowStockAt;
 function sanitizeCart(){
+  if(S.ship&&(S.ship.size!==S.size||S.mode!=="delivery"||!bsOn()))S.ship=null;if(S.mode!=="delivery"||!bsOn())S.bsSkip=false;
   const sz=activeSizes();
   if(!sz.find(s=>s.n===S.size)&&!validCustom(S.size))S.size=(sz.find(s=>s.n===6)||sz[0]||{n:6}).n;
   const used={};
@@ -521,7 +535,7 @@ function renderStore(){
   if(q.surcharge>0)L+=`<div><dt>Premium flavors</dt><dd>+${money(q.surcharge)}</dd></div>`;
   if(S.step===2){
     S.addons.forEach(id=>{const a=DB.addons.find(x=>x.id===id);if(a)L+=`<div><dt>${esc(a.name)}</dt><dd>+${money(a.price)}</dd></div>`});
-    L+=`<div><dt>${OPT_NAME[optOf(S)]}</dt><dd>${q.fee?money(q.fee):"Free"}</dd></div>`;
+    L+=`<div><dt>${OPT_NAME[optOf(S)]}</dt><dd>${q.feePending?"Choose a courier at checkout":q.fee?money(q.fee):"Free"}</dd></div>`;
     if(S.day)L+=`<div><dt>When</dt><dd>${S.mode!=="pickup"&&S.speed==="sameday"?"Today (sameday)":fmtDay(S.day)+(S.time?", "+esc(S.time):"")}</dd></div>`;
   }
   $("#lines").innerHTML=L;
@@ -746,18 +760,74 @@ const CUST_KEY="delidome-cust-v1";
 function loadCust(){try{return JSON.parse(localStorage.getItem(CUST_KEY)||"{}")||{}}catch(e){return {}}}
 function saveCust(){try{const r=document.querySelector('input[name="coNotify"]:checked');localStorage.setItem(CUST_KEY,JSON.stringify({name:$("#coName").value,phone:$("#coPhone").value,email:$("#coEmail").value,address:$("#coAddr").value,notify:r?r.value:"both"}))}catch(e){}}
 function prefillCust(){const c=loadCust();[["#coName","name"],["#coPhone","phone"],["#coEmail","email"],["#coAddr","address"]].forEach(([q,k])=>{if(c[k]&&!$(q).value)$(q).value=c[k]});const r=c.notify&&document.querySelector(`input[name="coNotify"][value="${c.notify}"]`);if(r)r.checked=true}
-function openCheckout(){
+/* --- checkout: optional courier prices (only when the owner switched Biteship on) --- */
+const BSD={area:null,lat:"",lng:"",label:"",opts:[],busy:false,tried:false,err:"",t:0};
+function bsBoxOpen(){
+  const on=bsOn()&&SBH.on&&S.mode==="delivery";$("#bsBox").hidden=!on;if(!on)return;
+  if(BSD.opts.length&&BSD.opts[0].size!==S.size){BSD.opts=[]}
+  bsDraw();if(!BSD.opts.length&&(BSD.area||BSD.lat))bsRates();
+}
+function bsDraw(){
+  const o=$("#bsOpts"),er=$("#bsErr"),pl=$("#bsPlace");
+  pl.hidden=!BSD.label;pl.innerHTML=BSD.label?`📍 ${esc(BSD.label)} · <a href="https://www.openstreetmap.org/?mlat=${esc(BSD.lat)}&mlon=${esc(BSD.lng)}#map=17/${esc(BSD.lat)}/${esc(BSD.lng)}" target="_blank" rel="noopener">Check on the map</a>`:"";
+  if(BSD.busy){o.innerHTML=`<p class="note">Looking for couriers…</p>`}
+  else{o.innerHTML=BSD.opts.map((x,i)=>`<button type="button" class="bsopt" data-bsopt="${i}" aria-pressed="${S.ship&&S.ship.sig===x.sig}"><span><b>${esc(x.courierName||x.courier)}</b> ${esc(x.serviceName||x.service)}${x.eta?`<small>${esc(x.eta)}</small>`:""}</span><span class="num">${money(x.price)}</span></button>`).join("")
+    +(S.bsSkip?`<p class="note">Standard delivery fee selected (${money(DB.settings.deliveryFee)}).</p>`:"")}
+  const msg=BSD.err&&!BSD.busy?BSD.err:"";er.hidden=!msg;er.textContent=msg;
+  if(msg&&bsFallback()&&!S.bsSkip)o.insertAdjacentHTML("beforeend",`<button type="button" class="ghost" data-bsskip>Use standard delivery (${money(DB.settings.deliveryFee)})</button>`);
+}
+async function bsRates(){
+  if(!(BSD.area||BSD.lat)||BSD.busy)return;
+  const my=++BSD.t;BSD.busy=true;BSD.err="";bsDraw();
+  try{
+    const r=await SBH.fn("biteship",{action:"rates",size:S.size,dest:{lat:BSD.lat,lng:BSD.lng,postal:BSD.area?BSD.area.postal:"",areaId:BSD.area?BSD.area.id:"",areaName:BSD.area?BSD.area.name:""}});
+    if(my!==BSD.t)return;BSD.opts=r.options||[];BSD.err=BSD.opts.length?"":(r.error||"No courier is available for this address.");
+    if(S.ship&&!BSD.opts.some(x=>x.sig===S.ship.sig)){S.ship=null}
+  }catch(e){if(my!==BSD.t)return;BSD.opts=[];BSD.err=e.message}
+  BSD.busy=false;bsDraw();renderCoSummary();renderStore();
+}
+async function bsGeocode(){
+  const addr=$("#coAddr").value.trim();if(!addr&&!BSD.area){BSD.err="Type your address (and pick your area) first.";bsDraw();return}
+  BSD.busy=true;BSD.err="";bsDraw();
+  try{const r=await SBH.fn("biteship",{action:"geocode",address:addr,area:BSD.area?BSD.area.name:""});BSD.busy=false;BSD.tried=true;
+    if(r.found){BSD.lat=r.lat;BSD.lng=r.lng;BSD.label=r.label;S.ship=null;BSD.opts=[];await bsRates();return}
+    BSD.err="We couldn't find that address on the map. Check the spelling or use your current location.";
+  }catch(e){BSD.busy=false;BSD.err=e.message}
+  bsDraw();
+}
+let bsAreaT=0;
+$("#bsArea").addEventListener("input",e=>{
+  clearTimeout(bsAreaT);const q=e.target.value.trim(),list=$("#bsAreaList");BSD.area=null;
+  if(q.length<3){list.hidden=true;return}
+  bsAreaT=setTimeout(async()=>{try{const r=await SBH.fn("biteship",{action:"areas",q});
+    list.innerHTML=(r.areas||[]).map((a,i)=>`<button type="button" data-bsarea="${i}">${esc(a.name)}</button>`).join("")||`<p class="note" style="padding:8px">No area found.</p>`;list.hidden=false;list._a=r.areas||[]}catch(err){list.innerHTML=`<p class="note" style="padding:8px">${esc(err.message)}</p>`;list.hidden=false}},350)});
+$("#bsAreaList").addEventListener("click",e=>{const b=e.target.closest("[data-bsarea]");if(!b)return;const a=$("#bsAreaList")._a[+b.dataset.bsarea];if(!a)return;
+  BSD.area=a;BSD.lat="";BSD.lng="";BSD.label="";BSD.opts=[];BSD.tried=false;S.ship=null;S.bsSkip=false;$("#bsArea").value=a.name;$("#bsAreaList").hidden=true;
+  if($("#coAddr").value.trim().length>=5)bsGeocode();else bsRates()});
+$("#bsFind").addEventListener("click",bsGeocode);
+$("#bsGeo").addEventListener("click",()=>{
+  if(!navigator.geolocation){BSD.err="Your browser can't share its location.";bsDraw();return}
+  BSD.busy=true;BSD.err="";bsDraw();
+  navigator.geolocation.getCurrentPosition(p=>{BSD.busy=false;BSD.lat=p.coords.latitude.toFixed(5);BSD.lng=p.coords.longitude.toFixed(5);BSD.label="Your current location";S.ship=null;BSD.opts=[];bsRates()},
+    ()=>{BSD.busy=false;BSD.err="We couldn't get your location. Allow location access, or search your area instead.";bsDraw()},{timeout:12000,maximumAge:60000})});
+$("#bsOpts").addEventListener("click",e=>{
+  const b=e.target.closest("[data-bsopt]");if(b){const x=BSD.opts[+b.dataset.bsopt];if(x){S.ship=x;S.bsSkip=false;bsDraw();renderCoSummary();renderStore();$("#coErr").hidden=true}return}
+  if(e.target.closest("[data-bsskip]")){S.ship=null;S.bsSkip=true;bsDraw();renderCoSummary();renderStore()}});
+function renderCoSummary(){
   const q=quote(S),counts=countItems(S.box);
   $("#summary").innerHTML=`<div><span>Box of ${S.size}</span><span class="num">${money(q.base)}</span></div>`+
     Object.entries(counts).map(([id,n])=>{const p=prod(id);return `<div class="m"><span>${n} × ${esc(p.name)}</span><span>${p.surcharge>0?"+"+money(p.surcharge*n):""}</span></div>`}).join("")+
     (q.sale?`<div class="sl"><span>${esc(q.sale.name)} (${saleOffText(q.sale)})</span><span class="num">−${money(q.discount)}</span></div>`:"")+
     (q.coupon&&q.couponDisc>0?`<div class="sl"><span>Coupon ${esc(q.coupon.code)}</span><span class="num">−${money(q.couponDisc)}</span></div>`:"")+
     S.addons.map(id=>{const a=DB.addons.find(x=>x.id===id);return a?`<div><span>${esc(a.name)}</span><span class="num">+${money(a.price)}</span></div>`:""}).join("")+
-    `<div><span>${OPT_NAME[optOf(S)]}</span><span class="num">${q.fee?money(q.fee):"Free"}</span></div>`+
+    `<div><span>${OPT_NAME[optOf(S)]}</span><span class="num">${q.feePending?"Choose a courier below":q.fee?money(q.fee):"Free"}</span></div>`+
     `<div><span>When</span><span>${esc(whenTxt(S))}</span></div>`+
     (S.note?`<div><span>Note</span><span style="text-align:right">${esc(S.note)}</span></div>`:"")+
     `<div class="t"><span>Total</span><span class="num">${money(q.total)}</span></div>`;
-  const del=S.mode==="delivery";$("#addrFields").hidden=!del;
+}
+function openCheckout(){
+  renderCoSummary();
+  const del=S.mode==="delivery";$("#addrFields").hidden=!del;bsBoxOpen();
   $("#coAddr").required=del;
   const eo=S.editId&&DB.orders.find(x=>x.id===S.editId);
   if(!eo)prefillCust();
@@ -863,6 +933,7 @@ $("#coForm").addEventListener("submit",e=>{
     $("#coErr").hidden=false;sanitizeCart();renderStoreStatic();renderStore();return}
   const q=quote({...S,phone:$("#coPhone").value.trim()}),del=S.mode==="delivery",ed=S.editId?DB.orders.find(x=>x.id===S.editId&&x.status==="awaiting"):null;
   if(S.coupon&&q.couponErr){const m=q.couponErr;S.coupon="";$("#coErr").textContent=m+" The coupon was removed, so please check your new total.";$("#coErr").hidden=false;renderStore();openCheckout();return}
+  if(bsPending(S)){$("#coErr").textContent="Please choose a courier to see your delivery price.";$("#coErr").hidden=false;$("#bsBox").scrollIntoView({block:"center"});return}
   const notify=(document.querySelector('input[name="coNotify"]:checked')||{value:"both"}).value;
   const cust={name:$("#coName").value.trim(),email:$("#coEmail").value.trim(),phone:$("#coPhone").value.trim(),
     address:del?$("#coAddr").value.trim():""};
@@ -870,7 +941,7 @@ $("#coForm").addEventListener("submit",e=>{
     base:q.base,discount:q.discount,coupon:q.coupon?q.coupon.code:"",couponDisc:q.couponDisc,surcharge:q.surcharge,addonsTotal:q.addons,fee:q.fee,total:q.total,customer:cust,gifts:ed&&ed.size===S.size&&ed.gifts?ed.gifts:giftPick(S.size)};
   if(SBH.on){
     const btn=f.querySelector("button[type=submit]");if(btn)btn.disabled=true;
-    SBH.place({notify,shuffled:!!S.shuf,size:S.size,items:fields.items,mode:S.mode,speed:S.speed,day:S.day,time:S.time,note:S.note,addons:[...S.addons],coupon:fields.coupon,expectTotal:q.total,customer:cust},ed).then(o=>{
+    SBH.place({notify,shuffled:!!S.shuf,size:S.size,items:fields.items,mode:S.mode,speed:S.speed,day:S.day,time:S.time,note:S.note,addons:[...S.addons],coupon:fields.coupon,expectTotal:q.total,customer:cust,ship:q.ship||undefined},ed).then(o=>{
       addMine(o.id);S.editId=null;saveCart();renderDone(o,!!ed);
       S=fresh();$("#coForm").reset();saveCart();sanitizeCart();renderStoreStatic();renderStore();renderEditBar();renderBag();
     }).catch(err=>{$("#coErr").textContent=err.message;$("#coErr").hidden=false;SBH.loadShop(true)}).finally(()=>{if(btn)btn.disabled=false});
@@ -1135,6 +1206,7 @@ function renderMO(){
     ${o.couponDisc>0?`<div class="sl"><span>Coupon ${esc(o.coupon)}</span><span class="num">−${money(o.couponDisc)}</span></div>`:""}
     <div><span>${modeName(o)}</span><span class="num">${o.fee?money(o.fee):"Free"}</span></div>
     <div class="t"><span>Total</span><span class="num">${money(o.total)}</span></div></div>${o.mode==="delivery"?`<p class="hint">Your box may be split into smaller or bigger boxes for delivery safety.</p>`:""}</div>
+  ${bsHTML(o,false)}
   ${giftsHTML(o)}
   ${o.status==="completed"?ratingHTML(o):""}
   ${complaintHTML(o)}
@@ -1811,6 +1883,7 @@ function openOrder(id){
     <div class="dsec"><h4>Customer</h4><dl class="dl"><dt>Name</dt><dd>${esc(o.customer.name)}</dd><dt>WhatsApp</dt><dd>${esc(o.customer.phone)}</dd><dt>Email</dt><dd>${esc(o.customer.email)}</dd>${o.customer.address?`<dt>Address</dt><dd>${esc(o.customer.address)}</dd>`:""}</dl></div>
     <div class="dsec"><h4>When</h4><dl class="dl"><dt>${modeName(o)}</dt><dd>${esc(whenTxt(o))}</dd>${o.note?`<dt>Note</dt><dd>${esc(o.note)}</dd>`:""}</dl></div>
     <div class="dsec"><h4>Box of ${o.size}</h4><div class="ditems">${Object.entries(o.items).map(([id,n])=>{const p=prod(id);return `<div>${miniPlate(p)}<span>${n} × ${esc(p?p.name:"Removed flavor")}</span><span class="num">${p&&p.surcharge>0?"+"+money(p.surcharge*n):""}</span></div>`}).join("")}</div></div>
+    ${bsHTML(o,true)}
     ${giftsHTML(o)}
     <div class="dsec"><h4>Payment</h4><div class="summary" style="margin:0">
       <div><span>Box of ${o.size}</span><span class="num">${money(o.base)}</span></div>
@@ -2539,6 +2612,55 @@ function viewBoxes(){
 
 /* --- Settings --- */
 const SND_OPTS=[["register","Ka-ching"],["chime","Chime"],["bell","Bell"],["door","Doorbell"],["pop","Cookie pop"],["alarm","Alarm"]];
+/* --- Courier delivery with Biteship (owner, optional) --- */
+const BSA={loaded:false,loading:false,hasKey:false,mode:"",cfg:{},secret:"",msg:"",dirty:false};
+const BS_COURIERS=[["gojek","Gojek"],["grab","Grab"],["lalamove","Lalamove"],["borzo","Borzo"],["jne","JNE"],["sicepat","SiCepat"],["jnt","J&T"],["anteraja","AnterAja"]];
+function bsAdminLoad(){
+  if(BSA.loaded||BSA.loading||!SBH.on||ROLE()!=="owner")return;BSA.loading=true;
+  SBH.rpc("admin_biteship_get",{}).then(r=>{BSA.hasKey=!!r.hasKey;BSA.mode=r.mode||"";BSA.cfg=r.cfg||{};BSA.secret=r.webhookSecret||"";BSA.loaded=true;BSA.loading=false;if(A.tab==="settings")renderAdmin()})
+    .catch(e=>{BSA.loading=false;BSA.msg=/does not exist|Could not find/i.test(e.message)?"Run the latest database file (20260118000000_biteship.sql) first.":e.message;BSA.loaded=true;if(A.tab==="settings")renderAdmin()});
+}
+function bsPanel(){
+  const b=DB.settings.biteship||{},on=!!b.on;
+  const head=`<h2>Courier delivery (Biteship) <span class="spill" style="background:var(--ice-2);color:var(--blue);font-size:11px;vertical-align:middle">Optional</span></h2>`;
+  if(!SBH.on)return `<section class="panel">${head}<p class="sub">Needs the live database. It is not available in demo mode.</p></section>`;
+  if(ROLE()!=="owner")return "";
+  bsAdminLoad();
+  if(!BSA.loaded)return `<section class="panel">${head}<p class="sub">Loading…</p></section>`;
+  const c=BSA.cfg,o=c.origin||{},d=c.dims||{},cou=Array.isArray(c.couriers)?c.couriers:["gojek","grab","lalamove"];
+  const inp=(l,path,v,ph,type)=>`<label class="af">${l}<input class="in" ${type?`type="${type}"`:""} data-bsc="${path}" value="${esc(v??"")}" placeholder="${esc(ph||"")}" maxlength="250"></label>`;
+  const url=`${SBK.url}/functions/v1/biteship-webhook?k=${BSA.secret}`;
+  return `<section class="panel">${head}
+    <p class="sub">Show live courier prices at checkout and book couriers from your orders. <b>Switch it off and nothing changes</b>: customers pay your normal delivery fee and you use your own courier.</p>
+    <div style="display:flex;gap:10px;align-items:center;margin:10px 0"><label class="sw"><input type="checkbox" data-bsset="on" ${on?"checked":""} aria-label="Use Biteship courier prices"><span></span></label><span class="stlabel">Use Biteship courier prices at checkout</span></div>
+    <div style="display:flex;gap:10px;align-items:center;margin:0 0 12px"><label class="sw"><input type="checkbox" data-bsset="fallback" ${b.fallback!==false?"checked":""} aria-label="Allow the normal delivery fee if prices cannot load"><span></span></label><span class="stlabel">If courier prices can't load, allow my normal delivery fee</span></div>
+    ${BSA.msg?`<p class="note" style="color:var(--red)">${esc(BSA.msg)}</p>`:""}
+    <h3 style="margin:14px 0 4px;font-size:15px">1. API key</h3>
+    <p class="note" style="margin:0 0 6px">${BSA.hasKey?`A key is saved${BSA.mode?` (${BSA.mode} mode)`:""}. It is stored privately and never shown on the website.`:"No key saved yet. Copy it from your Biteship dashboard (use the test key first)."}</p>
+    <div class="colin" style="flex-wrap:wrap"><input class="in" id="bsKey" type="password" autocomplete="off" placeholder="biteship_test.…" style="flex:1;min-width:180px"><button class="btn btn-blue btn-sm" type="button" data-bsa="savekey">Save key</button>${BSA.hasKey?`<button class="ghost" type="button" data-bsa="test">Test connection</button><button class="danger" type="button" data-bsa="rmkey">Remove key</button>`:""}</div>
+    <h3 style="margin:18px 0 4px;font-size:15px">2. Pickup details</h3>
+    <div class="grid2">${inp("Business name","origin.business",o.business,"Delidome")}${inp("Contact name","origin.name",o.name,"Your name")}${inp("Contact phone","origin.phone",o.phone,"08123456789")}${inp("Postal code","origin.postal",o.postal,"12345")}</div>
+    <div style="margin-top:10px">${inp("Pickup address","origin.address",o.address,"Street, number, area, city")}</div>
+    <div class="grid2" style="margin-top:10px">${inp("Latitude","origin.lat",o.lat,"-6.2088")}${inp("Longitude","origin.lng",o.lng,"106.8456")}</div>
+    <p class="note" style="margin:6px 0 0">Coordinates are needed for Gojek, Grab and Lalamove. In Google Maps, press and hold your shop and copy the two numbers.</p>
+    <div style="margin-top:10px">${inp("Note for the courier (optional)","origin.note",o.note,"e.g. Ask for Delidome at the front desk")}</div>
+    <h3 style="margin:18px 0 4px;font-size:15px">3. Couriers customers can choose</h3>
+    <div class="chips">${BS_COURIERS.map(([k,l])=>`<button class="fchip" type="button" data-bscour="${k}" aria-pressed="${cou.includes(k)}">${l}</button>`).join("")}</div>
+    <p class="note" style="margin:6px 0 0">Gojek, Grab and Lalamove deliver within hours, best for fresh cookies. The others need the postal codes.</p>
+    <h3 style="margin:18px 0 4px;font-size:15px">4. Box weight and size</h3>
+    <p class="note" style="margin:0 0 6px">Couriers price by weight. Leave blank to use ${c.gramsPerCookie||100} g per cookie + ${c.boxGrams||200} g for the box.</p>
+    <div class="grid3">${DB.sizes.slice().sort((x,y)=>x.n-y.n).map(z=>`<label class="af">Box of ${z.n} (grams)<input class="in" type="number" min="0" step="10" data-bsw="${z.n}" value="${esc((c.weights&&c.weights[z.n])||"")}" placeholder="${z.n*(+c.gramsPerCookie||100)+(+c.boxGrams||200)}"></label>`).join("")}</div>
+    <div class="grid3" style="margin-top:10px">${inp("Length (cm)","dims.l",d.l,"25","number")}${inp("Width (cm)","dims.w",d.w,"25","number")}${inp("Height (cm)","dims.h",d.h,"10","number")}</div>
+    <h3 style="margin:18px 0 4px;font-size:15px">5. Price</h3>
+    <div class="grid2">${inp("Add to every courier price","markup",c.markup,"0","number")}${inp("Round up to the nearest","roundTo",c.roundTo,"500","number")}</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px"><button class="btn btn-blue" type="button" data-bsa="savecfg">Save courier settings</button></div>
+    <p class="note" id="bsAdmMsg" hidden></p>
+    <h3 style="margin:18px 0 4px;font-size:15px">6. Delivery updates (webhook)</h3>
+    <p class="note" style="margin:0 0 6px">In the Biteship dashboard, add this as your webhook URL so courier status updates arrive by themselves. Keep it private.</p>
+    <div class="colin"><input class="in" readonly value="${esc(url)}" aria-label="Webhook URL" onclick="this.select()"><button class="ghost" type="button" data-bsa="copy">Copy</button></div>
+  </section>`;
+}
+function bsAdmMsg(t,bad){const n=document.getElementById("bsAdmMsg");if(!n)return;n.hidden=!t;n.textContent=t||"";n.style.color=bad?"var(--red)":""}
 function viewSettings(){
   const s=DB.settings,th=DB.thanks,pp=DB.proofpop,al=DB.alerts;
   return head("Shop settings","Delivery, order cutoff, opening days and the details shown on the shop page.")+MOCK+`
@@ -2583,6 +2705,7 @@ function viewSettings(){
       <div class="grid2" style="margin-top:8px"><label class="af">Continue button<input class="in" data-k="settings::coWarnOk" value="${esc(s.coWarnOk)}" maxlength="40"></label><label class="af">Back button<input class="in" data-k="settings::coWarnBack" value="${esc(s.coWarnBack)}" maxlength="30"></label></div>
       <button class="ghost" type="button" data-cwprev style="margin-top:8px">Preview pop-up</button>
     </section>
+    ${bsPanel()}
     <section class="panel">
       <div class="phead"><div><h2>Owner alerts</h2><p class="sub">A popup and a sound while the Admin page is open: when a new order is placed, when a customer sends a payment proof, and when a customer files a complaint. Browsers only play sound after you have clicked on the page once.</p></div><button class="btn btn-blue btn-sm" type="button" data-altest>Test alert</button></div>
       <div class="stack" style="gap:6px">
@@ -3609,6 +3732,13 @@ am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
   else if(d.lblprint!==undefined)printLabels([lblOrder()],A.lbl);
   else if(d.lbldl!==undefined)downloadLabels([lblOrder()],A.lbl);
 });
+$("#drawer").addEventListener("click",async e=>{const b=e.target.closest("[data-bsact]");if(!b)return;
+  const id=b.dataset.oid,act=b.dataset.bsact,o=DB.orders.find(x=>x.id===id),msg=$("#bsMsg");if(!o)return;
+  const go=async()=>{b.disabled=true;if(msg){msg.hidden=false;msg.style.color="";msg.textContent=act==="book"?"Booking the courier…":act==="cancel"?"Cancelling…":"Checking…"}
+    try{const r=await SBH.fn("biteship",{action:act,orderId:id},true);o.bship=r.bship;if(act==="book"||(r.bship&&r.bship.waybill)){o.courier=o.courier||((o.bship.courierName||o.bship.courier)+" "+(o.bship.serviceName||o.bship.service));if(r.bship.waybill)o.awb=r.bship.waybill}
+      toast(act==="book"?"Courier booked":act==="cancel"?"Courier booking cancelled":"Status updated");openOrder(id)}
+    catch(err){b.disabled=false;if(msg){msg.hidden=false;msg.style.color="var(--red)";msg.textContent=err.message}}};
+  if(act==="cancel")armed(b,go);else go()});
 $("#drawer").addEventListener("input",e=>{const el=e.target;if(el.dataset.ship&&A.openOrder){const o=DB.orders.find(x=>x.id===A.openOrder);if(o){o[el.dataset.ship]=el.value;saveSoon()}}});
 $("#drawer").addEventListener("click",e=>{const b=e.target.closest("[data-printone]");if(b){const o=DB.orders.find(x=>x.id===b.dataset.printone);if(o)printLabels([o],DB.label)}});
 am.addEventListener("dragover",e=>{const t=e.target.closest("[data-drop]");if(!t)return;e.preventDefault();t.classList.add("drag")});
@@ -3754,6 +3884,23 @@ function cpOpen(c){
       c.dispatchEvent(new Event("input",{bubbles:true}));c.dispatchEvent(new Event("change",{bubbles:true}));close()}});
   show();
 }
+/* --- Biteship settings handlers --- */
+am.addEventListener("input",e=>{const el=e.target;
+  if(el.dataset.bsc){const path=el.dataset.bsc.split("."),c=BSA.cfg;let t=c;for(let i=0;i<path.length-1;i++)t=t[path[i]]=t[path[i]]||{};t[path[path.length-1]]=el.type==="number"?(el.value===""?"":+el.value):el.value}
+  else if(el.dataset.bsw){BSA.cfg.weights=BSA.cfg.weights||{};BSA.cfg.weights[el.dataset.bsw]=el.value===""?"":+el.value}});
+am.addEventListener("change",e=>{const el=e.target;if(!el.dataset.bsset)return;const b=DB.settings.biteship=DB.settings.biteship||{on:false,fallback:true};
+  if(el.dataset.bsset==="on"&&el.checked&&!(BSA.hasKey&&BSA.cfg.origin&&BSA.cfg.origin.name&&BSA.cfg.origin.phone&&BSA.cfg.origin.address)){el.checked=false;toast("Save your API key and pickup details first");return}
+  b[el.dataset.bsset]=el.checked;saveSoon()});
+am.addEventListener("click",async e=>{const b=e.target.closest("button");if(!b)return;const d=b.dataset;
+  if(d.bscour){const c=BSA.cfg,a=Array.isArray(c.couriers)?c.couriers.slice():["gojek","grab","lalamove"];c.couriers=a.includes(d.bscour)?a.filter(x=>x!==d.bscour):a.concat(d.bscour);b.setAttribute("aria-pressed",c.couriers.includes(d.bscour));return}
+  if(!d.bsa)return;
+  try{
+    if(d.bsa==="savekey"){const k=($("#bsKey").value||"").trim();if(!k){bsAdmMsg("Paste your API key first.",true);return}b.disabled=true;await SBH.rpc("admin_biteship_save",{p:{key:k}});BSA.hasKey=true;BSA.mode=k.startsWith("biteship_test")?"test":k.startsWith("biteship_live")?"live":"unknown";toast("Key saved");renderAdmin()}
+    else if(d.bsa==="rmkey"){armed(b,async()=>{await SBH.rpc("admin_biteship_save",{p:{key:""}});BSA.hasKey=false;BSA.mode="";const s=DB.settings.biteship;if(s&&s.on){s.on=false;saveDB()}toast("Key removed. Courier prices are off.");renderAdmin()})}
+    else if(d.bsa==="savecfg"){b.disabled=true;await SBH.rpc("admin_biteship_save",{p:{cfg:BSA.cfg}});toast("Courier settings saved");bsAdmMsg("Saved.");b.disabled=false}
+    else if(d.bsa==="test"){b.disabled=true;b.textContent="Testing…";const r=await SBH.fn("biteship",{action:"test"},true);b.disabled=false;b.textContent="Test connection";bsAdmMsg(r.ok?`Connected (${r.mode} mode). Biteship lists ${r.couriers.length} couriers.`:`Not connected: ${r.error}`,!r.ok)}
+    else if(d.bsa==="copy"){const i=b.parentNode.querySelector("input");try{await navigator.clipboard.writeText(i.value);toast("Copied")}catch(err){i.select()}}
+  }catch(err){b.disabled=false;if(d.bsa==="test")b.textContent="Test connection";bsAdmMsg(err.message,true);toast(err.message)}});
 /* --- gift editor (Flash sales tab, Gifts promo) --- */
 am.addEventListener("input",e=>{const el=e.target,D=A.draft;
   if(el.dataset.gname!==undefined){D.gifts[+el.dataset.gname].name=el.value;updatePreview()}

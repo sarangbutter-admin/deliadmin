@@ -43,5 +43,21 @@
     return attempt(tok);
   }
 
+  // calls an Edge Function (admin = true: send the team member's token)
+  async function fn(name, body, admin) {
+    if (!on) throw new Error("Backend is not configured.");
+    var tok = null;
+    if (admin) { tok = await token(); if (!tok) throw new Error("Please sign in to the team area."); }
+    var t = timeout(30000), r;
+    try {
+      r = await fetch(URL_ + "/functions/v1/" + name, { method: "POST", headers: headers(tok), body: JSON.stringify(body || {}), signal: t.signal });
+    } catch (e) { t.done(); throw new Error(nice(e && e.message)); }
+    t.done();
+    var txt = await r.text(), j = null;
+    try { j = txt ? JSON.parse(txt) : null; } catch (e) { j = null; }
+    if (!r.ok) { var err = new Error(nice((j && (j.error || j.message)) || ("Request failed (" + r.status + ")"))); err.status = r.status; throw err; }
+    return j;
+  }
+
   window.SBK = { on: on, url: URL_, rpc: rpc };
 })();

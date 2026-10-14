@@ -27,7 +27,7 @@ If `config.js` is left empty the site runs in **demo mode**: everything is store
 ### 1. Supabase (the database)
 
 1. Create a project at <https://supabase.com> (any region close to your customers). Save the database password somewhere safe.
-2. Open **SQL Editor → New query**, paste the whole file `supabase/migrations/20260101000000_delidome_schema.sql`, press **Run**. Then do the same with `20260102000000_roles_customers.sql` (staff roles + customer list) `20260103000000_hardening.sql` (tighter permissions) `20260104000000_storage_select.sql` (picture uploads) `20260105000000_badges_reviews.sql` (badges, best sellers, buyer-only reviews) `20260106000000_team_log.sql` (staff usernames, access checkboxes, activity log, owner password) `20260107000000_order_flow.sql` (order status rules: payment proof + owner approval, forward-only steps, courier + airway bill for delivery, only owners can go back, edit or cancel once ready) and `20260108000000_reject_approval.sql` (staff rejecting a payment proof also needs owner approval) and `20260109000000_step_rules.sql` (no skipping steps, nothing moves on before payment is confirmed) and `20260110000000_ship_options.sql` (Sameday shipment, Pickup and Scheduled delivery, each with an on/off switch and a lead time) and `20260111000000_free_delivery_promo.sql` (scheduled Free delivery promos in Flash sales) and `20260112000000_pay_deadline.sql` (time to pay follows the order's due time: the earlier of the usual payment window and the due time minus the lead time, never under the minimum; sameday gets its own short window; times that are too soon are refused). and `20260113000000_refund_visitors.sql` (owner-only visitor numbers; owner can mark a paid order as refunded, and the customer sees it in the bell and their order history). and `20260114000000_sales_performance.sql` (orders remember who cancelled them and whether Random/Shuffle was used, for the dashboard Sales and Performance tabs). and `20260115000000_owner_only_delete.sql` (only an owner account can delete flavors, extras, box sizes and categories). and `20260116000000_time_slots.sql` (one-hour time slot boxes on a 24-hour clock, each with on/off and a daily limit that only paid orders use up). and `20260117000000_gifts.sql` (Gifts promos in Flash sales: free items with certain boxes, always-given or random; saved on the order). All are safe to run again later.
+2. Open **SQL Editor → New query**, paste the whole file `supabase/migrations/20260101000000_delidome_schema.sql`, press **Run**. Then do the same with `20260102000000_roles_customers.sql` (staff roles + customer list) `20260103000000_hardening.sql` (tighter permissions) `20260104000000_storage_select.sql` (picture uploads) `20260105000000_badges_reviews.sql` (badges, best sellers, buyer-only reviews) `20260106000000_team_log.sql` (staff usernames, access checkboxes, activity log, owner password) `20260107000000_order_flow.sql` (order status rules: payment proof + owner approval, forward-only steps, courier + airway bill for delivery, only owners can go back, edit or cancel once ready) and `20260108000000_reject_approval.sql` (staff rejecting a payment proof also needs owner approval) and `20260109000000_step_rules.sql` (no skipping steps, nothing moves on before payment is confirmed) and `20260110000000_ship_options.sql` (Sameday shipment, Pickup and Scheduled delivery, each with an on/off switch and a lead time) and `20260111000000_free_delivery_promo.sql` (scheduled Free delivery promos in Flash sales) and `20260112000000_pay_deadline.sql` (time to pay follows the order's due time: the earlier of the usual payment window and the due time minus the lead time, never under the minimum; sameday gets its own short window; times that are too soon are refused). and `20260113000000_refund_visitors.sql` (owner-only visitor numbers; owner can mark a paid order as refunded, and the customer sees it in the bell and their order history). and `20260114000000_sales_performance.sql` (orders remember who cancelled them and whether Random/Shuffle was used, for the dashboard Sales and Performance tabs). and `20260115000000_owner_only_delete.sql` (only an owner account can delete flavors, extras, box sizes and categories). and `20260116000000_time_slots.sql` (one-hour time slot boxes on a 24-hour clock, each with on/off and a daily limit that only paid orders use up). and `20260117000000_gifts.sql` (Gifts promos in Flash sales: free items with certain boxes, always-given or random; saved on the order). and `20260118000000_biteship.sql` (optional Biteship courier prices and booking; does nothing until switched on). All are safe to run again later.
 3. Create your owner login: **Authentication → Users → Add user → Create new user**. Enter your email and a long password, and tick **Auto Confirm User**.
 4. Tell the database that this email is the owner. In **SQL Editor** run (use your own email):
    ```sql
@@ -141,6 +141,24 @@ First things to do in the admin:
 | "Could not find the function … in the schema cache" | Re-run the SQL file, then wait a few seconds (or **Project Settings → API → Reload schema**). |
 | Pictures don't upload | Re-run the SQL file (it creates the `shop-media` bucket and its policies). |
 | Customers see an empty shop | Sign in to `/#admin` once so the starter content is created. |
+
+## Optional: Biteship courier delivery
+
+Live courier prices at checkout, booking and tracking. It is **off by default**: with it off, customers pay your normal delivery fee and you use your own courier, exactly as before.
+
+1. Run `supabase/migrations/20260118000000_biteship.sql` once (SQL Editor).
+2. Deploy the two Edge Functions (Supabase CLI):
+   ```
+   supabase functions deploy biteship
+   supabase functions deploy biteship-webhook --no-verify-jwt
+   ```
+   (`supabase/config.toml` already marks the webhook as public. It is protected by a secret in its address.)
+3. Create a Biteship account and copy the **test** API key.
+4. On the team site: **Shop settings → Courier delivery (Biteship)**. Paste the key, press **Save key**, **Test connection**, fill in your pickup details, choose couriers, **Save courier settings**, then switch it on.
+5. In the Biteship dashboard add the webhook URL shown at the bottom of that panel.
+6. Test a delivery order with the test key. When happy, replace it with your live key.
+
+Customers pick a courier at checkout (the price is signed by the server and checked again when the order is placed). After you confirm payment, press **Book courier now** on the order. Status and tracking show on the order for you and the customer.
 
 ## Tests that were run
 

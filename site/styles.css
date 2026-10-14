@@ -549,6 +549,7 @@ footer a{color:var(--white)}
 .bake .bar-t{height:8px;border-radius:99px;background:var(--ice);margin-top:4px;overflow:hidden}
 .bake .bar-t i{display:block;height:100%;background:var(--blue);border-radius:99px}
 .bake b{font-family:var(--display);font-size:16px;color:var(--blue);font-variant-numeric:tabular-nums}
+.search{border:1.5px solid var(--line);border-radius:var(--r-pill);padding:8px 14px;font-size:14px;min-width:0;width:220px;max-width:100%;background:var(--white)}
 table.t{width:100%;border-collapse:collapse;font-size:14px;min-width:700px}
 .t th{text-align:left;font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.07em;padding:10px;border-bottom:1px solid var(--ice-2);white-space:nowrap}
 .t td{padding:12px 10px;border-bottom:1px solid var(--ice-2);vertical-align:middle}
@@ -572,8 +573,10 @@ textarea.in{resize:vertical;border-radius:10px}
 .money-in .in{border:0;padding-left:2px}
 .danger{border:1.5px solid #F2C2CC;background:var(--white);color:var(--red);border-radius:var(--r-pill);padding:7px 12px;font-weight:600;font-size:13px}
 .danger.armed{background:var(--red);color:var(--white);border-color:var(--red)}
+.ghost{border:1.5px solid var(--line);background:var(--white);color:var(--blue);border-radius:var(--r-pill);padding:7px 12px;font-weight:600;font-size:13px}
 .prow .pthumb .plate{width:84px}
 .pthumb.drag .plate{outline:3px dashed var(--blue);outline-offset:3px}
+.upl.busy{opacity:.6;pointer-events:none}
 .linkbtn.sm{font-size:12px}
 .catbar{margin-bottom:18px}
 .stars{color:var(--blue);letter-spacing:1px}
@@ -592,9 +595,12 @@ textarea.in{resize:vertical;border-radius:10px}
 .sp.on{color:var(--blue)}
 .lblx{display:block;font-size:13px;font-weight:600;margin-bottom:6px}
 .rvadd h4,.rvlist+form h4{margin:0}
+.ptools .search{flex:1 1 240px;width:auto;max-width:420px}
 @keyframes rowflash{0%,40%{background:var(--ice-2)}100%{background:transparent}}
+.np-top .acts{display:grid;gap:6px;justify-items:start}
 .catrow .note{white-space:nowrap}
 .stepin .in{width:84px;text-align:center;font-variant-numeric:tabular-nums}
+.stepin .ghost{width:34px;height:34px;padding:0;font-size:18px;line-height:1}
 .spill.ok{background:#D9F4E5;color:#0B6B3A}
 .spill.low{background:#FFEFD1;color:#8A4F00}
 .spill.out{background:#FCE3E8;color:#A3001F}
@@ -763,6 +769,7 @@ body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
 @keyframes nudgeShake{0%,100%{transform:none}20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}
 
 /* colour pop-up */
+.colin .cpbtn,.bgcol .cpbtn{width:46px;flex:none}
 .cpsw.on{outline:3px solid var(--blue);outline-offset:1px}
 
 
@@ -792,3 +799,16 @@ body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
 @keyframes gdice{0%,100%{transform:rotate(-12deg)}50%{transform:rotate(12deg) scale(1.1)}}
 .dsec .gl .gc{background:#EEF0FF}
 @media (prefers-reduced-motion:reduce){.gb,.gtag,.gc.rnd i{animation:none!important}}
+
+/* checkout: courier choice */
+.bsbox{border:1.5px dashed var(--line);border-radius:14px;padding:12px}
+.bsrow{position:relative}
+.bsrow input{width:100%}
+.bslist{position:absolute;z-index:5;left:0;right:0;top:100%;background:var(--white);border:1.5px solid var(--line);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,60,.18);max-height:220px;overflow:auto}
+.bslist button{display:block;width:100%;text-align:left;padding:10px 12px;background:none;border:0;border-bottom:1px solid var(--ice-2);font:inherit;cursor:pointer}
+.bslist button:hover{background:var(--ice)}
+.bsbtns{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.bsopts{display:grid;gap:8px;margin-top:10px}
+.bsopt{display:flex;justify-content:space-between;align-items:center;gap:10px;text-align:left;padding:10px 12px;border:2px solid var(--line);border-radius:12px;background:var(--white);font:inherit;cursor:pointer}
+.bsopt small{display:block;color:var(--muted)}
+.bsopt[aria-pressed="true"]{border-color:var(--blue);background:var(--ice)}
