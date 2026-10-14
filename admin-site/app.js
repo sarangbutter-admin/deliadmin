@@ -2049,14 +2049,36 @@ function stepWhy(o,st){
   if(st==="new"&&ci>=0&&ci<3&&cur!=="review")return "Confirm payment needs the customer's payment proof first.";
   if(si>=3&&ci>=0&&ci<2)return "Confirm the payment first. Baking and the next steps only open after Payment confirmed.";
   if(ci>=2&&si>ci+1)return "Orders move one step at a time. They can't skip a step.";
-  if(own)return "";
-  if(cur==="review"&&st==="new")return o.rejReq?"A proof rejection is already waiting for the owner.":o.payReq?"Already waiting for the owner's approval.":"";
-  if(cur==="review"&&st==="awaiting")return o.payReq?"A payment confirmation is already waiting for the owner.":o.rejReq?"Already waiting for the owner's approval.":"";
+  if(ovrOn(o))return "";
+  if(cur==="review"&&st==="new")return own?"":o.rejReq?"A proof rejection is already waiting for the owner.":o.payReq?"Already waiting for the owner's approval.":"";
+  if(cur==="review"&&st==="awaiting")return own?"":o.payReq?"A payment confirmation is already waiting for the owner.":o.rejReq?"Already waiting for the owner's approval.":"";
   const ok=(["awaiting","review"].includes(cur)&&st==="cancelled")||(cur==="new"&&st==="baking")||(cur==="baking"&&st==="ready")||(cur==="ready"&&st==="completed");
-  return ok?"":["new","baking"].includes(cur)&&st==="cancelled"?"Only an owner can cancel a paid order.":"Orders only move forward one step at a time. Going back needs an owner.";
+  if(ok)return "";
+  if(own)return "Turn on 🔒 Owner mode for this order first (going back a step, cancelling a paid order or reopening a cancelled one).";
+  return ["new","baking"].includes(cur)&&st==="cancelled"?"Only an owner can cancel a paid order.":"Orders only move forward one step at a time. Going back needs an owner.";
 }
-const canEditOrder=o=>ROLE()==="owner"?!["cancelled","completed"].includes(o.status):["awaiting","review"].includes(o.status);
-const canCancelOrder=o=>ROLE()==="owner"?!["cancelled","completed"].includes(o.status):["awaiting","review"].includes(o.status);
+/* --- Owner mode: per order, owner password, switches itself off after 5 minutes --- */
+const OWNM={};   // order id -> unlocked until (ms)
+const ovrOn=o=>ROLE()==="owner"&&(OWNM[o.id]||0)>Date.now();
+const ownLocked=o=>ROLE()==="owner"&&!ovrOn(o);   // an owner without Owner mode follows the everyday rules
+const fmtLeftS=ms=>{const s=Math.max(0,Math.round(ms/1000));return Math.floor(s/60)+":"+String(s%60).padStart(2,"0")};
+function ownBtn(o){if(ROLE()!=="owner")return "";const on=ovrOn(o);
+  return `<button class="oc-b ownm${on?" on":""}" type="button" data-ownm="${o.id}" title="${on?"Tap to turn Owner mode off":"Owner password needed. Unlocks going back, cancelling or editing a paid order and refunds for 5 minutes"}">${on?`🔓 Owner mode · <span data-ownt="${o.id}">${fmtLeftS(OWNM[o.id]-Date.now())}</span>`:"🔒 Owner mode"}</button>`}
+async function ownerModeToggle(id){
+  const o=DB.orders.find(x=>x.id===id);if(!o)return;
+  if(ovrOn(o)){delete OWNM[id];if(SBH.on)SBH.rpc("admin_owner_mode",{p_id:id,p_password:""}).catch(()=>{});toast("Owner mode off");renderAdmin();if(A.openOrder===id)openOrder(id);return}
+  if(!SBH.on){OWNM[id]=Date.now()+300000;toast("Owner mode on for 5 minutes");renderAdmin();return}
+  const ok=await pwPrompt({title:"Owner mode for "+o.code,text:"Type the owner password. This unlocks going back a step, cancelling or editing this paid order and refunds, for this order only. It switches off by itself after 5 minutes.",button:"Turn on",
+    run:async pw=>{try{const r=await SBH.rpc("admin_owner_mode",{p_id:id,p_password:pw});if(r&&r.ok)OWNM[id]=r.until;return r}catch(x){return {ok:false,err:x.message}}}}).then(()=>true,()=>false);
+  if(ok&&ovrOn(o)){toast("Owner mode on for 5 minutes");renderAdmin();if(A.openOrder===id)openOrder(id)}
+}
+document.addEventListener("click",e=>{const b=e.target.closest("[data-ownm]");if(b){ownerModeToggle(b.dataset.ownm);return}
+  const n=e.target.closest("[data-needown]");if(n){toast("Turn on Owner mode for this order first (🔒 Owner mode button).");const t=document.querySelector(`[data-ownm="${n.dataset.needown}"]`);if(t){t.classList.remove("nudge");void t.offsetWidth;t.classList.add("nudge")}}});
+setInterval(()=>{let gone=false;for(const id in OWNM){const left=OWNM[id]-Date.now();if(left<=0){delete OWNM[id];gone=true;continue}document.querySelectorAll(`[data-ownt="${id}"]`).forEach(x=>x.textContent=fmtLeftS(left))}
+  if(gone&&view==="admin"){toast("Owner mode switched off");renderAdmin()}},1000);
+const PAIDISH=["new","baking","ready","completed"];
+const canEditOrder=o=>ROLE()==="owner"?!["cancelled","completed"].includes(o.status)&&(["awaiting","review"].includes(o.status)||ovrOn(o)):["awaiting","review"].includes(o.status);
+const canCancelOrder=o=>ROLE()==="owner"?!["cancelled","completed"].includes(o.status)&&(["awaiting","review"].includes(o.status)||ovrOn(o)):["awaiting","review"].includes(o.status);
 const shownRows=()=>ordRows().filter(o=>A.filter==="all"||(A.filter==="rejected"?isRej(o):A.filter==="awaiting"?o.status==="awaiting"&&!isRej(o):o.status===A.filter));
 function orderCard(o){
   const del=o.mode==="delivery",c=o.customer,paid=canLabel(o);
@@ -2080,7 +2102,7 @@ function orderCard(o){
     ${payLine?`<div class="oc-info">${payLine}</div>`:""}
     ${o.cancelReason?`<div class="oc-info">Cancel reason: ${esc(o.cancelReason)}</div>`:""}
     <div class="oc-sts" role="group" aria-label="Order status">${keys.map(k=>{const why=stepWhy(o,k);return `<button class="oc-b${why&&o.status!==k?" off":""}${k==="awaiting"&&isRej(o)?" oc-rejb":""}${k==="review"&&o.status==="review"?" oc-chk":""}" type="button" data-ostatus="${o.id}:${k}" aria-pressed="${o.status===k}" ${why&&o.status!==k?`aria-disabled="true" title="${esc(why)}"`:""}>${k==="new"?"✓ ":""}${k==="awaiting"&&isRej(o)?"✕ Rejected":k==="new"&&o.status==="review"&&!own&&!o.payReq?"Confirm payment (owner approves)":stLabel(k,o.mode)}</button>${k==="baking"&&bsReqShow(o)?`<button class="oc-b oc-req${["new","baking"].includes(o.status)?"":" off"}" type="button" data-bsreq="${o.id}" ${["new","baking"].includes(o.status)?"":'aria-disabled="true" title="Confirm the payment first"'}>🛵 ${o.bship.failed||o.bship.cancelledAt?"Book courier again":"Request courier pickup"}</button>`:""}`}).join("")}</div>
-    <div class="oc-sts">${canEdit?`<button class="oc-b" type="button" data-osub="${o.id}">✎ Edit / substitute</button>`:""}${canCancelOrder(o)?`<button class="oc-b" type="button" data-ocancel="${o.id}">✕ Cancel order</button>`:""}${canRefund(o)?`<button class="oc-b" type="button" data-refund="${o.id}">💸 Refund</button>`:""}<button class="oc-b" type="button" data-order="${o.id}">Details</button></div>
+    <div class="oc-sts">${ownBtn(o)}${canEdit?`<button class="oc-b" type="button" data-osub="${o.id}">✎ Edit / substitute</button>`:own&&PAIDISH.includes(o.status)&&o.status!=="completed"?`<button class="oc-b off" type="button" data-needown="${o.id}">✎ Edit 🔒</button>`:""}${canCancelOrder(o)?`<button class="oc-b" type="button" data-ocancel="${o.id}">✕ Cancel order</button>`:own&&PAIDISH.includes(o.status)&&o.status!=="completed"?`<button class="oc-b off" type="button" data-needown="${o.id}">✕ Cancel 🔒</button>`:""}${canRefund(o)?`<button class="oc-b" type="button" data-refund="${o.id}">💸 Refund</button>`:canRefundLocked(o)?`<button class="oc-b off" type="button" data-needown="${o.id}">💸 Refund 🔒</button>`:""}<button class="oc-b" type="button" data-order="${o.id}">Details</button></div>
     ${lbl}
     ${paid&&del?`<div class="grid2"><label class="af" style="font-size:12px">Courier<input class="in" data-oship="courier" data-oid="${o.id}" ${!own&&["ready","completed"].includes(o.status)&&String(o.awb||"").trim()?"disabled":""} maxlength="30" value="${esc(o.courier||"")}" placeholder="e.g. JNE"></label><label class="af" style="font-size:12px">Airway bill<input class="in" data-oship="awb" data-oid="${o.id}" ${!own&&["ready","completed"].includes(o.status)&&String(o.awb||"").trim()?"disabled":""} maxlength="40" value="${esc(o.awb||"")}" placeholder="Tracking no."></label></div>`:""}
     ${paid&&del&&["new","baking"].includes(o.status)?`<p class="note" style="margin:0">${o.status==="baking"?"Type the courier and airway bill: the order moves to <b>Out for delivery</b> by itself.":"After baking, type the courier and airway bill to send it out."}</p>`:""}
@@ -2225,7 +2247,8 @@ $("#modal").addEventListener("click",e=>{
 },true);
 
 /* --- refunds (owner only) --- */
-const canRefund=o=>ROLE()==="owner"&&!!o.paidAt&&!o.refund;
+const canRefund=o=>ROLE()==="owner"&&!!o.paidAt&&!o.refund&&(ovrOn(o)||!SBH.on);
+const canRefundLocked=o=>ROLE()==="owner"&&!!o.paidAt&&!o.refund&&!ovrOn(o)&&SBH.on;
 let RF=null;
 function refundMsgText(o,amt,note){const full=amt>=o.total-.005,nm=(o.customer.name.split(" ")[0]||"there");return `Hi ${nm}, your order ${o.code} was ${full?"refunded":"partly refunded"}: ${money(amt)}.${note?" "+note:""} It can take a few days to show in your account.`}
 function renderRefund(){
