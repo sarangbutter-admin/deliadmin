@@ -217,7 +217,18 @@ const bsShip=(c,at=Date.now(),db=DB)=>bsOn(db)&&c.mode==="delivery"&&c.ship&&c.s
 const bsPending=(c,db=DB)=>bsOn(db)&&c.mode==="delivery"&&!c.bsSkip&&!bsShip(c,Date.now(),db);
 const BS_ST={confirmed:"Courier booked",scheduled:"Pickup scheduled",allocated:"Courier assigned",picking_up:"Courier is on the way to pick up",picked:"Picked up",dropping_off:"On the way to you",return_in_transit:"Returning",on_hold:"On hold",delivered:"Delivered",rejected:"Rejected by courier",disposed:"Disposed",courier_not_found:"No courier found",returned:"Returned",cancelled:"Booking cancelled"};
 const BS_FAIL=["courier_not_found","rejected","cancelled","returned","disposed"];
-const placeHTML=o=>{const p=o.place;if(!p||o.mode!=="delivery"||!(p.note||p.photo))return "";
+// customers can change the note and photo on their order page until a courier is booked
+let PLE=null;
+const placeEditable=o=>SBH.on&&o.mode==="delivery"&&["awaiting","review","new","baking"].includes(o.status)&&!(o.bship&&o.bship.biteshipId)&&(DB.settings.dnoteOn!==false||DB.settings.dphotoOn!==false);
+function placeEditHTML(o){
+  const p=o.place||{};if(!PLE||PLE.id!==o.id)PLE={id:o.id,note:p.note||"",img:undefined};
+  const img=PLE.img==="remove"?"":PLE.img||(p.photo?p.img||"":""),loading=PLE.img===undefined&&p.photo&&!p.img;
+  return `<div class="dsec"><h4>📍 Delivery details</h4><p class="note" style="margin:0 0 8px">Help the courier find you. You can change this until the courier is booked.</p>
+    ${DB.settings.dnoteOn!==false?`<label class="af">Note for the driver<textarea class="in" id="plNote" rows="2" maxlength="200" placeholder="e.g. Green gate next to Indomaret, house no. 6, ring the bell">${esc(PLE.note)}</textarea></label>`:""}
+    ${DB.settings.dphotoOn!==false?`<div class="af" style="margin-top:8px">Photo of your place<div class="colin" style="flex-wrap:wrap;margin-top:4px">${img?`<img class="placeprev" src="${esc(img)}" alt="Your place">`:loading?`<span class="note">Loading the photo…</span>`:""}<label class="ghost mqbtn">📷 ${img||loading?"Change photo":"Add photo"}<input type="file" accept="image/*" hidden id="plPhoto"></label>${img||loading?`<button class="ghost" type="button" data-plrm>Remove</button>`:""}</div><small class="note">Only the shop and you can see it.</small></div>`:""}
+    <button class="btn btn-blue btn-sm" type="button" data-plsave="${o.id}" style="margin-top:10px">Save delivery details</button><p class="err" id="plErr" hidden></p></div>`;
+}
+const placeHTML=(o,cust)=>{if(cust&&placeEditable(o))return placeEditHTML(o);const p=o.place;if(!p||o.mode!=="delivery"||!(p.note||p.photo))return "";
   return `<div class="dsec"><h4>📍 Delivery details</h4>${p.note?`<p style="margin:0 0 6px"><b>Note for the driver:</b> ${esc(p.note)}</p>`:""}${p.photo?(p.img?`<a href="${esc(p.img)}" target="_blank" rel="noopener"><img class="placeprev big" src="${esc(p.img)}" alt="Photo of the delivery place"></a>`:`<p class="note">Loading the photo…</p>`):""}</div>`};
 const bsBadge=o=>{const b=o.bship;if(!b||!b.courier||o.mode!=="delivery")return null;
   if(b.failed)return {t:"Courier failed",c:"bad"};if(!b.biteshipId)return b.status==="cancelled"?{t:"Courier cancelled",c:"bad"}:{t:"Courier not booked",c:"wait"};
@@ -1306,7 +1317,7 @@ function renderMO(){
     <div><span>${modeName(o)}</span><span class="num">${o.fee?money(o.fee):"Free"}</span></div>
     <div class="t"><span>Total</span><span class="num">${money(o.total)}</span></div></div>${o.mode==="delivery"?`<p class="hint">Your box may be split into smaller or bigger boxes for delivery safety.</p>`:""}</div>
   ${bsHTML(o,false)}
-  ${placeHTML(o)}
+  ${placeHTML(o,true)}
   ${giftsHTML(o)}
   ${o.status==="completed"?ratingHTML(o):""}
   ${complaintHTML(o)}
@@ -1343,6 +1354,17 @@ $("#moSheet").addEventListener("click",e=>{
     if(SBH.on){SBH.cancel(o.id).then(()=>{if(S.editId===o.id){S.editId=null;saveCart();renderEditBar()}toast("Order cancelled");renderBag();renderMO()}).catch(ex=>toast(ex.message));return}
     o.status="cancelled";o.cancelReason="You cancelled this order.";releaseHold(o);saveDB();if(S.editId===o.id){S.editId=null;renderEditBar()}toast("Order cancelled");renderBag();renderMO()})}
 });
+$("#moSheet").addEventListener("input",e=>{if(e.target.id==="plNote"&&PLE){PLE.note=e.target.value.slice(0,200);window.PLE_DIRTY=true}});
+$("#moSheet").addEventListener("change",async e=>{if(e.target.id!=="plPhoto"||!PLE)return;const f=e.target.files[0];e.target.value="";if(!f)return;
+  try{PLE.img=await processPlace(f);window.PLE_DIRTY=true;renderMO()}catch(err){toast(err.message)}});
+$("#moSheet").addEventListener("click",async e=>{
+  if(e.target.closest("[data-plrm]")&&PLE){PLE.img="remove";window.PLE_DIRTY=true;renderMO();return}
+  const b=e.target.closest("[data-plsave]");if(!b||!PLE)return;const o=DB.orders.find(x=>x.id===b.dataset.plsave);if(!o)return;
+  b.disabled=true;b.textContent="Saving…";const img=PLE.img;
+  try{await SBH.placeInfo(o.id,DB.settings.dnoteOn!==false?String(PLE.note||"").trim():"",img||"");
+    const n=DB.orders.find(x=>x.id===o.id);if(n&&n.place){if(img&&img!=="remove")n.place.img=img;if(img==="remove")delete n.place.img}
+    PLE=null;window.PLE_DIRTY=false;toast("Delivery details saved");renderMO()}
+  catch(err){b.disabled=false;b.textContent="Save delivery details";const er=$("#plErr");if(er){er.hidden=false;er.textContent=err.message}}});
 $("#moSheet").addEventListener("change",e=>{
   if(e.target.name==="cpScope"){$("#cpItems").hidden=e.target.value!=="items";return}
   if(e.target.id!=="mpFile")return;const f=e.target.files[0],img=$("#mpPrev");

@@ -571,6 +571,7 @@ select.st{border-radius:var(--r-pill);border:0;padding:6px 10px;font-weight:700;
 @keyframes blink{50%{opacity:.25}}
 .spill.scheduled{background:var(--ice);color:var(--blue)}
 .spill.ended{background:#ECEDF3;color:#4D4F70}
+.af{display:grid;gap:5px;font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.02em;min-width:0}
 .in{width:100%;border:1.5px solid var(--line);border-radius:10px;padding:9px 11px;background:var(--white);font-size:14px;font-weight:500;color:var(--ink);min-width:0}
 .in:focus{border-color:var(--blue);outline:none}
 textarea.in{resize:vertical;border-radius:10px}

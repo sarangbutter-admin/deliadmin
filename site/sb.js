@@ -72,6 +72,7 @@
   function typingInMO() {
     var f = document.activeElement, sh = $q("#moSheet");
     if (f && sh && sh.contains(f) && /INPUT|TEXTAREA|SELECT/.test(f.tagName)) return true;
+    if (window.PLE_DIRTY) return true;   // unsaved delivery details
     var pf = $q("#mpFile"), pn = $q("#mpName"), ct = $q("#cpText");
     return !!((pf && pf.files && pf.files.length) || (pn && pn.value) || (ct && ct.value));
   }
