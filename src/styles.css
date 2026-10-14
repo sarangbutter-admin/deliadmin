@@ -85,7 +85,8 @@ p{margin:0}
 .dome.nofloat .float{display:none}
 .float{position:absolute;z-index:1;opacity:.95;width:clamp(64px,11vw,128px);aspect-ratio:1;animation:bob 6s ease-in-out infinite}
 .float:nth-child(2n){animation-delay:-3s}
-@media (max-width:640px){.float{width:58px}.float:nth-of-type(n+5){display:none}}
+@media (max-width:640px){.float{width:58px}.float.hid-ph{display:none}}
+@media (min-width:641px){.float.hid-pc{display:none}}
 @keyframes bob{50%{transform:translateY(-10px) rotate(6deg)}}
 .float.fx-spin{animation:fspin 9s linear infinite}
 .float.fx-pulse{animation:fpulse 3.2s ease-in-out infinite}
