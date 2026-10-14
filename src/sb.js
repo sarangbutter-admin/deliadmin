@@ -156,6 +156,9 @@
   }, 1000);
   document.addEventListener("visibilitychange", function () { if (!document.hidden && !H.admin && H.loaded) { H.refreshOrders(); H.loadShop(true); } });
 
+  // Edge Functions (courier prices etc.); admin = true sends the team sign-in
+  H.fn = function (name, body, admin) { return K.fn(name, body, !!admin); };
+
   /* ================= owner: sign-in ================= */
   var DOCS = ["settings", "page", "marquee", "announcer", "thanks", "proofpop", "payMethods", "alerts", "label", "badges"];
   var COLLS = { sizes: function (o) { return String(o.n); }, categories: function (o) { return o.id; }, addons: function (o) { return o.id; }, sales: function (o) { return o.id; }, coupons: function (o) { return o.id; }, broadcasts: function (o) { return o.id; } };
@@ -188,7 +191,6 @@
   var starting = false;
   H.adminReady = function () { return H.admin; };
   H.rpc = function (name, args) { return K.rpc(name, args, true); };
-  H.fn = function (name, body, admin) { return K.fn(name, body, !!admin); };
   H.enterAdmin = function () {
     if (H.admin) return;
     if (!K.signedIn()) { loginUI(); return; }

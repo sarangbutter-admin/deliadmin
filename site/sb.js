@@ -155,4 +155,7 @@
   }, 1000);
   document.addEventListener("visibilitychange", function () { if (!document.hidden && H.loaded) { H.refreshOrders(); H.loadShop(true); } });
 
+  // Edge Functions (courier prices etc.); admin = true sends the team sign-in
+  H.fn = function (name, body, admin) { return K.fn(name, body, !!admin); };
+
 })();

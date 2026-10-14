@@ -517,12 +517,14 @@ footer a{color:var(--white)}
 .code{font-family:var(--display);font-size:20px;letter-spacing:.06em;color:var(--blue)}
 .note{font-size:12px;color:var(--muted)}
 
+.admin{display:grid;grid-template-columns:236px minmax(0,1fr);min-height:100vh;background:var(--ice)}
 .side .logo{color:var(--white);margin:0 8px 2px}
 .side .role{font-size:11px;opacity:.7;margin:0 8px 18px;letter-spacing:.12em;text-transform:uppercase;font-weight:600}
 .nav .count{font-size:12px;background:var(--white);color:var(--blue);border-radius:999px;padding:1px 8px;font-variant-numeric:tabular-nums}
 .nav .count.live{background:var(--red);color:var(--white)}
 .nav button[aria-current="page"] .count:not(.live){background:var(--blue);color:var(--white)}
 @media (max-width:860px){
+  .admin{grid-template-columns:minmax(0,1fr)}
   .side .role{display:none}
 }
 .ahead{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:16px}

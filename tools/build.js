@@ -92,9 +92,9 @@ wr('admin-site/backend.js',BK);
   const e=BK.indexOf('  async function rpc');const f=BK.indexOf('  window.SBK = {');
   if([a,b,c,d,e,f].some(x=>x<0))throw new Error('backend.js markers');
   let rpcSrc=BK.slice(e,BK.indexOf('  async function login'));
-  rpcSrc=rpcSrc.replace(/    var tok = null;\n    if \(admin\)[^\n]*\n/,'    var tok = null;\n').replace(/\n    try \{ return await attempt\(tok\); \}\n    catch \(e\) \{[\s\S]*?\n    \}\n  \}\n/,'\n    return attempt(tok);\n  }\n').replace('async function rpc(name, args, admin)','async function rpc(name, args)');
+  rpcSrc=rpcSrc.replace(/    var tok = null;\n    if \(admin\)[^\n]*\n/g,'    var tok = null;\n').replace(/\n    try \{ return await attempt\(tok\); \}\n    catch \(e\) \{[\s\S]*?\n    \}\n  \}\n/,'\n    return attempt(tok);\n  }\n').replace('async function rpc(name, args, admin)','async function rpc(name, args)');
   const head=BK.slice(0,a).replace(/   - login\(\)[^\n]*\n/,'').replace(/   - upload\(\)[^\n]*\n/,'');
-  wr('site/backend.js',head+BK.slice(b,c)+rpcSrc+'  window.SBK = { on: on, url: URL_, rpc: rpc };\n})();\n');
+  wr('site/backend.js',head+BK.slice(b,c)+rpcSrc+'  window.SBK = { on: on, url: URL_, rpc: rpc, fn: fn };\n})();\n');
 }
 
 /* ---------------- html / css / misc ---------------- */

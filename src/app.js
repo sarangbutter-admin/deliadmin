@@ -2616,9 +2616,10 @@ const SND_OPTS=[["register","Ka-ching"],["chime","Chime"],["bell","Bell"],["door
 const BSA={loaded:false,loading:false,hasKey:false,mode:"",cfg:{},secret:"",msg:"",dirty:false};
 const BS_COURIERS=[["gojek","Gojek"],["grab","Grab"],["lalamove","Lalamove"],["borzo","Borzo"],["jne","JNE"],["sicepat","SiCepat"],["jnt","J&T"],["anteraja","AnterAja"]];
 function bsAdminLoad(){
-  if(BSA.loaded||BSA.loading||!SBH.on||ROLE()!=="owner")return;BSA.loading=true;
-  SBH.rpc("admin_biteship_get",{}).then(r=>{BSA.hasKey=!!r.hasKey;BSA.mode=r.mode||"";BSA.cfg=r.cfg||{};BSA.secret=r.webhookSecret||"";BSA.loaded=true;BSA.loading=false;if(A.tab==="settings")renderAdmin()})
-    .catch(e=>{BSA.loading=false;BSA.msg=/does not exist|Could not find/i.test(e.message)?"Run the latest database file (20260118000000_biteship.sql) first.":e.message;BSA.loaded=true;if(A.tab==="settings")renderAdmin()});
+  if((BSA.loaded&&!BSA.failedAt)||BSA.loading||!SBH.on||ROLE()!=="owner")return;
+  if(BSA.failedAt&&Date.now()-BSA.failedAt<10000)return;BSA.loading=true;
+  SBH.rpc("admin_biteship_get",{}).then(r=>{BSA.hasKey=!!r.hasKey;BSA.mode=r.mode||"";if(!BSA.dirty)BSA.cfg=r.cfg||{};BSA.secret=r.webhookSecret||"";BSA.loaded=true;BSA.loading=false;BSA.failedAt=0;BSA.msg="";if(A.tab==="settings")renderAdmin()})
+    .catch(e=>{BSA.loading=false;BSA.msg=/does not exist|Could not find/i.test(e.message)?"Run the latest database file (20260118000000_biteship.sql) first.":e.message;BSA.loaded=true;BSA.failedAt=Date.now();if(A.tab==="settings")renderAdmin()});
 }
 function bsPanel(){
   const b=DB.settings.biteship||{},on=!!b.on;
@@ -2638,6 +2639,7 @@ function bsPanel(){
     <h3 style="margin:14px 0 4px;font-size:15px">1. API key</h3>
     <p class="note" style="margin:0 0 6px">${BSA.hasKey?`A key is saved${BSA.mode?` (${BSA.mode} mode)`:""}. It is stored privately and never shown on the website.`:"No key saved yet. Copy it from your Biteship dashboard (use the test key first)."}</p>
     <div class="colin" style="flex-wrap:wrap"><input class="in" id="bsKey" type="password" autocomplete="off" placeholder="biteship_test.…" style="flex:1;min-width:180px"><button class="btn btn-blue btn-sm" type="button" data-bsa="savekey">Save key</button>${BSA.hasKey?`<button class="ghost" type="button" data-bsa="test">Test connection</button><button class="danger" type="button" data-bsa="rmkey">Remove key</button>`:""}</div>
+    <p class="note" id="bsTestMsg" ${BSA.test?"":"hidden"} style="margin:8px 0 0;font-weight:600;${BSA.test&&BSA.test.bad?"color:var(--red)":"color:#0A6B34"}">${esc(BSA.test?BSA.test.t:"")}</p>
     <h3 style="margin:18px 0 4px;font-size:15px">2. Pickup details</h3>
     <div class="grid2">${inp("Business name","origin.business",o.business,"Delidome")}${inp("Contact name","origin.name",o.name,"Your name")}${inp("Contact phone","origin.phone",o.phone,"08123456789")}${inp("Postal code","origin.postal",o.postal,"12345")}</div>
     <div style="margin-top:10px">${inp("Pickup address","origin.address",o.address,"Street, number, area, city")}</div>
@@ -2657,7 +2659,7 @@ function bsPanel(){
     <p class="note" id="bsAdmMsg" hidden></p>
     <h3 style="margin:18px 0 4px;font-size:15px">6. Delivery updates (webhook)</h3>
     <p class="note" style="margin:0 0 6px">In the Biteship dashboard, add this as your webhook URL so courier status updates arrive by themselves. Keep it private.</p>
-    <div class="colin"><input class="in" readonly value="${esc(url)}" aria-label="Webhook URL" onclick="this.select()"><button class="ghost" type="button" data-bsa="copy">Copy</button></div>
+    ${BSA.secret?`<div class="colin"><input class="in" readonly value="${esc(url)}" aria-label="Webhook URL" onclick="this.select()"><button class="ghost" type="button" data-bsa="copy">Copy</button></div>`:`<p class="note" style="color:var(--red)">The webhook address isn't ready. Reload this page, then copy it again.</p>`}
   </section>`;
 }
 function bsAdmMsg(t,bad){const n=document.getElementById("bsAdmMsg");if(!n)return;n.hidden=!t;n.textContent=t||"";n.style.color=bad?"var(--red)":""}
@@ -3886,6 +3888,7 @@ function cpOpen(c){
 }
 /* --- Biteship settings handlers --- */
 am.addEventListener("input",e=>{const el=e.target;
+  if(el.dataset.bsc||el.dataset.bsw)BSA.dirty=true;
   if(el.dataset.bsc){const path=el.dataset.bsc.split("."),c=BSA.cfg;let t=c;for(let i=0;i<path.length-1;i++)t=t[path[i]]=t[path[i]]||{};t[path[path.length-1]]=el.type==="number"?(el.value===""?"":+el.value):el.value}
   else if(el.dataset.bsw){BSA.cfg.weights=BSA.cfg.weights||{};BSA.cfg.weights[el.dataset.bsw]=el.value===""?"":+el.value}});
 am.addEventListener("change",e=>{const el=e.target;if(!el.dataset.bsset)return;const b=DB.settings.biteship=DB.settings.biteship||{on:false,fallback:true};
@@ -3895,10 +3898,12 @@ am.addEventListener("click",async e=>{const b=e.target.closest("button");if(!b)r
   if(d.bscour){const c=BSA.cfg,a=Array.isArray(c.couriers)?c.couriers.slice():["gojek","grab","lalamove"];c.couriers=a.includes(d.bscour)?a.filter(x=>x!==d.bscour):a.concat(d.bscour);b.setAttribute("aria-pressed",c.couriers.includes(d.bscour));return}
   if(!d.bsa)return;
   try{
-    if(d.bsa==="savekey"){const k=($("#bsKey").value||"").trim();if(!k){bsAdmMsg("Paste your API key first.",true);return}b.disabled=true;await SBH.rpc("admin_biteship_save",{p:{key:k}});BSA.hasKey=true;BSA.mode=k.startsWith("biteship_test")?"test":k.startsWith("biteship_live")?"live":"unknown";toast("Key saved");renderAdmin()}
+    if(d.bsa==="savekey"){const k=($("#bsKey").value||"").trim();if(!k){bsAdmMsg("Paste your API key first.",true);return}b.disabled=true;await SBH.rpc("admin_biteship_save",{p:{key:k}});BSA.hasKey=true;BSA.mode=k.startsWith("biteship_test")?"test":k.startsWith("biteship_live")?"live":"unknown";BSA.test=null;BSA.loaded=false;BSA.failedAt=0;toast("Key saved");renderAdmin()}
     else if(d.bsa==="rmkey"){armed(b,async()=>{await SBH.rpc("admin_biteship_save",{p:{key:""}});BSA.hasKey=false;BSA.mode="";const s=DB.settings.biteship;if(s&&s.on){s.on=false;saveDB()}toast("Key removed. Courier prices are off.");renderAdmin()})}
-    else if(d.bsa==="savecfg"){b.disabled=true;await SBH.rpc("admin_biteship_save",{p:{cfg:BSA.cfg}});toast("Courier settings saved");bsAdmMsg("Saved.");b.disabled=false}
-    else if(d.bsa==="test"){b.disabled=true;b.textContent="Testing…";const r=await SBH.fn("biteship",{action:"test"},true);b.disabled=false;b.textContent="Test connection";bsAdmMsg(r.ok?`Connected (${r.mode} mode). Biteship lists ${r.couriers.length} couriers.`:`Not connected: ${r.error}`,!r.ok)}
+    else if(d.bsa==="savecfg"){b.disabled=true;await SBH.rpc("admin_biteship_save",{p:{cfg:BSA.cfg}});BSA.dirty=false;toast("Courier settings saved");bsAdmMsg("Saved.");b.disabled=false}
+    else if(d.bsa==="test"){b.disabled=true;b.textContent="Testing…";let r;try{r=await SBH.fn("biteship",{action:"test"},true)}catch(err){r={ok:false,error:err.message}}
+      BSA.test=r&&r.ok?{t:`✓ Connected to Biteship (${r.mode} mode). ${r.couriers.length} couriers available.`}:{t:`✗ Not connected: ${(r&&r.error)||"no answer from the server"}`,bad:true};
+      toast(BSA.test.t);renderAdmin()}
     else if(d.bsa==="copy"){const i=b.parentNode.querySelector("input");try{await navigator.clipboard.writeText(i.value);toast("Copied")}catch(err){i.select()}}
   }catch(err){b.disabled=false;if(d.bsa==="test")b.textContent="Test connection";bsAdmMsg(err.message,true);toast(err.message)}});
 /* --- gift editor (Flash sales tab, Gifts promo) --- */

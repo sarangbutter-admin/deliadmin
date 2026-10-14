@@ -47,7 +47,6 @@
   async function fn(name, body, admin) {
     if (!on) throw new Error("Backend is not configured.");
     var tok = null;
-    if (admin) { tok = await token(); if (!tok) throw new Error("Please sign in to the team area."); }
     var t = timeout(30000), r;
     try {
       r = await fetch(URL_ + "/functions/v1/" + name, { method: "POST", headers: headers(tok), body: JSON.stringify(body || {}), signal: t.signal });
@@ -59,5 +58,5 @@
     return j;
   }
 
-  window.SBK = { on: on, url: URL_, rpc: rpc };
+  window.SBK = { on: on, url: URL_, rpc: rpc, fn: fn };
 })();
