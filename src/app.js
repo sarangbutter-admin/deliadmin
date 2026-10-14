@@ -1238,7 +1238,7 @@ function drawDraftBar(){
   const am=$("#amain");if(!am||!SBH.pending)return;
   const keys=SBH.pending();let bar=$("#draftBar");
   {const tabs={settings:["settings","boxes"],marquee:["marquee"],page:["landing","hero"]};document.querySelectorAll("[data-tab]").forEach(b=>b.classList.toggle("pend",keys.some(k=>(tabs[k]||[]).includes(b.dataset.tab))))}
-  const onTab=SBH.admin&&["settings","boxes","marquee","landing"].includes(A.tab);
+  const onTab=SBH.admin&&["settings","boxes","marquee","landing","hero"].includes(A.tab);
   if(!keys.length&&!onTab){if(bar)bar.remove();return}
   const busy=keys.length>0,sig=(busy?keys.join():"idle")+"|"+A.tab;
   const html=busy?`<div class="db-tx"><b>Not published yet</b><span>${keys.map(k=>esc(DRAFT_NAMES[k])).join(", ")}. Customers still see the old version.</span></div><div class="db-act"><button class="btn btn-blue" type="button" data-dbpub>Save &amp; publish</button><button class="ghost" type="button" data-dbdisc>Discard changes</button></div>`
@@ -1248,7 +1248,7 @@ function drawDraftBar(){
   if(bar.dataset.sig!==sig){bar.dataset.sig=sig;bar.innerHTML=html}
 }
 function afterSave(){if(SBH.on&&SBH.admin)requestAnimationFrame(()=>{try{drawDraftBar()}catch(e){}})}
-function toastHook(msg){return msg==="Saved"&&SBH.admin&&SBH.pending&&["settings","boxes","marquee","landing"].includes(A.tab)&&SBH.pending().length?"Draft kept. Press Publish changes to show it in the shop.":msg}
+function toastHook(msg){return msg==="Saved"&&SBH.admin&&SBH.pending&&["settings","boxes","marquee","landing","hero"].includes(A.tab)&&SBH.pending().length?"Draft kept. Press Publish changes to show it in the shop.":msg}
 document.addEventListener("click",async e=>{
   const b=e.target.closest("[data-dbpub],[data-dbdisc]");if(!b||!SBH.pending)return;
   const keys=SBH.pending();if(!keys.length)return;
@@ -1391,6 +1391,10 @@ function viewHero(){
         ${h.carousel!==false?`<label class="af" style="margin:0;max-width:170px"><div class="money-in"><input class="in" type="number" min="2" max="30" step="1" data-hr="carouselSec" data-hrnum="1" value="${+h.carouselSec||5}"><span style="padding-right:10px">sec each</span></div></label>`:""}</div>`:""}
       ${h.media.length?`<label class="af" style="margin-top:10px">Darken the picture: ${h.overlay}%<input type="range" min="0" max="80" step="5" value="${h.overlay}" data-hr="overlay" data-hrnum="1"></label>`:""}
     </section>
+    <section class="panel"><h2>Info line under the banner</h2><div class="stack" style="gap:8px;margin-top:8px">
+    <div class="af">Info line under the banner<p class="note" style="margin:0">Each item is a line of text. Tick to show it. <b>{sizes}</b> becomes your box sizes (like "4, 6 or 12"), <b>{cutoff}</b> your order cutoff time, <b>{closed}</b> your closed days.</p></div>
+    ${pg.strip.items.map((it,i)=>`<div class="colin"><span class="sw"><input type="checkbox" data-lp="strip.items.${i}.on" ${it.on?"checked":""} aria-label="Show item ${i+1}"><span></span></span><input class="in" data-lp="strip.items.${i}.t" maxlength="80" value="${esc(it.t)}" aria-label="Info item ${i+1}"><button class="danger" type="button" data-lpsdel="${i}" aria-label="Delete item ${i+1}">×</button></div>`).join("")}
+    ${pg.strip.items.length<6?`<button class="ghost" type="button" data-lpsadd style="justify-self:start">+ Add item</button>`:""}</div><p class="note" style="margin:8px 0 0">Saved as a draft. Press Save &amp; publish at the top to show it in the shop.</p></section>
     <section class="panel"><h2>Floating cookies</h2>
       <div style="display:flex;gap:10px;align-items:center;margin:10px 0"><label class="sw"><input type="checkbox" data-hr="floats" ${h.floats?"checked":""} aria-label="Show floating cookies"><span></span></label><span class="stlabel">Show floating cookies</span></div>
       <p class="sub" style="margin:0 0 10px">Upload your own picture for any spot. Spots you leave alone keep showing your flavor photos, as before.</p>
@@ -3147,11 +3151,6 @@ function viewLanding(){
     <div class="grid2">${lpFontSel("Heading font","headFont")}${lpFontSel("Body font","bodyFont")}</div>
     <div class="af">Your own fonts<div class="colin" style="flex-wrap:wrap">${pg.fonts.map(f=>`<span class="fchip">${esc(f.name)} <button class="danger" type="button" data-lpfontrm="${f.id}" style="padding:2px 8px">×</button></span>`).join("")}${pg.fonts.length<3?`<label class="ghost mqbtn">+ Upload font<input type="file" accept=".ttf,.otf,.woff,.woff2,font/*" hidden data-lpfont></label>`:""}</div>
       <p class="note">Up to 3 fonts (.ttf, .otf, .woff, .woff2, 1 MB each). They appear in the font lists above. Only upload fonts you're licensed to use on the web.</p></div>`,true)}
-  ${sec("Top banner (hero)",`
-    <p class="note" style="margin:0">The banner's words, buttons, colors, picture and floating cookies now live in the <button class="ghost" type="button" data-gotab="hero" style="padding:4px 12px">Top banner</button> tab, where you can preview before saving.</p>
-    <div class="af">Info line under the banner<p class="note" style="margin:0">Each item is a line of text. Tick to show it. <b>{sizes}</b> becomes your box sizes (like "4, 6 or 12"), <b>{cutoff}</b> your order cutoff time, <b>{closed}</b> your closed days.</p></div>
-    ${pg.strip.items.map((it,i)=>`<div class="colin"><span class="sw"><input type="checkbox" data-lp="strip.items.${i}.on" ${it.on?"checked":""} aria-label="Show item ${i+1}"><span></span></span><input class="in" data-lp="strip.items.${i}.t" maxlength="80" value="${esc(it.t)}" aria-label="Info item ${i+1}"><button class="danger" type="button" data-lpsdel="${i}" aria-label="Delete item ${i+1}">×</button></div>`).join("")}
-    ${pg.strip.items.length<6?`<button class="ghost" type="button" data-lpsadd style="justify-self:start">+ Add item</button>`:""}`,true)}
   ${sec(`Extra sections (${pg.blocks.length})`,`
     <p class="sub" style="margin:0">Add image, video or text sections above or below the box builder. Use the Marquee banner tab for the running text strip.</p>
     ${pg.blocks.map((b,i)=>`<div class="lpblock"><div class="mo-row"><b>Section ${i+1}</b><div class="colin"><button class="ghost" type="button" data-lpbup="${i}" ${i===0?"disabled":""} aria-label="Move up">↑</button><button class="ghost" type="button" data-lpbdown="${i}" ${i===pg.blocks.length-1?"disabled":""} aria-label="Move down">↓</button><button class="danger" type="button" data-lpbdel="${i}">Delete</button></div></div>
