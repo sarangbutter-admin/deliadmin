@@ -1972,7 +1972,7 @@ $("#modal").addEventListener("click",e=>{
 
 /* --- Flavor editor pop-up: full details of one flavor, Save or Cancel --- */
 let PE=null;
-const PE_KEYS=["name","surcharge","cat","art","desc","badges","status","track","stock","img","cutout","tints"];
+const PE_KEYS=["name","surcharge","cat","art","desc","badges","status","track","stock","img","cutout","tints","bg"];
 function openPEdit(id){
   const p=prod(id);if(!p)return;
   const d={};PE_KEYS.forEach(k=>{if(p[k]!==undefined)d[k]=JSON.parse(JSON.stringify(p[k]))});
@@ -1988,6 +1988,7 @@ function drawPEdit(){
     <div class="pe-photo">${plateHTML(v)}
       <label class="upl">${v.img?"Replace photo":"Upload photo"}<input type="file" accept="image/*" data-pefile aria-label="Upload photo"></label>
       ${v.img?`<button class="linkbtn sm" type="button" data-perm>Remove photo</button>`:""}
+      <button class="ghost" type="button" data-pebg>🎨 Background</button>
     </div>
     <div class="stack" style="gap:12px">
       <label class="af">Name<input class="in" data-pe="name" value="${esc(v.name||"")}" maxlength="40"></label>
@@ -2032,6 +2033,8 @@ $("#modal").addEventListener("click",e=>{
   if(d.pestatus){PE.d.status=d.pestatus;drawPEdit();return}
   if(d.pestk){PE.d.stock=Math.max(0,(+PE.d.stock||0)+(+d.pestk));drawPEdit();return}
   if(d.pebadge){const l=PE.d.badges||[];PE.d.badges=l.includes(d.pebadge)?l.filter(x=>x!==d.pebadge):[...l,d.pebadge];drawPEdit();return}
+  if(d.pebg!==undefined){const st=PE,reopen=()=>{PE=st;openModal("","pedit");drawPEdit()};PE=null;closeModal();
+    openBg(st.id,{bg:st.d.bg===null?null:(st.d.bg!==undefined?st.d.bg:(prod(st.id)||{}).bg),done:out=>{st.d.bg=out;reopen()},back:reopen});return}
   if(d.perm!==undefined){delete PE.d.img;delete PE.d.cutout;delete PE.d.tints;PE.d.img="";if(PE.d.art==="photo")PE.d.art="none";drawPEdit();return}
   if(d.pereviews!==undefined){if(peDirty()&&b.dataset.arm!=="1"){b.dataset.arm="1";b.textContent="Unsaved changes – tap again to leave";return}const id=PE.id;peClose();openAdminReviews(id);return}
   if(d.pedel!==undefined){const id=PE.id;peClose();delConfirm("this flavor",()=>needOwner("delete a flavor").then(()=>{DB.products=DB.products.filter(p=>p.id!==id);saveDB();toast("Flavor deleted");renderAdmin()}).catch(()=>{}));return}
@@ -2041,7 +2044,7 @@ $("#modal").addEventListener("click",e=>{
     const priceChanged=(+D.surcharge||0)!==(+p.surcharge||0);
     (priceChanged?needOwner("change a price"):Promise.resolve()).then(()=>{
       const prev=JSON.stringify(p);
-      PE_KEYS.forEach(k=>{if(D[k]===undefined||D[k]===""&&k==="img"){if(k==="img"||k==="cutout"||k==="tints")delete p[k]}else p[k]=D[k]});
+      PE_KEYS.forEach(k=>{if(D[k]===null&&k==="bg"){delete p.bg}else if(D[k]===undefined||D[k]===""&&k==="img"){if(k==="img"||k==="cutout"||k==="tints")delete p[k]}else p[k]=D[k]});
       p.surcharge=+D.surcharge||0;if(p.badges&&!p.badges.length)delete p.badges;
       const i=DB.products.indexOf(p);if(PE.pos!==i){DB.products.splice(i,1);DB.products.splice(Math.min(PE.pos,DB.products.length),0,p)}
       if(!saveDB()){Object.assign(p,JSON.parse(prev));toast("Not enough storage space. Try a smaller photo.");return}
@@ -2139,7 +2142,7 @@ function prow(p){const own=ROLE()==="owner",r=ratingOf(p);return `<div class="pr
         </div>
         <div class="pfoot">
           <div class="left"><div class="seg" role="group" aria-label="Availability">${[["available","Available"],["soldout","Sold out"],["hidden","Hidden"]].map(([k,l])=>`<button type="button" data-pstatus="${p.id}:${k}" aria-pressed="${p.status===k}">${l}</button>`).join("")}</div></div>
-          <div class="left"><button class="btn btn-blue btn-sm" type="button" data-pedit="${p.id}">✎ Edit</button>${own?`<button class="danger" type="button" data-pdel="${p.id}">Delete</button>`:""}</div>
+          <div class="left"><button class="btn btn-blue btn-sm" type="button" data-pedit="${p.id}">✎ Edit</button><button class="ghost" type="button" data-pbg="${p.id}">🎨 Background</button>${own?`<button class="danger" type="button" data-pdel="${p.id}">Delete</button>`:""}</div>
         </div>
       </div>
     </div>`}
@@ -2208,7 +2211,7 @@ function addAdminReview(){
 
 /* --- Add flavor popup --- */
 function openModal(html,kind){$("#modalCard").innerHTML=html;A.modal=kind;$("#modal").hidden=false;document.body.style.overflow="hidden"}
-function closeModal(){const m=$("#modal");if(!m||m.hidden)return;const wasStatus=A.modal==="status";m.hidden=true;A.modal=null;if(wasStatus){SC=null;renderAdmin()}document.body.style.overflow=""}
+function closeModal(){const m=$("#modal");if(!m||m.hidden)return;const bgBack=A.modal==="pbg"&&typeof BG!=="undefined"&&BG&&BG.back;if(bgBack){BG.back=null;BG.done=null;setTimeout(bgBack,0)}const wasStatus=A.modal==="status";m.hidden=true;A.modal=null;if(wasStatus){SC=null;renderAdmin()}document.body.style.overflow=""}
 const npProduct = () => ({id:"np",name:"New flavor",art:A.np.art,img:A.np.img,cutout:A.np.cutout,tints:A.np.tints});
 function refreshNp(){
   $("#npPrev").innerHTML=plateHTML(npProduct());
@@ -2288,9 +2291,10 @@ function addCat(){
 
 /* --- Flavor background editor (preview first, saved only on "Save") --- */
 let BG=null;
-function openBg(id){const p=prod(id);if(!p)return;const cur=p.bg||{};
+function openBg(id,dr){const p=prod(id);if(!p)return;const cur=(dr?dr.bg:p.bg)||{};
   BG={id,d:Object.assign({type:"auto",c1:"#EEF0FF",c2:"#000096",dir:"diag",img:"",size:84,ring:""},JSON.parse(JSON.stringify(cur)))};
   if(!BG.d.size)BG.d.size=84;
+  if(dr){BG.done=dr.done;BG.back=dr.back}
   openModal("","pbg");renderBg();}
 function bgPrev(){const p=prod(BG.id),el=$("#bgPrev");if(!p||!el)return;
   el.innerHTML=[["Menu",""],["Small","sm"]].map(([l,c])=>`<div class="bgp ${c}"><div class="bgp-plate">${plateHTML(p,BG.d)}</div><span>${l}</span></div>`).join("")}
@@ -2322,7 +2326,9 @@ function bgSave(){const p=prod(BG.id);if(!p)return;const d=BG.d;
   if(d.type==="gradient"){out.c1=d.c1;out.c2=d.c2;out.dir=d.dir}
   if(d.type==="image")out.img=d.img;
   if(d.ring)out.ring=d.ring;
-  if(out.type==="auto"&&out.size===84&&!out.ring)delete p.bg;else p.bg=out;
+  const none=out.type==="auto"&&out.size===84&&!out.ring;
+  if(BG.done){const f=BG.done;BG.back=null;BG.done=null;closeModal();f(none?null:out);return}   // editing inside the flavor pop-up: keep it as a draft
+  if(none)delete p.bg;else p.bg=out;
   saveDB();closeModal();renderAdmin();toast("Background saved");
 }
 $("#modal").addEventListener("click",e=>{if(A.modal!=="pbg"||!BG)return;const b=e.target.closest("button");if(!b)return;const d=b.dataset;
