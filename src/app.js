@@ -2039,6 +2039,10 @@ const ordRank=o=>(o.payReq||o.rejReq)&&o.status==="review"?0:o.complaint&&(o.com
 function stepWhy(o,st){
   const cur=o.status,own=ROLE()==="owner",del=o.mode==="delivery";
   if(st===cur)return "";
+  if(cur==="cancelled"&&!["awaiting","review"].includes(st))return "A cancelled order can only be reopened as Awaiting payment (or Check payment if it has a proof). Then confirm the payment again.";
+  if(st==="review"&&!o.proof)return "Check payment needs the customer's payment proof first.";
+  if(["baking","ready","completed"].includes(cur)&&["awaiting","review"].includes(st))return "This order is already paid. Use Cancel order or Refund instead of moving it back to payment.";
+  if(cur==="new"&&st==="awaiting")return "To undo a payment confirmation, move it back to Check payment.";
   if(st==="new"&&!o.proof)return "Confirm payment needs the customer's payment proof first.";
   if(st==="ready"&&del&&!(String(o.courier||"").trim()&&String(o.awb||"").trim()))return "Type the courier and the airway bill number first. The order moves to Out for delivery by itself.";
   const SEQ=["awaiting","review","new","baking","ready","completed"],ci=SEQ.indexOf(cur),si=SEQ.indexOf(st);
@@ -2075,7 +2079,7 @@ function orderCard(o){
     <div class="oc-items"><div class="note" style="margin:0">Box of ${o.size} · placed ${fmtAgo(o.createdAt)}</div>${items}${addons}</div>
     ${payLine?`<div class="oc-info">${payLine}</div>`:""}
     ${o.cancelReason?`<div class="oc-info">Cancel reason: ${esc(o.cancelReason)}</div>`:""}
-    <div class="oc-sts" role="group" aria-label="Order status">${keys.map(k=>{const why=stepWhy(o,k);return `<button class="oc-b${why&&o.status!==k?" off":""}${k==="awaiting"&&isRej(o)?" oc-rejb":""}${k==="review"&&o.status==="review"?" oc-chk":""}" type="button" data-ostatus="${o.id}:${k}" aria-pressed="${o.status===k}" ${why&&o.status!==k?`aria-disabled="true" title="${esc(why)}"`:""}>${k==="new"?"✓ ":""}${k==="awaiting"&&isRej(o)?"✕ Rejected":k==="new"&&o.status==="review"&&!own&&!o.payReq?"Confirm payment (owner approves)":stLabel(k,o.mode)}</button>`}).join("")}</div>
+    <div class="oc-sts" role="group" aria-label="Order status">${keys.map(k=>{const why=stepWhy(o,k);return `<button class="oc-b${why&&o.status!==k?" off":""}${k==="awaiting"&&isRej(o)?" oc-rejb":""}${k==="review"&&o.status==="review"?" oc-chk":""}" type="button" data-ostatus="${o.id}:${k}" aria-pressed="${o.status===k}" ${why&&o.status!==k?`aria-disabled="true" title="${esc(why)}"`:""}>${k==="new"?"✓ ":""}${k==="awaiting"&&isRej(o)?"✕ Rejected":k==="new"&&o.status==="review"&&!own&&!o.payReq?"Confirm payment (owner approves)":stLabel(k,o.mode)}</button>${k==="baking"&&bsReqShow(o)?`<button class="oc-b oc-req${["new","baking"].includes(o.status)?"":" off"}" type="button" data-bsreq="${o.id}" ${["new","baking"].includes(o.status)?"":'aria-disabled="true" title="Confirm the payment first"'}>🛵 ${o.bship.failed||o.bship.cancelledAt?"Book courier again":"Request courier pickup"}</button>`:""}`}).join("")}</div>
     <div class="oc-sts">${canEdit?`<button class="oc-b" type="button" data-osub="${o.id}">✎ Edit / substitute</button>`:""}${canCancelOrder(o)?`<button class="oc-b" type="button" data-ocancel="${o.id}">✕ Cancel order</button>`:""}${canRefund(o)?`<button class="oc-b" type="button" data-refund="${o.id}">💸 Refund</button>`:""}<button class="oc-b" type="button" data-order="${o.id}">Details</button></div>
     ${lbl}
     ${paid&&del?`<div class="grid2"><label class="af" style="font-size:12px">Courier<input class="in" data-oship="courier" data-oid="${o.id}" ${!own&&["ready","completed"].includes(o.status)&&String(o.awb||"").trim()?"disabled":""} maxlength="30" value="${esc(o.courier||"")}" placeholder="e.g. JNE"></label><label class="af" style="font-size:12px">Airway bill<input class="in" data-oship="awb" data-oid="${o.id}" ${!own&&["ready","completed"].includes(o.status)&&String(o.awb||"").trim()?"disabled":""} maxlength="40" value="${esc(o.awb||"")}" placeholder="Tracking no."></label></div>`:""}
@@ -2140,6 +2144,7 @@ function applyStatus(id,st){
   if(st==='awaiting'&&prev==='cancelled'){o.expiresAt=payDeadlineMs(o);delete o.cancelReason}
   if(st!=='cancelled')delete o.cancelReason;
   if(st==='new'&&!o.paidAt)o.paidAt=Date.now();
+  if(st==='awaiting'||st==='review')delete o.paidAt;   // back to the payment steps: no longer paid
   if(st==='completed'&&prev!=='completed')o.completedAt=Date.now();
   if(st!=='completed')delete o.completedAt;
   if(!SBH.on&&o.tracked&&st==="cancelled"&&o.holds){Object.entries(o.items).forEach(([pid,n])=>{const p=prod(pid);if(p&&p.track)p.stock+=n});o.holds=false;note=", stock put back"}
@@ -2149,10 +2154,13 @@ function applyStatus(id,st){
 /* --- change status with confirmation --- */
 let SC=null;
 // Biteship orders: marking "Ready" asks to request the pickup; the order moves to Out for delivery once the courier picks it up
+const bsReqShow=o=>SBH.on&&o.mode==="delivery"&&o.bship&&o.bship.courier&&!o.bship.biteshipId&&!["completed","cancelled"].includes(o.status);
+document.addEventListener("click",e=>{const b=e.target.closest("[data-bsreq]");if(!b)return;const o=DB.orders.find(x=>x.id===b.dataset.bsreq);if(!o)return;
+  if(!["new","baking"].includes(o.status)){toast("Confirm the payment first. Couriers are booked for paid orders.");return}bsReadyAsk(o)});
 function bsReadyAsk(o){
   const b=o.bship,nm=esc((b.courierName||b.courier)+" "+(b.serviceName||b.service));
   A.modal="bsready";$("#modalCard").innerHTML=`<div class="sheet-top"><h3 id="modalTitle">Request pickup?</h3><button class="x" type="button" data-close aria-label="Close">✕</button></div>
-    <p>Order <b>${esc(o.code)}</b> uses <b>${nm}</b>. Request the pickup now and the courier comes to your pickup address.</p>
+    <p>Order <b>${esc(o.code)}</b> uses <b>${nm}</b>. Request the pickup now and a driver comes to your pickup address.</p>
     <p class="note">Only do this when the box is packed and ready. The order moves to <b>Out for delivery</b> by itself when the courier picks it up, and to <b>Delivered</b> when it arrives.</p>
     <p class="err" id="bsReadyErr" hidden></p>
     <div style="display:grid;gap:8px;margin-top:12px"><button class="btn btn-blue" type="button" data-bsready="${o.id}">🛵 Yes, request pickup now</button>
@@ -2170,7 +2178,6 @@ function bsApply(o,r){if(!o||!r)return;if(r.bship)o.bship=r.bship;if(r.status)o.
 function setOrderStatus(id,st,extra){
   const o=DB.orders.find(x=>x.id===id);if(!o)return;
   if(o.status===st){renderAdmin();return}
-  if(st==="ready"&&o.mode==="delivery"&&o.bship&&o.bship.courier&&!o.bship.biteshipId&&SBH.on&&!(extra&&extra.ownCourier)){bsReadyAsk(o);renderAdmin();return}
   const why=stepWhy(o,st);if(why){toast(why);renderAdmin();return}
   if(ROLE()!=="owner"&&o.status==="review"&&st==="new"){   // staff: ask an owner to approve
     if(!SBH.on){toast("Sent to the owner for approval");return}
