@@ -4,7 +4,7 @@
 //   https://<project>.supabase.co/functions/v1/biteship-webhook?k=<webhook secret shown in Shop settings>
 // Moves the order on by itself (picked up -> Out for delivery, delivered -> Delivered), saves proof photos,
 // tells the customer, and (when switched on) books a new courier once if no driver was found.
-import { admin, applyUpdate, bookOrder, bs, driverOf, FAILED, findProofs, json, kv } from "../_shared/common.ts";
+import { admin, applyUpdate, bookOrder, bs, driverOf, FAILED, findProofs, hmacHex, json, kv } from "../_shared/common.ts";
 
 const clean = (s: unknown, n: number) => String(s ?? "").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, n);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -12,6 +12,18 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 Deno.serve(async (req) => {
   const url = new URL(req.url);
   const db = admin();
+
+  // the customer's place photo, for the driver (private link from the booking note)
+  if (req.method === "GET" && url.searchParams.get("ph")) {
+    const id = clean(url.searchParams.get("ph"), 40), sec = (await kv(db, "quote_secret"))?.v as string;
+    if (!sec || url.searchParams.get("s") !== (await hmacHex(sec, "place|" + id)).slice(0, 32)) return new Response("Not found", { status: 404 });
+    const { data: f } = await db.from("order_files").select("data").eq("order_id", id).eq("kind", "place").maybeSingle();
+    const m = f && /^data:(image\/(?:png|jpeg|webp));base64,(.+)$/.exec(String(f.data));
+    if (!m) return new Response("This photo is no longer available.", { status: 404 });
+    const bin = Uint8Array.from(atob(m[2]), (c) => c.charCodeAt(0));
+    return new Response(bin, { headers: { "Content-Type": m[1], "Cache-Control": "private, max-age=3600" } });
+  }
+
   const secret = (await kv(db, "webhook_secret"))?.v as string;
   if (!secret || url.searchParams.get("k") !== secret) return json({ error: "Not allowed" }, 401);
   if (req.method !== "POST") return json({ ok: true });
@@ -48,5 +60,6 @@ Deno.serve(async (req) => {
     // @ts-ignore EdgeRuntime is provided by Supabase
     if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(job); else await job;
   }
+  if (status === "delivered") await db.rpc("place_cleanup");   // remove place photos of orders delivered 3+ days ago
   return json({ ok: true });
 });

@@ -217,6 +217,8 @@ const bsShip=(c,at=Date.now(),db=DB)=>bsOn(db)&&c.mode==="delivery"&&c.ship&&c.s
 const bsPending=(c,db=DB)=>bsOn(db)&&c.mode==="delivery"&&!c.bsSkip&&!bsShip(c,Date.now(),db);
 const BS_ST={confirmed:"Courier booked",scheduled:"Pickup scheduled",allocated:"Courier assigned",picking_up:"Courier is on the way to pick up",picked:"Picked up",dropping_off:"On the way to you",return_in_transit:"Returning",on_hold:"On hold",delivered:"Delivered",rejected:"Rejected by courier",disposed:"Disposed",courier_not_found:"No courier found",returned:"Returned",cancelled:"Booking cancelled"};
 const BS_FAIL=["courier_not_found","rejected","cancelled","returned","disposed"];
+const placeHTML=o=>{const p=o.place;if(!p||o.mode!=="delivery"||!(p.note||p.photo))return "";
+  return `<div class="dsec"><h4>📍 Delivery details</h4>${p.note?`<p style="margin:0 0 6px"><b>Note for the driver:</b> ${esc(p.note)}</p>`:""}${p.photo?(p.img?`<a href="${esc(p.img)}" target="_blank" rel="noopener"><img class="placeprev big" src="${esc(p.img)}" alt="Photo of the delivery place"></a>`:`<p class="note">Loading the photo…</p>`):""}</div>`};
 const bsBadge=o=>{const b=o.bship;if(!b||!b.courier||o.mode!=="delivery")return null;
   if(b.failed)return {t:"Courier failed",c:"bad"};if(!b.biteshipId)return b.status==="cancelled"?{t:"Courier cancelled",c:"bad"}:{t:"Courier not booked",c:"wait"};
   const m={confirmed:["Searching driver","wait"],scheduled:["Pickup scheduled","wait"],allocated:["Driver assigned","go"],picking_up:["Driver on the way","go"],picked:["Picked up","go"],dropping_off:["On the way","go"],delivered:["Delivered","done"],on_hold:["On hold","bad"]}[b.status];
@@ -330,7 +332,7 @@ function crumbColors(p){
 
 /* ================= SHOP ================= */
 loadDB();
-const fresh = () => ({size:6, box:[], step:1, mode:"pickup", speed:"scheduled", day:null, time:null, note:"", addons:[], coupon:"", ship:null, bsSkip:false});
+const fresh = () => ({size:6, box:[], step:1, mode:"pickup", speed:"scheduled", day:null, time:null, note:"", addons:[], coupon:"", ship:null, bsSkip:false, dnote:"", dphoto:""});
 let S = fresh(), hadCart=false;
 try{const s=JSON.parse(localStorage.getItem(CART_KEY)||"null");if(s&&Array.isArray(s.box)){S={...S,...s,step:s.step===2?2:1};hadCart=true;
   }}catch(e){}
@@ -782,7 +784,7 @@ function bsNudge(){
 }
 function bsPopOpen(){
   const body=$("#bsPopBody");body.appendChild($("#addrFields"));body.appendChild($("#bsBox"));
-  $("#addrFields").hidden=false;$("#coAddr").required=false;bsBoxOpen();
+  $("#addrFields").hidden=false;$("#coAddr").required=false;placeFieldsShow();bsBoxOpen();
   $("#bsPop").hidden=false;document.body.style.overflow="hidden";
 }
 // checkout form: one line with the chosen courier and a Change button (the full courier box lives in the pop-up)
@@ -813,6 +815,25 @@ function bsBoxOpen(){
 }
 /* free map with a draggable pin (Leaflet + OpenStreetMap), loaded only when the courier box is used */
 let bsLeaf=null,bsMapObj=null,bsPin=null,bsPinT=0;
+/* --- optional "Note for the driver" + "Photo of your place" (switch on/off in Delivery & courier) --- */
+const placeOn=k=>DB.settings[k]!==false;
+function placeFieldsShow(){
+  const del=S.mode==="delivery";$("#placeNoteWrap").hidden=!(del&&placeOn("dnoteOn"));$("#placePhotoWrap").hidden=!(del&&SBH.on&&placeOn("dphotoOn"));
+  $("#coDNote").value=S.dnote||"";const pv=$("#coPhotoPrev");pv.hidden=!S.dphoto;if(S.dphoto)pv.src=S.dphoto;$("#coPhotoRm").hidden=!S.dphoto;
+  $("#coPhotoBtn").firstChild.textContent=S.dphoto?"📷 Change photo":"📷 Add photo";
+}
+async function processPlace(file){
+  if(!file||!/^image\//.test(file.type))throw new Error("Please choose a photo (JPG, PNG or WebP).");
+  if(file.size>25e6)throw new Error("That image is over 25 MB. Try a smaller one.");
+  const url=URL.createObjectURL(file);
+  try{const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>rej(new Error("Couldn't read that image."));i.src=url});
+    const k=Math.min(1,1000/Math.max(img.naturalWidth,img.naturalHeight)),w=Math.round(img.naturalWidth*k),h=Math.round(img.naturalHeight*k);
+    const c=document.createElement("canvas");c.width=w;c.height=h;const x=c.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,w,h);x.drawImage(img,0,0,w,h);
+    let o=c.toDataURL("image/webp",.72);if(!o.startsWith("data:image/webp"))o=c.toDataURL("image/jpeg",.75);return o}finally{URL.revokeObjectURL(url)}
+}
+$("#coDNote").addEventListener("input",e=>{S.dnote=e.target.value.slice(0,200)});
+$("#coPhoto").addEventListener("change",async e=>{const f=e.target.files[0];e.target.value="";if(!f)return;try{S.dphoto=await processPlace(f);placeFieldsShow()}catch(err){toast(err.message)}});
+$("#coPhotoRm").addEventListener("click",()=>{S.dphoto="";placeFieldsShow()});
 function bsLoadLeaflet(){
   if(bsLeaf)return bsLeaf;
   bsLeaf=new Promise((res,rej)=>{const l=document.createElement("link");l.rel="stylesheet";l.href="vendor/leaflet/leaflet.css";document.head.appendChild(l);
@@ -902,7 +923,7 @@ function renderCoSummary(){
 }
 function openCheckout(){
   renderCoSummary();
-  const del=S.mode==="delivery";$("#addrFields").hidden=!del;$("#bsBox").hidden=true;bsSumDraw();
+  const del=S.mode==="delivery";$("#addrFields").hidden=!del;$("#bsBox").hidden=true;bsSumDraw();placeFieldsShow();
   $("#coAddr").required=del;
   const eo=S.editId&&DB.orders.find(x=>x.id===S.editId);
   if(!eo)prefillCust();
@@ -1013,10 +1034,12 @@ $("#coForm").addEventListener("submit",e=>{
   const cust={name:$("#coName").value.trim(),email:$("#coEmail").value.trim(),phone:$("#coPhone").value.trim(),
     address:del?$("#coAddr").value.trim():""};
   const fields={notify,size:S.size,items:countItems(S.box),mode:S.mode,speed:S.mode==="pickup"?"pickup":S.speed,day:S.day,time:S.time,note:S.note,addons:[...S.addons],sale:q.sale?`${q.sale.name} (${saleOffText(q.sale)})`:"",
-    base:q.base,discount:q.discount,coupon:q.coupon?q.coupon.code:"",couponDisc:q.couponDisc,surcharge:q.surcharge,addonsTotal:q.addons,fee:q.fee,total:q.total,customer:cust,gifts:ed&&ed.size===S.size&&ed.gifts?ed.gifts:giftPick(S.size)};
+    base:q.base,discount:q.discount,coupon:q.coupon?q.coupon.code:"",couponDisc:q.couponDisc,surcharge:q.surcharge,addonsTotal:q.addons,fee:q.fee,total:q.total,customer:cust,gifts:ed&&ed.size===S.size&&ed.gifts?ed.gifts:giftPick(S.size),...(S.mode==="delivery"&&(S.dnote||S.dphoto)?{place:{note:String(S.dnote||"").slice(0,200),photo:!!S.dphoto,img:S.dphoto||"",at:Date.now()}}:{})};
   if(SBH.on){
     const btn=f.querySelector("button[type=submit]");if(btn)btn.disabled=true;
+    const pNote=S.mode==="delivery"&&placeOn("dnoteOn")?String(S.dnote||"").trim():"",pImg=S.mode==="delivery"&&placeOn("dphotoOn")?S.dphoto:"";
     SBH.place({notify,shuffled:!!S.shuf,size:S.size,items:fields.items,mode:S.mode,speed:S.speed,day:S.day,time:S.time,note:S.note,addons:[...S.addons],coupon:fields.coupon,expectTotal:q.total,customer:cust,ship:q.ship||undefined},ed).then(o=>{
+      if(pNote||pImg)SBH.placeInfo(o.id,pNote,pImg).catch(err=>toast("Order placed, but the driver note or photo didn't save: "+err.message));
       addMine(o.id);S.editId=null;saveCart();renderDone(o,!!ed);
       S=fresh();$("#coForm").reset();saveCart();sanitizeCart();renderStoreStatic();renderStore();renderEditBar();renderBag();
     }).catch(err=>{$("#coErr").textContent=err.message;$("#coErr").hidden=false;SBH.loadShop(true)}).finally(()=>{if(btn)btn.disabled=false});
@@ -1283,6 +1306,7 @@ function renderMO(){
     <div><span>${modeName(o)}</span><span class="num">${o.fee?money(o.fee):"Free"}</span></div>
     <div class="t"><span>Total</span><span class="num">${money(o.total)}</span></div></div>${o.mode==="delivery"?`<p class="hint">Your box may be split into smaller or bigger boxes for delivery safety.</p>`:""}</div>
   ${bsHTML(o,false)}
+  ${placeHTML(o)}
   ${giftsHTML(o)}
   ${o.status==="completed"?ratingHTML(o):""}
   ${complaintHTML(o)}
@@ -1413,7 +1437,7 @@ function renderAdmin(){
   $("#cSales").textContent=nLive?nLive+" live":"";$("#cSales").hidden=!nLive;
   const lowN=DB.products.filter(isLow).length;
   $("#cProducts").textContent=lowN?lowN+" low":DB.products.filter(p=>p.status==="available").length;$("#cProducts").classList.toggle("live",!!lowN);
-  $("#amain").innerHTML=({notify:viewNotify,dashboard:viewDashboard,orders:viewOrders,sales:viewSales,products:viewProducts,complaints:viewComplaints,boxes:viewBoxes,marquee:viewMarquee,announcer:viewAnnouncer,coupons:viewCoupons,hero:viewHero,labels:viewLabels,landing:viewLanding,settings:viewSettings,customers:viewCustomers,team:viewTeam,badges:viewBadges,log:viewLog})[A.tab]();
+  $("#amain").innerHTML=({notify:viewNotify,dashboard:viewDashboard,orders:viewOrders,sales:viewSales,products:viewProducts,complaints:viewComplaints,boxes:viewBoxes,marquee:viewMarquee,announcer:viewAnnouncer,coupons:viewCoupons,hero:viewHero,labels:viewLabels,landing:viewLanding,settings:viewSettings,delivery:viewDelivery,customers:viewCustomers,team:viewTeam,badges:viewBadges,log:viewLog})[A.tab]();
   if(A.tab==="log"&&LG.list===null)loadLog();
   if(A.tab==="customers"&&(CU.list===null||CU.stale))loadCustomers();
   if(A.tab==="team"&&TM.list===null)loadTeam();
@@ -1432,8 +1456,8 @@ const DRAFT_NAMES={settings:"Shop settings",marquee:"Marquee banner",page:"Landi
 function drawDraftBar(){
   const am=$("#amain");if(!am||!SBH.pending)return;
   const keys=SBH.pending();let bar=$("#draftBar");
-  {const tabs={settings:["settings","boxes"],marquee:["marquee"],page:["landing","hero"]};document.querySelectorAll("[data-tab]").forEach(b=>b.classList.toggle("pend",keys.some(k=>(tabs[k]||[]).includes(b.dataset.tab))))}
-  const onTab=SBH.admin&&["settings","boxes","marquee","landing","hero"].includes(A.tab);
+  {const tabs={settings:["settings","boxes","delivery"],marquee:["marquee"],page:["landing","hero"]};document.querySelectorAll("[data-tab]").forEach(b=>b.classList.toggle("pend",keys.some(k=>(tabs[k]||[]).includes(b.dataset.tab))))}
+  const onTab=SBH.admin&&["settings","delivery","boxes","marquee","landing","hero"].includes(A.tab);
   if(!keys.length&&!onTab){if(bar)bar.remove();return}
   const busy=keys.length>0,sig=(busy?keys.join():"idle")+"|"+A.tab;
   const html=busy?`<div class="db-tx"><b>Not published yet</b><span>${keys.map(k=>esc(DRAFT_NAMES[k])).join(", ")}. Customers still see the old version.</span></div><div class="db-act"><button class="btn btn-blue" type="button" data-dbpub>Save &amp; publish</button><button class="ghost" type="button" data-dbdisc>Discard changes</button></div>`
@@ -1443,7 +1467,7 @@ function drawDraftBar(){
   if(bar.dataset.sig!==sig){bar.dataset.sig=sig;bar.innerHTML=html}
 }
 function afterSave(){if(SBH.on&&SBH.admin)requestAnimationFrame(()=>{try{drawDraftBar()}catch(e){}})}
-function toastHook(msg){return msg==="Saved"&&SBH.admin&&SBH.pending&&["settings","boxes","marquee","landing","hero"].includes(A.tab)&&SBH.pending().length?"Draft kept. Press Publish changes to show it in the shop.":msg}
+function toastHook(msg){return msg==="Saved"&&SBH.admin&&SBH.pending&&["settings","delivery","boxes","marquee","landing","hero"].includes(A.tab)&&SBH.pending().length?"Draft kept. Press Publish changes to show it in the shop.":msg}
 document.addEventListener("click",async e=>{
   const b=e.target.closest("[data-dbpub],[data-dbdisc]");if(!b||!SBH.pending)return;
   const keys=SBH.pending();if(!keys.length)return;
@@ -1940,7 +1964,7 @@ function viewOrders(){
 
 function openOrder(id){
   const o=DB.orders.find(x=>x.id===id);if(!o)return;A.openOrder=id;
-  if(SBH.on&&!o._ft&&((o.proof&&!o.proof.img)||(o.complaint&&o.complaint.photoCount>0&&!(o.complaint.photos||[]).length))){o._ft=1;SBH.adminFiles(o).then(()=>{if(A.openOrder===id)openOrder(id)})}
+  if(SBH.on&&!o._ft&&((o.proof&&!o.proof.img)||(o.complaint&&o.complaint.photoCount>0&&!(o.complaint.photos||[]).length)||(o.place&&o.place.photo&&!o.place.img))){o._ft=1;SBH.adminFiles(o).then(()=>{if(A.openOrder===id)openOrder(id)})}
   const d=$("#drawer");
   d.innerHTML=`<div class="drawer-card" role="dialog" aria-modal="true" aria-label="Order ${esc(o.code)}">
     <div class="sheet-top"><div><h3>${esc(o.code)}</h3><span class="note">Placed ${fmtDT(o.createdAt)}${o.example?" · Example":""}</span></div><button class="x" type="button" data-close aria-label="Close">✕</button></div>
@@ -1960,6 +1984,7 @@ function openOrder(id){
     <div class="dsec"><h4>When</h4><dl class="dl"><dt>${modeName(o)}</dt><dd>${esc(whenTxt(o))}</dd>${o.note?`<dt>Note</dt><dd>${esc(o.note)}</dd>`:""}</dl></div>
     <div class="dsec"><h4>Box of ${o.size}</h4><div class="ditems">${Object.entries(o.items).map(([id,n])=>{const p=prod(id);return `<div>${miniPlate(p)}<span>${n} × ${esc(p?p.name:"Removed flavor")}</span><span class="num">${p&&p.surcharge>0?"+"+money(p.surcharge*n):""}</span></div>`}).join("")}</div></div>
     ${bsHTML(o,true)}
+    ${placeHTML(o)}
     ${giftsHTML(o)}
     <div class="dsec"><h4>Payment</h4><div class="summary" style="margin:0">
       <div><span>Box of ${o.size}</span><span class="num">${money(o.base)}</span></div>
@@ -2714,8 +2739,8 @@ const BS_COURIERS=[["gojek","Gojek"],["grab","Grab"],["lalamove","Lalamove"],["b
 function bsAdminLoad(){
   if((BSA.loaded&&!BSA.failedAt)||BSA.loading||!SBH.on||ROLE()!=="owner")return;
   if(BSA.failedAt&&Date.now()-BSA.failedAt<10000)return;BSA.loading=true;
-  SBH.rpc("admin_biteship_get",{}).then(r=>{BSA.hasKey=!!r.hasKey;BSA.hasGoogle=!!r.hasGoogle;BSA.mode=r.mode||"";if(!BSA.dirty)BSA.cfg=r.cfg||{};BSA.secret=r.webhookSecret||"";BSA.loaded=true;BSA.loading=false;BSA.failedAt=0;BSA.msg="";if(A.tab==="settings")renderAdmin()})
-    .catch(e=>{BSA.loading=false;BSA.msg=/does not exist|Could not find/i.test(e.message)?"Run the latest database file (20260118000000_biteship.sql) first.":e.message;BSA.loaded=true;BSA.failedAt=Date.now();if(A.tab==="settings")renderAdmin()});
+  SBH.rpc("admin_biteship_get",{}).then(r=>{BSA.hasKey=!!r.hasKey;BSA.hasGoogle=!!r.hasGoogle;BSA.mode=r.mode||"";if(!BSA.dirty)BSA.cfg=r.cfg||{};BSA.secret=r.webhookSecret||"";BSA.loaded=true;BSA.loading=false;BSA.failedAt=0;BSA.msg="";if(A.tab==="delivery")renderAdmin()})
+    .catch(e=>{BSA.loading=false;BSA.msg=/does not exist|Could not find/i.test(e.message)?"Run the latest database file (20260118000000_biteship.sql) first.":e.message;BSA.loaded=true;BSA.failedAt=Date.now();if(A.tab==="delivery")renderAdmin()});
 }
 function bsPanel(){
   const b=DB.settings.biteship||{},on=!!b.on;
@@ -2765,14 +2790,14 @@ function bsPanel(){
   </section>`;
 }
 function bsAdmMsg(t,bad){const n=document.getElementById("bsAdmMsg");if(!n)return;n.hidden=!t;n.textContent=t||"";n.style.color=bad?"var(--red)":""}
-function viewSettings(){
-  const s=DB.settings,th=DB.thanks,pp=DB.proofpop,al=DB.alerts;
-  return head("Shop settings","Delivery, order cutoff, opening days and the details shown on the shop page.")+MOCK+`
+/* --- Delivery & courier tab (owner): delivery fee, ways to get an order, time slots, couriers --- */
+function viewDelivery(){
+  const s=DB.settings;
+  return head("Delivery & courier","How customers get their cookies: delivery fee, pickup and delivery options, time slots, the Biteship courier and the driver note and photo.")+MOCK+`
   <div class="stack">
     <section class="panel">
-      <h2>Ordering</h2><p class="sub">Customers can order up to 7 days ahead.</p>
-      <div class="grid3">
-        <label class="af">Currency symbol<input class="in" data-k="settings::currency" value="${esc(s.currency)}" maxlength="4"></label>
+      <h2>Delivery and pickup</h2>
+      <div class="grid2">
         <label class="af">Delivery fee<div class="money-in"><span>${esc(s.currency)}</span><input class="in" type="number" min="0" step="0.5" data-k="settings::deliveryFee" value="${s.deliveryFee}"></div></label>
         <label class="af">Delivery radius<div class="money-in"><input class="in" type="number" min="1" data-k="settings::deliveryKm" value="${s.deliveryKm}"><span style="padding-right:10px">km</span></div></label>
       </div>
@@ -2785,12 +2810,6 @@ function viewSettings(){
         <div class="grid3"><label class="af">Lead time<div class="money-in"><input class="in" type="number" min="0" step="1" data-k="settings::${lead}" value="${s[lead]}"><span style="padding-right:10px">${u}</span></div><small class="note">${hint}</small></label>
         ${k==="sameday"?`<label class="af">Order by (today)<select class="in" data-k="settings::samedayCutoff">${Array.from({length:24},(_,h)=>`<option value="${h}" ${h===s.samedayCutoff?"selected":""}>${fmtHour(h)}</option>`).join("")}</select></label>
         <label class="af">Sameday fee<div class="money-in"><span>${esc(s.currency)}</span><input class="in" type="number" min="0" step="0.5" data-k="settings::samedayFee" value="${s.samedayFee}"></div></label>`:""}</div></div>`).join("")}</div>
-      <div class="grid2" style="margin-top:12px">
-        <label class="af">Order cutoff for next day<select class="in" data-k="settings::cutoffHour">${Array.from({length:24},(_,h)=>`<option value="${h}" ${h===s.cutoffHour?"selected":""}>${fmtHour(h)}</option>`).join("")}</select></label>
-        <div class="af">Closed days<div class="chips">${DOW.map((d,i)=>`<button class="fchip" type="button" data-closed="${i}" aria-pressed="${s.closedWeekdays.includes(i)}">${d}</button>`).join("")}</div></div>
-      </div>
-      <div class="grid2" style="margin-top:12px"><label class="af">Shop time zone<select class="in" data-k="settings::tz">${(TZS.includes(s.tz||"Asia/Jakarta")?TZS:[s.tz,...TZS]).map(z=>`<option value="${esc(z)}" ${z===(s.tz||"Asia/Jakarta")?"selected":""}>${esc(z.replace(/_/g," "))}</option>`).join("")}</select><small class="note">Used for the order cutoff and the days customers can pick.</small></label></div>
-      <div class="grid2" style="margin-top:12px"><label class="af">Low stock warning at<div class="money-in"><input class="in" type="number" min="0" step="1" data-k="settings::lowStockAt" value="${s.lowStockAt}"><span style="padding-right:10px">cookies</span></div></label></div>
       <h3 style="margin:18px 0 4px;font-size:15px">Time slots</h3><p class="sub" style="margin:0 0 8px">One-hour boxes on a 24-hour clock. Pick the hour in each box, switch it on or off, and set how many paid orders it takes per day (0 = no limit). Only orders with confirmed payment use up the limit. A full slot can't be chosen by customers.</p>
       <div class="stack slotlist" style="gap:8px">${(s.slots||[]).map((x,i)=>`<div class="pmcard slotrow">
         <select class="in" data-slotsel="${i}" aria-label="Time slot ${i+1}">${SLOT_PRESETS.map(t=>`<option value="${t}" ${t===x.t?"selected":""} ${t!==x.t&&s.slots.some(y=>y.t===t)?"disabled":""}>${t}</option>`).join("")}</select>
@@ -2802,6 +2821,30 @@ function viewSettings(){
       <h3 style="margin:18px 0 4px;font-size:15px">Sameday closed pop-up</h3><p class="sub" style="margin:0 0 8px">Shown when a customer taps Sameday shipment after the order-by time. They tap the button to carry on and choose a day and time slot.</p>
       <label class="af">Message<textarea class="in" rows="3" data-k="settings::samedayMsg">${esc(s.samedayMsg)}</textarea></label>
       <label class="af" style="margin-top:8px;max-width:200px">Button name<input class="in" data-k="settings::samedayOk" value="${esc(s.samedayOk)}" maxlength="20"></label>
+    </section>
+    <section class="panel">
+      <h2>Note for the driver and photo of the place</h2><p class="sub">Optional fields for delivery orders, in the courier pop-up and at checkout. The note goes to the courier with the booking. The photo is private (only you and the customer) and is deleted 3 days after delivery.</p>
+      <label class="chk" style="margin-top:6px"><input type="checkbox" data-k="settings::dnoteOn" ${s.dnoteOn!==false?"checked":""}> <b>Ask for a note for the driver</b></label>
+      <label class="chk" style="margin-top:6px"><input type="checkbox" data-k="settings::dphotoOn" ${s.dphotoOn!==false?"checked":""}> <b>Let customers add a photo of their place</b></label>
+    </section>
+    ${bsPanel()}
+  </div>`;
+}
+function viewSettings(){
+  const s=DB.settings,th=DB.thanks,pp=DB.proofpop,al=DB.alerts;
+  return head("Shop settings","Order cutoff, opening days, payment and the details shown on the shop page. Delivery and couriers are in the Delivery & courier tab.")+MOCK+`
+  <div class="stack">
+    <section class="panel">
+      <h2>Ordering</h2><p class="sub">Customers can order up to 7 days ahead.</p>
+      <div class="grid3">
+        <label class="af">Currency symbol<input class="in" data-k="settings::currency" value="${esc(s.currency)}" maxlength="4"></label>
+      </div>
+      <div class="grid2" style="margin-top:12px">
+        <label class="af">Order cutoff for next day<select class="in" data-k="settings::cutoffHour">${Array.from({length:24},(_,h)=>`<option value="${h}" ${h===s.cutoffHour?"selected":""}>${fmtHour(h)}</option>`).join("")}</select></label>
+        <div class="af">Closed days<div class="chips">${DOW.map((d,i)=>`<button class="fchip" type="button" data-closed="${i}" aria-pressed="${s.closedWeekdays.includes(i)}">${d}</button>`).join("")}</div></div>
+      </div>
+      <div class="grid2" style="margin-top:12px"><label class="af">Shop time zone<select class="in" data-k="settings::tz">${(TZS.includes(s.tz||"Asia/Jakarta")?TZS:[s.tz,...TZS]).map(z=>`<option value="${esc(z)}" ${z===(s.tz||"Asia/Jakarta")?"selected":""}>${esc(z.replace(/_/g," "))}</option>`).join("")}</select><small class="note">Used for the order cutoff and the days customers can pick.</small></label></div>
+      <div class="grid2" style="margin-top:12px"><label class="af">Low stock warning at<div class="money-in"><input class="in" type="number" min="0" step="1" data-k="settings::lowStockAt" value="${s.lowStockAt}"><span style="padding-right:10px">cookies</span></div></label></div>
       <h3 style="margin:18px 0 4px;font-size:15px">Check-your-details pop-up</h3><p class="sub" style="margin:0 0 8px">Shown in the middle of the screen when a customer taps Checkout, before the form opens.</p>
       <label class="chk"><input type="checkbox" data-k="settings::coWarnOn" ${s.coWarnOn!==false?"checked":""}> <b>Show this pop-up</b></label>
       <div class="grid2" style="margin-top:8px"><label class="af">Emoji<input class="in" data-k="settings::coWarnEmoji" value="${esc(s.coWarnEmoji)}" maxlength="8"></label><label class="af">Title<input class="in" data-k="settings::coWarnTitle" value="${esc(s.coWarnTitle)}" maxlength="60"></label></div>
@@ -2809,7 +2852,6 @@ function viewSettings(){
       <div class="grid2" style="margin-top:8px"><label class="af">Continue button<input class="in" data-k="settings::coWarnOk" value="${esc(s.coWarnOk)}" maxlength="40"></label><label class="af">Back button<input class="in" data-k="settings::coWarnBack" value="${esc(s.coWarnBack)}" maxlength="30"></label></div>
       <button class="ghost" type="button" data-cwprev style="margin-top:8px">Preview pop-up</button>
     </section>
-    ${bsPanel()}
     <section class="panel">
       <div class="phead"><div><h2>Owner alerts</h2><p class="sub">A popup and a sound while the Admin page is open: when a new order is placed, when a customer sends a payment proof, and when a customer files a complaint. Browsers only play sound after you have clicked on the page once.</p></div><button class="btn btn-blue btn-sm" type="button" data-altest>Test alert</button></div>
       <div class="stack" style="gap:6px">
@@ -4058,10 +4100,10 @@ const ROLE=()=>SBH.on?(SBH.role||"owner"):"owner";
 const PERMS=[["dashboard","Dashboard","sales numbers (visitor numbers are for owners only)"],["orders","Orders","confirm payments, change status, edit orders"],["complaints","Complaints","reply and resolve"],
   ["customers","Customers","see, add and edit"],["labels","Shipping labels","print labels"],["products","Flavors & stock","edit flavors and stock (prices need the owner password)"],
   ["badges","Badges","design badges"],["boxes","Boxes & extras","sizes and extras (prices need the owner password)"],["sales","Flash sales",""],["coupons","Coupons",""],
-  ["notify","Notifications","messages to all customers"],["design","Shop look","top banner, landing page, marquee, announcer"],["settings","Shop settings","settings and payment methods"]];
+  ["notify","Notifications","messages to all customers"],["design","Shop look","top banner, landing page, marquee, announcer"],["settings","Shop settings","settings, payment methods, delivery & courier"]];
 const PERM_PRESETS={Cashier:["orders","complaints","customers","labels"],Packer:["orders","labels"],Baker:["orders","products"],Manager:PERMS.map(p=>p[0]).filter(k=>k!=="settings")};
 const TAB_PERM={dashboard:"dashboard",orders:"orders",complaints:"complaints",customers:"customers",labels:"labels",products:"products",badges:"badges",boxes:"boxes",
-  sales:"sales",coupons:"coupons",notify:"notify",announcer:"design",hero:"design",landing:"design",marquee:"design",settings:"settings"};
+  sales:"sales",coupons:"coupons",notify:"notify",announcer:"design",hero:"design",landing:"design",marquee:"design",settings:"settings",delivery:"settings"};
 const myPerms=()=>SBH.on?(SBH.perms||[]):PERMS.map(p=>p[0]);
 const tabAllowed=t=>ROLE()==="owner"||(TAB_PERM[t]&&myPerms().includes(TAB_PERM[t]));
 const CU={list:null,q:"",form:null,err:"",loading:false,stale:false};

@@ -212,6 +212,8 @@ const bsShip=(c,at=Date.now(),db=DB)=>bsOn(db)&&c.mode==="delivery"&&c.ship&&c.s
 const bsPending=(c,db=DB)=>bsOn(db)&&c.mode==="delivery"&&!c.bsSkip&&!bsShip(c,Date.now(),db);
 const BS_ST={confirmed:"Courier booked",scheduled:"Pickup scheduled",allocated:"Courier assigned",picking_up:"Courier is on the way to pick up",picked:"Picked up",dropping_off:"On the way to you",return_in_transit:"Returning",on_hold:"On hold",delivered:"Delivered",rejected:"Rejected by courier",disposed:"Disposed",courier_not_found:"No courier found",returned:"Returned",cancelled:"Booking cancelled"};
 const BS_FAIL=["courier_not_found","rejected","cancelled","returned","disposed"];
+const placeHTML=o=>{const p=o.place;if(!p||o.mode!=="delivery"||!(p.note||p.photo))return "";
+  return `<div class="dsec"><h4>📍 Delivery details</h4>${p.note?`<p style="margin:0 0 6px"><b>Note for the driver:</b> ${esc(p.note)}</p>`:""}${p.photo?(p.img?`<a href="${esc(p.img)}" target="_blank" rel="noopener"><img class="placeprev big" src="${esc(p.img)}" alt="Photo of the delivery place"></a>`:`<p class="note">Loading the photo…</p>`):""}</div>`};
 const bsBadge=o=>{const b=o.bship;if(!b||!b.courier||o.mode!=="delivery")return null;
   if(b.failed)return {t:"Courier failed",c:"bad"};if(!b.biteshipId)return b.status==="cancelled"?{t:"Courier cancelled",c:"bad"}:{t:"Courier not booked",c:"wait"};
   const m={confirmed:["Searching driver","wait"],scheduled:["Pickup scheduled","wait"],allocated:["Driver assigned","go"],picking_up:["Driver on the way","go"],picked:["Picked up","go"],dropping_off:["On the way","go"],delivered:["Delivered","done"],on_hold:["On hold","bad"]}[b.status];
@@ -323,7 +325,7 @@ function crumbColors(p){
 }
 /* ================= SHOP ================= */
 loadDB();
-const fresh = () => ({size:6, box:[], step:1, mode:"pickup", speed:"scheduled", day:null, time:null, note:"", addons:[], coupon:"", ship:null, bsSkip:false});
+const fresh = () => ({size:6, box:[], step:1, mode:"pickup", speed:"scheduled", day:null, time:null, note:"", addons:[], coupon:"", ship:null, bsSkip:false, dnote:"", dphoto:""});
 let S = fresh(), hadCart=false;
 try{const s=JSON.parse(localStorage.getItem(CART_KEY)||"null");if(s&&Array.isArray(s.box)){S={...S,...s,step:s.step===2?2:1};hadCart=true;
   }}catch(e){}
@@ -769,7 +771,7 @@ function bsNudge(){
 }
 function bsPopOpen(){
   const body=$("#bsPopBody");body.appendChild($("#addrFields"));body.appendChild($("#bsBox"));
-  $("#addrFields").hidden=false;$("#coAddr").required=false;bsBoxOpen();
+  $("#addrFields").hidden=false;$("#coAddr").required=false;placeFieldsShow();bsBoxOpen();
   $("#bsPop").hidden=false;document.body.style.overflow="hidden";
 }
 // checkout form: one line with the chosen courier and a Change button (the full courier box lives in the pop-up)
@@ -799,6 +801,25 @@ function bsBoxOpen(){
 }
 /* free map with a draggable pin (Leaflet + OpenStreetMap), loaded only when the courier box is used */
 let bsLeaf=null,bsMapObj=null,bsPin=null,bsPinT=0;
+/* --- optional "Note for the driver" + "Photo of your place" (switch on/off in Delivery & courier) --- */
+const placeOn=k=>DB.settings[k]!==false;
+function placeFieldsShow(){
+  const del=S.mode==="delivery";$("#placeNoteWrap").hidden=!(del&&placeOn("dnoteOn"));$("#placePhotoWrap").hidden=!(del&&SBH.on&&placeOn("dphotoOn"));
+  $("#coDNote").value=S.dnote||"";const pv=$("#coPhotoPrev");pv.hidden=!S.dphoto;if(S.dphoto)pv.src=S.dphoto;$("#coPhotoRm").hidden=!S.dphoto;
+  $("#coPhotoBtn").firstChild.textContent=S.dphoto?"📷 Change photo":"📷 Add photo";
+}
+async function processPlace(file){
+  if(!file||!/^image\//.test(file.type))throw new Error("Please choose a photo (JPG, PNG or WebP).");
+  if(file.size>25e6)throw new Error("That image is over 25 MB. Try a smaller one.");
+  const url=URL.createObjectURL(file);
+  try{const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>rej(new Error("Couldn't read that image."));i.src=url});
+    const k=Math.min(1,1000/Math.max(img.naturalWidth,img.naturalHeight)),w=Math.round(img.naturalWidth*k),h=Math.round(img.naturalHeight*k);
+    const c=document.createElement("canvas");c.width=w;c.height=h;const x=c.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,w,h);x.drawImage(img,0,0,w,h);
+    let o=c.toDataURL("image/webp",.72);if(!o.startsWith("data:image/webp"))o=c.toDataURL("image/jpeg",.75);return o}finally{URL.revokeObjectURL(url)}
+}
+$("#coDNote").addEventListener("input",e=>{S.dnote=e.target.value.slice(0,200)});
+$("#coPhoto").addEventListener("change",async e=>{const f=e.target.files[0];e.target.value="";if(!f)return;try{S.dphoto=await processPlace(f);placeFieldsShow()}catch(err){toast(err.message)}});
+$("#coPhotoRm").addEventListener("click",()=>{S.dphoto="";placeFieldsShow()});
 function bsLoadLeaflet(){
   if(bsLeaf)return bsLeaf;
   bsLeaf=new Promise((res,rej)=>{const l=document.createElement("link");l.rel="stylesheet";l.href="vendor/leaflet/leaflet.css";document.head.appendChild(l);
@@ -888,7 +909,7 @@ function renderCoSummary(){
 }
 function openCheckout(){
   renderCoSummary();
-  const del=S.mode==="delivery";$("#addrFields").hidden=!del;$("#bsBox").hidden=true;bsSumDraw();
+  const del=S.mode==="delivery";$("#addrFields").hidden=!del;$("#bsBox").hidden=true;bsSumDraw();placeFieldsShow();
   $("#coAddr").required=del;
   const eo=S.editId&&DB.orders.find(x=>x.id===S.editId);
   if(!eo)prefillCust();
@@ -998,10 +1019,12 @@ $("#coForm").addEventListener("submit",e=>{
   const cust={name:$("#coName").value.trim(),email:$("#coEmail").value.trim(),phone:$("#coPhone").value.trim(),
     address:del?$("#coAddr").value.trim():""};
   const fields={notify,size:S.size,items:countItems(S.box),mode:S.mode,speed:S.mode==="pickup"?"pickup":S.speed,day:S.day,time:S.time,note:S.note,addons:[...S.addons],sale:q.sale?`${q.sale.name} (${saleOffText(q.sale)})`:"",
-    base:q.base,discount:q.discount,coupon:q.coupon?q.coupon.code:"",couponDisc:q.couponDisc,surcharge:q.surcharge,addonsTotal:q.addons,fee:q.fee,total:q.total,customer:cust,gifts:ed&&ed.size===S.size&&ed.gifts?ed.gifts:giftPick(S.size)};
+    base:q.base,discount:q.discount,coupon:q.coupon?q.coupon.code:"",couponDisc:q.couponDisc,surcharge:q.surcharge,addonsTotal:q.addons,fee:q.fee,total:q.total,customer:cust,gifts:ed&&ed.size===S.size&&ed.gifts?ed.gifts:giftPick(S.size),...(S.mode==="delivery"&&(S.dnote||S.dphoto)?{place:{note:String(S.dnote||"").slice(0,200),photo:!!S.dphoto,img:S.dphoto||"",at:Date.now()}}:{})};
   if(SBH.on){
     const btn=f.querySelector("button[type=submit]");if(btn)btn.disabled=true;
+    const pNote=S.mode==="delivery"&&placeOn("dnoteOn")?String(S.dnote||"").trim():"",pImg=S.mode==="delivery"&&placeOn("dphotoOn")?S.dphoto:"";
     SBH.place({notify,shuffled:!!S.shuf,size:S.size,items:fields.items,mode:S.mode,speed:S.speed,day:S.day,time:S.time,note:S.note,addons:[...S.addons],coupon:fields.coupon,expectTotal:q.total,customer:cust,ship:q.ship||undefined},ed).then(o=>{
+      if(pNote||pImg)SBH.placeInfo(o.id,pNote,pImg).catch(err=>toast("Order placed, but the driver note or photo didn't save: "+err.message));
       addMine(o.id);S.editId=null;saveCart();renderDone(o,!!ed);
       S=fresh();$("#coForm").reset();saveCart();sanitizeCart();renderStoreStatic();renderStore();renderEditBar();renderBag();
     }).catch(err=>{$("#coErr").textContent=err.message;$("#coErr").hidden=false;SBH.loadShop(true)}).finally(()=>{if(btn)btn.disabled=false});
@@ -1265,6 +1288,7 @@ function renderMO(){
     <div><span>${modeName(o)}</span><span class="num">${o.fee?money(o.fee):"Free"}</span></div>
     <div class="t"><span>Total</span><span class="num">${money(o.total)}</span></div></div>${o.mode==="delivery"?`<p class="hint">Your box may be split into smaller or bigger boxes for delivery safety.</p>`:""}</div>
   ${bsHTML(o,false)}
+  ${placeHTML(o)}
   ${giftsHTML(o)}
   ${o.status==="completed"?ratingHTML(o):""}
   ${complaintHTML(o)}

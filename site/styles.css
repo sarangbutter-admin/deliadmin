@@ -849,3 +849,6 @@ body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
 .bspf-imgs{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0}
 .bspf-imgs img{width:84px;height:84px;object-fit:cover;border-radius:10px;border:1px solid var(--line)}
 .bspf>b{display:block}
+.placex{margin-top:10px}.placex textarea{width:100%}
+.placeprev{width:72px;height:72px;object-fit:cover;border-radius:10px;border:1px solid var(--line)}
+.placeprev.big{width:160px;height:160px}

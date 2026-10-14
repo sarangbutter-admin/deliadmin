@@ -135,14 +135,21 @@
     }
     return r;
   };
+  // driver note + place photo, saved right after the order is placed
+  H.placeInfo = async function (id, note, img) { var d = await K.rpc("submit_place", { p_id: id, p_token: tk(id), p_note: note || "", p_img: img || "" }); setOrderIn(DB.orders, d); lastOrdSig = ""; };
   H.visit = function (vid) { K.rpc("log_visit", { p_vid: vid }).catch(function () {}); };
   // complaint photos are stored apart from the order; fetch them when the customer opens the order
   var fileLoading = {};
   H.needFiles = function (o) {
-    if (!o || !o.complaint || !(o.complaint.photoCount > 0) || (o.complaint.photos || []).length || fileLoading[o.id]) return;
+    var needCp = o && o.complaint && o.complaint.photoCount > 0 && !(o.complaint.photos || []).length;
+    var needPl = o && o.place && o.place.photo && !o.place.img;
+    if (!o || !(needCp || needPl) || fileLoading[o.id]) return;
     fileLoading[o.id] = 1;
     K.rpc("order_files", { p_id: o.id, p_token: tk(o.id) }).then(function (f) {
-      if (f && f.photos && f.photos.length && o.complaint) { o.complaint.photos = f.photos; if (!$q("#moSheet").hidden && MO.id === o.id && !typingInMO()) renderMO(); }
+      var ch = false;
+      if (f && f.photos && f.photos.length && o.complaint) { o.complaint.photos = f.photos; ch = true; }
+      if (f && f.place && o.place) { o.place.img = f.place; ch = true; }
+      if (ch && !$q("#moSheet").hidden && MO.id === o.id && !typingInMO()) renderMO();
     }).catch(function () {}).finally(function () { fileLoading[o.id] = 0; });
   };
 
@@ -456,12 +463,13 @@
 
   // payment-proof and complaint pictures are fetched when the owner opens them
   H.adminFiles = async function (o) {
-    var need = (o.proof && !o.proof.img) || (o.complaint && o.complaint.photoCount > 0 && !(o.complaint.photos || []).length);
+    var need = (o.proof && !o.proof.img) || (o.complaint && o.complaint.photoCount > 0 && !(o.complaint.photos || []).length) || (o.place && o.place.photo && !o.place.img);
     if (!need) return;
     try {
       var f = await K.rpc("admin_order_files", { p_id: o.id }, true);
       if (o.proof && f.proof) o.proof.img = f.proof;
       if (o.complaint && f.photos) o.complaint.photos = f.photos;
+      if (o.place && f.place) o.place.img = f.place;
     } catch (e) { toast("Couldn't load the picture: " + e.message); }
   };
   // change one order right away (used for staff payment checks and owner approvals)

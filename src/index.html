@@ -188,7 +188,11 @@
         <div class="field"><label for="coEmail">Email</label><input id="coEmail" type="email" required autocomplete="email"></div>
         <div class="field"><span class="flbl" style="font-weight:600;font-size:14px">Send order updates by</span>
           <div style="display:flex;flex-wrap:wrap;gap:6px 18px"><label class="chk"><input type="radio" name="coNotify" value="whatsapp"> WhatsApp</label><label class="chk"><input type="radio" name="coNotify" value="email"> Email</label><label class="chk"><input type="radio" name="coNotify" value="both" checked> Both</label></div></div>
-        <div class="field" id="addrFields" hidden><label for="coAddr">Delivery address</label><textarea id="coAddr" rows="3" autocomplete="street-address" placeholder="Street, number, area, city"></textarea></div>
+        <div class="field" id="addrFields" hidden><label for="coAddr">Delivery address</label><textarea id="coAddr" rows="3" autocomplete="street-address" placeholder="Street, number, area, city"></textarea>
+          <div class="placex" id="placeNoteWrap" hidden><label for="coDNote">Note for the driver <small class="note">(optional)</small></label><textarea id="coDNote" rows="2" maxlength="200" placeholder="e.g. Green gate next to Indomaret, house no. 6, ring the bell"></textarea></div>
+          <div class="placex" id="placePhotoWrap" hidden><span class="flbl">Photo of your place <small class="note">(optional)</small></span>
+            <div class="colin" style="flex-wrap:wrap"><label class="ghost mqbtn" id="coPhotoBtn">📷 Add photo<input type="file" accept="image/*" hidden id="coPhoto"></label><img id="coPhotoPrev" class="placeprev" hidden alt="Your place"><button type="button" class="ghost" id="coPhotoRm" hidden>Remove</button></div>
+            <small class="note">Helps the courier find you. Only the shop and you can see it, and it's deleted a few days after delivery.</small></div></div>
         <div class="field bssum" id="bsSum" hidden></div>
         <div class="field bsbox" id="bsBox" hidden>
           <span class="flbl" style="font-weight:600;font-size:14px">Courier</span>
@@ -247,6 +251,7 @@
         <button type="button" data-tab="hero"><span class="nl"><span class="ni" aria-hidden="true">🖼️</span>Top banner</span></button>
         <button type="button" data-tab="landing"><span class="nl"><span class="ni" aria-hidden="true">🏠</span>Landing page</span></button>
         <button type="button" data-tab="marquee"><span class="nl"><span class="ni" aria-hidden="true">🎞️</span>Marquee banner</span></button>
+        <button type="button" data-tab="delivery"><span class="nl"><span class="ni" aria-hidden="true">🛵</span>Delivery &amp; courier</span></button>
         <button type="button" data-tab="labels"><span class="nl"><span class="ni" aria-hidden="true">🏷️</span>Shipping labels</span></button>
         <button type="button" data-tab="settings"><span class="nl"><span class="ni" aria-hidden="true">⚙️</span>Shop settings</span></button>
         <button type="button" data-tab="log"><span class="nl"><span class="ni" aria-hidden="true">📜</span>Activity</span></button>

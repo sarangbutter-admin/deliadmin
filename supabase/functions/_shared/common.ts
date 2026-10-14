@@ -151,6 +151,21 @@ export function boxOf(cfg: any, size: number) {
   return { weight: Math.max(100, Math.round(w)), length: nm(d.l, 25), width: nm(d.w, 25), height: nm(d.h, 10) };
 }
 
+// private link to the customer's place photo (served by the webhook function, works until the photo is deleted)
+export async function placeLink(db: any, id: string) {
+  const sec = (await kv(db, "quote_secret"))?.v as string;
+  if (!sec) return "";
+  return Deno.env.get("SUPABASE_URL") + "/functions/v1/biteship-webhook?ph=" + encodeURIComponent(id) + "&s=" + (await hmacHex(sec, "place|" + id)).slice(0, 32);
+}
+// what the driver reads: the customer's note for the driver, the order note, the order code and the place photo link
+async function driverNote(db: any, o: any, id: string) {
+  const pl = o.place || {}, parts: string[] = [];
+  if (pl.note) parts.push(cl(pl.note, 200));
+  if (o.note) parts.push(cl(o.note, 120));
+  parts.push("Order " + o.code);
+  if (pl.photo) { const l = await placeLink(db, id); if (l) parts.push("Photo of the place: " + l); }
+  return parts.join(". ");
+}
 // books (or books again) the courier for a paid order; returns {bship} or {error}
 export async function bookOrder(db: any, key: string, cfg: any, row: { id: string; data: any }) {
   const o: any = row.data, sh: any = o.bship;
@@ -164,7 +179,7 @@ export async function bookOrder(db: any, key: string, cfg: any, row: { id: strin
     shipper_contact_name: cl(org.name, 60), shipper_contact_phone: cl(org.phone, 20), shipper_organization: cl(org.business || org.name, 60),
     origin_contact_name: cl(org.name, 60), origin_contact_phone: cl(org.phone, 20), origin_address: cl(org.address, 250), origin_note: cl(org.note, 200),
     destination_contact_name: cl(c.name, 60), destination_contact_phone: cl(c.phone, 20), destination_contact_email: cl(c.email, 100),
-    destination_address: cl(c.address, 250), destination_note: cl((o.note ? o.note + " " : "") + "Order " + o.code, 200),
+    destination_address: cl(c.address, 250), destination_note: cl(await driverNote(db, o, row.id), 500),
     courier_company: sh.courier, courier_type: sh.service, delivery_type: "now",
     order_note: "Delidome order " + o.code + " (cookies, handle with care)", metadata: { orderCode: o.code },
     items: [{ name: "Cookie box of " + o.size, description: "Fragile baked goods", value: Math.round(nm(o.base)), quantity: 1, weight: box.weight, length: box.length, width: box.width, height: box.height }],
