@@ -1081,3 +1081,4 @@ body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
 .placex{margin-top:10px}.placex textarea{width:100%}
 .placeprev{width:72px;height:72px;object-fit:cover;border-radius:10px;border:1px solid var(--line)}
 .placeprev.big{width:160px;height:160px}
+.addrwarn{margin:6px 0 0;padding:7px 10px;border-radius:10px;background:#FFF6D6;border:1px solid #F2D37A;color:#6B4E00;font-size:12.5px;line-height:1.4}
