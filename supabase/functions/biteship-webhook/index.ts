@@ -49,7 +49,7 @@ Deno.serve(async (req) => {
 
   // optional: try once more by itself when no driver took the order
   const cfg = (await kv(db, "biteship_cfg")) || {};
-  if (FAILED.includes(status) && status !== "returned" && cfg.autoRetry && key && (next.bship.retries || 0) < 1 && ["new", "baking", "ready"].includes(next.status)) {
+  if (FAILED.includes(status) && status !== "returned" && cfg.autoRetry && key && (next.bship.retries || 0) < 1 && ["baking", "ready"].includes(next.status)) {
     const job = (async () => {
       await sleep(60_000);
       const { data: fresh } = await db.from("orders").select("id,data").eq("id", row.id).maybeSingle();

@@ -171,7 +171,8 @@ export async function bookOrder(db: any, key: string, cfg: any, row: { id: strin
   const o: any = row.data, sh: any = o.bship;
   if (!sh || !sh.courier) return { error: "This order has no courier chosen." };
   if (sh.biteshipId) return { error: "A courier is already booked for this order." };
-  if (!["new", "baking", "ready"].includes(o.status)) return { error: "Confirm the payment first. Couriers are booked for paid orders." };
+  // like the order steps: the pickup comes after Baking (booking again after a failed courier is fine at Out for delivery too)
+  if (!(o.status === "baking" || (o.status === "ready" && (sh.failed || sh.cancelledAt)))) return { error: "Move the order to Baking first. The courier pickup comes after Baking." };
   const org = cfg.origin || {};
   if (!org.name || !org.phone || !org.address) return { error: "Fill in your pickup details in Shop settings first." };
   const box = boxOf(cfg, nm(o.size)), c = o.customer || {};
