@@ -1970,6 +1970,87 @@ $("#modal").addEventListener("click",e=>{
     const {fn,back}=DELC;DELC=null;closeModal();if(back)openCats();fn()}
 },true);
 
+/* --- Flavor editor pop-up: full details of one flavor, Save or Cancel --- */
+let PE=null;
+const PE_KEYS=["name","surcharge","cat","art","desc","badges","status","track","stock","img","cutout","tints"];
+function openPEdit(id){
+  const p=prod(id);if(!p)return;
+  const d={};PE_KEYS.forEach(k=>{if(p[k]!==undefined)d[k]=JSON.parse(JSON.stringify(p[k]))});
+  PE={id,d,pos:DB.products.indexOf(p),orig:JSON.stringify(d),origPos:DB.products.indexOf(p),busy:false};
+  openModal("","pedit");drawPEdit();
+}
+const peDirty=()=>PE&&(JSON.stringify(PE.d)!==PE.orig||PE.pos!==PE.origPos);
+function drawPEdit(){
+  const p=prod(PE.id);if(!p){closeModal();return}
+  const d=PE.d,v=Object.assign({},p,d),r=ratingOf(p),n=DB.products.length,own=ROLE()==="owner";
+  $("#modalCard").innerHTML=`<div class="sheet-top"><div><h3 id="modalTitle">Edit flavor</h3><span class="note">${esc(p.name)}</span></div><button class="x" type="button" data-pecancel aria-label="Close">✕</button></div>
+  <div class="pe-grid">
+    <div class="pe-photo">${plateHTML(v)}
+      <label class="upl">${v.img?"Replace photo":"Upload photo"}<input type="file" accept="image/*" data-pefile aria-label="Upload photo"></label>
+      ${v.img?`<button class="linkbtn sm" type="button" data-perm>Remove photo</button>`:""}
+    </div>
+    <div class="stack" style="gap:12px">
+      <label class="af">Name<input class="in" data-pe="name" value="${esc(v.name||"")}" maxlength="40"></label>
+      <div class="grid2">
+        <label class="af">Category<select class="in" data-pe="cat">${catOptions(v.cat)}</select></label>
+        <label class="af">Extra price per cookie<div class="money-in"><span>+${DB.settings.currency}</span><input class="in" type="number" min="0" step="0.25" data-pe="surcharge" value="${+v.surcharge||0}"></div></label>
+      </div>
+      <label class="af">Description<textarea class="in" rows="2" data-pe="desc" maxlength="90">${esc(v.desc||"")}</textarea></label>
+      <label class="af">Look<select class="in" data-pe="art">${lookOptions(v)}</select></label>
+    </div>
+  </div>
+  <div class="af" style="margin-top:12px">Availability<div class="seg" role="group">${[["available","Available"],["soldout","Sold out"],["hidden","Hidden"]].map(([k,l])=>`<button type="button" data-pestatus="${k}" aria-pressed="${v.status===k}">${l}</button>`).join("")}</div></div>
+  <div class="stockrow" style="margin-top:12px"><label class="sw"><input type="checkbox" data-pe="track" ${v.track?"checked":""} aria-label="Track stock"><span></span></label><span class="stlabel">Track stock</span>
+    ${v.track?`<div class="stepin"><button class="ghost" type="button" data-pestk="-1" aria-label="One less">−</button><input class="in" type="number" min="0" step="1" data-pe="stock" value="${v.stock||0}" aria-label="Cookies in stock"><button class="ghost" type="button" data-pestk="1" aria-label="One more">+</button></div><button class="ghost" type="button" data-pestk="12">+12</button>`:`<span class="note" style="margin:0">Stock is not counted</span>`}</div>
+  <div class="bdgpick" style="margin-top:12px"><span class="lblx">Badges</span>${(DB.badges.list||[]).map(b=>{const on=(v.badges||[]).includes(b.id),auto=b.id==="best"&&bestIds().includes(p.id)&&!on;return `<button type="button" class="bdgtog${on?" on":""}${auto?" auto":""}" data-pebadge="${esc(b.id)}" aria-pressed="${on}">${badgeHTML(b)}${auto?"<small>auto</small>":""}</button>`}).join("")}</div>
+  <div class="grid2" style="margin-top:12px;align-items:end">
+    <label class="af">Position in the menu<select class="in" data-pepos>${Array.from({length:n},(_,i)=>`<option value="${i}" ${i===PE.pos?"selected":""}>${i===0?"1 (top)":i===n-1?`${n} (bottom)`:i+1}</option>`).join("")}</select></label>
+    <div class="af">Reviews<button class="ghost" type="button" data-pereviews>${r.n?`★ ${r.avg.toFixed(1)} · ${r.n} review${r.n>1?"s":""} · manage`:"No reviews yet · manage"}</button></div>
+  </div>
+  <p class="err" id="peErr" hidden></p>
+  <div class="pe-actions">
+    ${own?`<button class="danger" type="button" data-pedel>Delete</button>`:"<span></span>"}
+    <div class="mo-row" style="gap:10px"><button class="ghost" type="button" data-pecancel>Cancel</button><button class="btn btn-blue btn-sm" type="button" data-pesave ${PE.busy?"disabled":""}>${PE.busy?"Saving…":"Save"}</button></div>
+  </div>`;
+}
+function peSet(el){const k=el.dataset.pe;if(!k)return;let v=el.type==="checkbox"?el.checked:el.type==="number"?Math.max(0,parseFloat(el.value)||0):el.value;
+  if(k==="stock")v=Math.round(v);PE.d[k]=v;if(k==="track"&&v&&typeof PE.d.stock!=="number")PE.d.stock=0;
+  if(k==="track"||k==="art")drawPEdit()}
+$("#modal").addEventListener("input",e=>{if(A.modal!=="pedit"||!PE)return;const el=e.target;if(el.dataset.pe&&el.type!=="checkbox"&&el.tagName!=="SELECT")peSet(el)});
+$("#modal").addEventListener("change",async e=>{if(A.modal!=="pedit"||!PE)return;const el=e.target;
+  if(el.dataset.pefile!==undefined&&el.files[0]){try{const r=await processImage(el.files[0]);Object.assign(PE.d,{img:r.img,cutout:r.cutout,tints:r.tints,art:"photo"});drawPEdit()}catch(x){toast(x.message)}return}
+  if(el.dataset.pepos!==undefined){PE.pos=+el.value;return}
+  if(el.dataset.pe)peSet(el)});
+function peClose(){PE=null;closeModal()}
+$("#modal").addEventListener("click",e=>{
+  if(A.modal!=="pedit"||!PE)return;const t=e.target,b=t.closest("button");
+  if(t.id==="modal"||t.closest("[data-pecancel]")){
+    if(peDirty()&&b&&b.dataset.arm!=="1"){b.dataset.arm="1";const was=b.textContent;b.textContent="Discard changes?";setTimeout(()=>{if(b.isConnected){b.dataset.arm="";b.textContent=was}},3000);return}
+    if(peDirty()&&!b)return;
+    peClose();return}
+  if(!b)return;const d=b.dataset;
+  if(d.pestatus){PE.d.status=d.pestatus;drawPEdit();return}
+  if(d.pestk){PE.d.stock=Math.max(0,(+PE.d.stock||0)+(+d.pestk));drawPEdit();return}
+  if(d.pebadge){const l=PE.d.badges||[];PE.d.badges=l.includes(d.pebadge)?l.filter(x=>x!==d.pebadge):[...l,d.pebadge];drawPEdit();return}
+  if(d.perm!==undefined){delete PE.d.img;delete PE.d.cutout;delete PE.d.tints;PE.d.img="";if(PE.d.art==="photo")PE.d.art="none";drawPEdit();return}
+  if(d.pereviews!==undefined){if(peDirty()&&b.dataset.arm!=="1"){b.dataset.arm="1";b.textContent="Unsaved changes – tap again to leave";return}const id=PE.id;peClose();openAdminReviews(id);return}
+  if(d.pedel!==undefined){const id=PE.id;peClose();delConfirm("this flavor",()=>needOwner("delete a flavor").then(()=>{DB.products=DB.products.filter(p=>p.id!==id);saveDB();toast("Flavor deleted");renderAdmin()}).catch(()=>{}));return}
+  if(d.pesave!==undefined){
+    const p=prod(PE.id),D=PE.d,er=$("#peErr");if(!p){peClose();return}
+    D.name=String(D.name||"").trim();if(!D.name){er.textContent="Give the flavor a name.";er.hidden=false;return}
+    const priceChanged=(+D.surcharge||0)!==(+p.surcharge||0);
+    (priceChanged?needOwner("change a price"):Promise.resolve()).then(()=>{
+      const prev=JSON.stringify(p);
+      PE_KEYS.forEach(k=>{if(D[k]===undefined||D[k]===""&&k==="img"){if(k==="img"||k==="cutout"||k==="tints")delete p[k]}else p[k]=D[k]});
+      p.surcharge=+D.surcharge||0;if(p.badges&&!p.badges.length)delete p.badges;
+      const i=DB.products.indexOf(p);if(PE.pos!==i){DB.products.splice(i,1);DB.products.splice(Math.min(PE.pos,DB.products.length),0,p)}
+      if(!saveDB()){Object.assign(p,JSON.parse(prev));toast("Not enough storage space. Try a smaller photo.");return}
+      const id=PE.id;peClose();toast(`${p.name} saved`);renderAdmin();
+      const row=document.querySelector(`[data-prow="${id}"]`);if(row){row.scrollIntoView({block:"center",behavior:RM?"auto":"smooth"});row.classList.add("flash-row")}
+    }).catch(()=>{});
+  }
+});
+
 /* --- Flash sales --- */
 function viewSales(){
   const D=A.draft,now=Date.now();
@@ -2045,15 +2126,12 @@ function productMatches(p){
   const q=A.pq.trim().toLowerCase();
   return !q||[p.name,p.desc,catName(p.cat)].join(" ").toLowerCase().includes(q);
 }
-function prow(p){const ed=A.pedit===p.id,own=ROLE()==="owner",r=ratingOf(p);return `<div class="prow simple${ed?" editing":""}" data-prow="${p.id}">
+function prow(p){const own=ROLE()==="owner",r=ratingOf(p);return `<div class="prow simple" data-prow="${p.id}">
       <div class="pthumb" data-drop="${p.id}">${plateHTML(p)}
         <label class="upl">${p.img?"Replace photo":"Upload photo"}<input type="file" accept="image/*" data-upload="${p.id}" aria-label="Upload photo for ${esc(p.name)}"></label>
       </div>
       <div class="pfields">
-        <div class="grid2">
-          <label class="af">Name<input class="in" data-k="products:${p.id}:name" value="${esc(p.name)}" maxlength="40"></label>
-          <label class="af">Extra price per cookie<div class="money-in"><span>+${DB.settings.currency}</span><input class="in" type="number" min="0" step="0.25" data-k="products:${p.id}:surcharge" value="${p.surcharge}"></div></label>
-        </div>
+        <div class="ptitle"><b>${esc(p.name)}</b><span>${p.surcharge>0?`+${money(p.surcharge)} per cookie`:"Regular price"}</span></div>
         <p class="pmeta">${esc(catName(p.cat)||"No category")} · ${r.n?`★ ${r.avg.toFixed(1)} (${r.n})`:"no reviews"} · position ${DB.products.indexOf(p)+1} of ${DB.products.length}${(p.badges||[]).length?` · ${(p.badges||[]).length} badge${(p.badges||[]).length>1?"s":""}`:""}</p>
         <div class="stockrow">
           <label class="sw"><input type="checkbox" data-k="products:${p.id}:track" ${p.track?"checked":""} aria-label="Track stock for ${esc(p.name)}"><span></span></label><span class="stlabel">Track stock</span>
@@ -2061,21 +2139,8 @@ function prow(p){const ed=A.pedit===p.id,own=ROLE()==="owner",r=ratingOf(p);retu
         </div>
         <div class="pfoot">
           <div class="left"><div class="seg" role="group" aria-label="Availability">${[["available","Available"],["soldout","Sold out"],["hidden","Hidden"]].map(([k,l])=>`<button type="button" data-pstatus="${p.id}:${k}" aria-pressed="${p.status===k}">${l}</button>`).join("")}</div></div>
-          <div class="left"><button class="btn btn-blue btn-sm" type="button" data-pedit="${p.id}" aria-expanded="${ed}">${ed?"Close":"✎ Edit"}</button>${own?`<button class="danger" type="button" data-pdel="${p.id}">Delete</button>`:""}</div>
+          <div class="left"><button class="btn btn-blue btn-sm" type="button" data-pedit="${p.id}">✎ Edit</button>${own?`<button class="danger" type="button" data-pdel="${p.id}">Delete</button>`:""}</div>
         </div>
-        ${ed?`<div class="pedit">
-          <div class="grid2">
-            <label class="af">Category<select class="in" data-k="products:${p.id}:cat">${catOptions(p.cat)}</select></label>
-            <label class="af">Look<select class="in" data-k="products:${p.id}:art" aria-label="Cookie look">${lookOptions(p)}</select></label>
-          </div>
-          <label class="af">Description<input class="in" data-k="products:${p.id}:desc" value="${esc(p.desc)}" maxlength="90"></label>
-          <div class="bdgpick"><span class="lblx">Badges</span>${(DB.badges.list||[]).map(b=>{const on=(p.badges||[]).includes(b.id),auto=b.id==="best"&&bestIds().includes(p.id)&&!on;return `<button type="button" class="bdgtog${on?" on":""}${auto?" auto":""}" data-pbadge="${p.id}:${esc(b.id)}" aria-pressed="${on}" title="${auto?"Added automatically (top seller)":on?"Tap to remove":"Tap to add"}">${badgeHTML(b)}${auto?"<small>auto</small>":""}</button>`}).join("")}<button type="button" class="linkbtn sm" data-gotab="badges">Edit badges</button></div>
-          <div class="grid2" style="align-items:end">
-            <label class="af">Move in the menu<select class="in" data-move="${p.id}" aria-label="Move ${esc(p.name)} in the menu"><option value="">Menu position ${DB.products.indexOf(p)+1} of ${DB.products.length}</option><option value="top">Move to top</option><option value="up">Move up one</option><option value="down">Move down one</option><option value="middle">Move to middle</option><option value="bottom">Move to bottom</option></select></label>
-            <div class="af">Reviews<button class="ghost" type="button" data-rvadmin="${p.id}">${(()=>{const r=ratingOf(p);return r.n?`Reviews · ★ ${r.avg.toFixed(1)} (${r.n})`:"Reviews · none yet"})()}</button></div>
-          </div>
-          <div class="chips">${p.img?`<button class="ghost" type="button" data-rmimg="${p.id}">Remove photo</button>`:""}<button class="ghost" type="button" data-pbg="${p.id}">🎨 Photo background</button></div>
-        </div>`:""}
       </div>
     </div>`}
 function productRows(){
@@ -2637,7 +2702,7 @@ am.addEventListener("click",e=>{
   else if(d.pcatmanage!==undefined){openCats()}
   else if(d.pcat){A.pcat=d.pcat;renderAdmin()}
   else if(d.pst){A.pst=d.pst;renderAdmin()}
-  else if(d.pedit){A.pedit=A.pedit===d.pedit?null:d.pedit;renderAdmin();const r=document.querySelector(`[data-prow="${d.pedit}"]`);if(r&&A.pedit)r.scrollIntoView({block:"start",behavior:RM?"auto":"smooth"})}
+  else if(d.pedit){openPEdit(d.pedit)}
   else if(d.pclear!==undefined){A.pq="";A.pcat="all";renderAdmin()}
   else if(d.sadd!==undefined){const n=Math.round(+$("#newN").value),p=+$("#newP").value,err=$("#sizeErr");
     if(!(n>=1&&n<=24)){err.textContent="Box size must be between 1 and 24 cookies.";err.hidden=false;return}
