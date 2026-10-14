@@ -1372,7 +1372,7 @@ function viewHero(){
   const inp=(label,path,max,rows)=>`<label class="af">${label}${rows?`<textarea class="in" rows="${rows}" data-hr="${path}" maxlength="${max}">${esc(h[path])}</textarea>`:`<input class="in" data-hr="${path}" maxlength="${max}" value="${esc(h[path])}">`}</label>`;
   const slot=i=>{const c=safeMedia(h.cookies[i]),pr=prods[i],x=heroCkx(h,i);
     const thumb=c?`<img src="${esc(c)}" alt="" style="width:100%;height:100%;object-fit:contain">`:pr?`<div class="plate" style="background:#1A1FB0;width:100%">${plateInner(pr)}</div>`:`<span class="note">Empty</span>`;
-    return `<div class="pmcard" style="text-align:center;gap:8px"><b style="font-size:13px">Cookie ${i+1}</b><div style="width:72px;height:72px;margin:0 auto;display:grid;place-items:center;background:#EEF0FF;border-radius:50%;overflow:hidden">${thumb}</div>
+    return `<div class="pmcard" style="text-align:center;gap:8px${x.show?"":";opacity:.6"}"><b style="font-size:13px">Cookie ${i+1}</b><label class="sw" style="justify-self:center"><input type="checkbox" data-hrx="${i}.show" ${x.show?"checked":""} aria-label="Show Cookie ${i+1}"><span></span></label><span class="note" style="margin:0">${x.show?"Shown":"Hidden"}</span><div style="width:72px;height:72px;margin:0 auto;display:grid;place-items:center;background:#EEF0FF;border-radius:50%;overflow:hidden">${thumb}</div>
       <span class="note" style="margin:0">${c?"Your image":pr?"Default (flavor photo)":"Nothing to show"}</span>
       <label class="ghost mqbtn" style="justify-self:center">${c?"Replace":"Upload"}<input type="file" accept="image/*" hidden data-hrck="${i}"></label>${c?`<button class="danger" type="button" data-hrckrm="${i}">Use default</button>`:""}
       <label class="af" style="margin:0;text-align:left;font-size:12px">Background<input type="color" data-hrx="${i}.bg" value="${x.bg||(i%2?"#2328C8":"#1A1FB0")}" style="width:100%;height:34px"></label>
@@ -1417,7 +1417,7 @@ function viewHero(){
       <div class="grid2" style="margin:0 0 12px">
         <label class="af">Cookies shown on phones<input class="in" type="number" min="0" max="12" step="1" data-hr="ckPh" data-hrnum="1" value="${heroCkShow(h,"ckPh")}"></label>
         <label class="af">Cookies shown on larger screens and PC<input class="in" type="number" min="0" max="12" step="1" data-hr="ckPc" data-hrnum="1" value="${heroCkShow(h,"ckPc")}"></label></div>
-      <p class="note" style="margin:0 0 10px">Cookies show in order, Cookie 1 first. 0 hides them on that screen.</p>
+      <p class="note" style="margin:0 0 10px">Cookies show in order, Cookie 1 first. Switch a cookie off to hide it; the next ones move up to fill its place. 0 hides them on that screen.</p>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px">${Array.from({length:heroCkN(h)},(_,i)=>i).map(slot).join("")}</div>
       ${heroCkN(h)<12?`<button class="ghost" type="button" data-hrckadd style="margin-top:10px">+ Add cookie (${heroCkN(h)} of 12)</button>`:`<p class="note" style="margin:10px 0 0">12 cookies is the most.</p>`}
     </section>
@@ -2634,7 +2634,7 @@ am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
 });
 
 function hrSetX(el){const h=hrDraft(),[i,k]=el.dataset.hrx.split("."),n=+i;if(!Array.isArray(h.ckx))h.ckx=[];while(h.ckx.length<=n)h.ckx.push({});
-  const x=h.ckx[n]=h.ckx[n]||{};x[k]=k==="op"?+el.value:el.value;hrDraw();
+  const x=h.ckx[n]=h.ckx[n]||{};x[k]=k==="op"?+el.value:k==="show"?el.checked:el.value;hrDraw();if(k==="show"){renderAdmin();return}
   if(k==="op"){const l=el.closest("label");if(l&&l.firstChild)l.firstChild.textContent=`Opacity: ${x.op}%`}}
 am.addEventListener("input",e=>{const el=e.target;if(el.dataset.hrx){hrSetX(el);return}if(!el.dataset.hr)return;hrSet(el)});
 function hrSet(el){const h=hrDraft(),k=el.dataset.hr;h[k]=el.type==="checkbox"?el.checked:el.dataset.hrnum?+el.value:el.value;
@@ -3073,15 +3073,14 @@ const HERO_SPOTS=[[3,6],[85,4],[-4,46],[90,40],[2,84],[86,82],[22,2],[68,2],[14,
 const HERO_FX=[["bob","Float"],["spin","Spin"],["pulse","Pulse"],["wiggle","Wiggle"],["none","Still"]];
 const heroCkN=h=>Math.max(6,Math.min(12,+(h&&h.ckn)||6));
 const heroCkShow=(h,k)=>{const v=h&&h[k];return v===undefined||v===""||v===null?(k==="ckPh"?6:12):Math.max(0,Math.min(12,Math.round(+v)||0))};
-const heroCkx=(h,i)=>{const x=(h&&h.ckx&&h.ckx[i])||{};return{bg:/^#[0-9a-f]{6}$/i.test(x.bg||"")?x.bg:"",op:Math.max(10,Math.min(100,+x.op||95)),fx:HERO_FX.some(f=>f[0]===x.fx)?x.fx:"bob"}};
+const heroCkx=(h,i)=>{const x=(h&&h.ckx&&h.ckx[i])||{};return{show:x.show!==false,bg:/^#[0-9a-f]{6}$/i.test(x.bg||"")?x.bg:"",op:Math.max(10,Math.min(100,+x.op||95)),fx:HERO_FX.some(f=>f[0]===x.fx)?x.fx:"bob"}};
 function heroFloats(dome,h){
   if(!dome)return;dome.querySelectorAll(".float").forEach(n=>n.remove());
-  const prods=DB.products.filter(p=>p.status!=="hidden"&&hasImage(p)).slice(0,6),cs=(h&&h.cookies)||[];let html="";
-  for(let i=0;i<heroCkN(h);i++){const c=safeMedia(cs[i]);let inner="";
+  const prods=DB.products.filter(p=>p.status!=="hidden"&&hasImage(p)).slice(0,6),cs=(h&&h.cookies)||[],ph=heroCkShow(h,"ckPh"),pc=heroCkShow(h,"ckPc");let html="",k=0;
+  for(let i=0;i<heroCkN(h);i++){const x=heroCkx(h,i);if(!x.show)continue;const c=safeMedia(cs[i]);let inner="";
     if(c)inner=`<img class="ck ph${/^data:image\/jpeg/i.test(c)?"":" cut"}" src="${esc(c)}" alt="" draggable="false">`;else if(prods[i])inner=plateInner(prods[i]);
     if(!inner)continue;
-    const x=heroCkx(h,i);
-    html+=`<div class="float fx-${x.fx}${i>=heroCkShow(h,"ckPh")?" hid-ph":""}${i>=heroCkShow(h,"ckPc")?" hid-pc":""}" aria-hidden="true" style="left:${HERO_SPOTS[i][0]}%;top:${HERO_SPOTS[i][1]}%;opacity:${x.op/100}"><div class="plate" style="background:${x.bg||(i%2?"#2328C8":"#1A1FB0")}">${inner}</div></div>`}
+    html+=`<div class="float fx-${x.fx}${k>=ph?" hid-ph":""}${k>=pc?" hid-pc":""}" aria-hidden="true" style="left:${HERO_SPOTS[k][0]}%;top:${HERO_SPOTS[k][1]}%;opacity:${x.op/100}"><div class="plate" style="background:${x.bg||(i%2?"#2328C8":"#1A1FB0")}">${inner}</div></div>`;k++}
   dome.insertAdjacentHTML("afterbegin",html);
 }
 function heroFill(dome,h){

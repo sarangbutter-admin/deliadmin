@@ -1295,15 +1295,14 @@ const HERO_SPOTS=[[3,6],[85,4],[-4,46],[90,40],[2,84],[86,82],[22,2],[68,2],[14,
 const HERO_FX=[["bob","Float"],["spin","Spin"],["pulse","Pulse"],["wiggle","Wiggle"],["none","Still"]];
 const heroCkN=h=>Math.max(6,Math.min(12,+(h&&h.ckn)||6));
 const heroCkShow=(h,k)=>{const v=h&&h[k];return v===undefined||v===""||v===null?(k==="ckPh"?6:12):Math.max(0,Math.min(12,Math.round(+v)||0))};
-const heroCkx=(h,i)=>{const x=(h&&h.ckx&&h.ckx[i])||{};return{bg:/^#[0-9a-f]{6}$/i.test(x.bg||"")?x.bg:"",op:Math.max(10,Math.min(100,+x.op||95)),fx:HERO_FX.some(f=>f[0]===x.fx)?x.fx:"bob"}};
+const heroCkx=(h,i)=>{const x=(h&&h.ckx&&h.ckx[i])||{};return{show:x.show!==false,bg:/^#[0-9a-f]{6}$/i.test(x.bg||"")?x.bg:"",op:Math.max(10,Math.min(100,+x.op||95)),fx:HERO_FX.some(f=>f[0]===x.fx)?x.fx:"bob"}};
 function heroFloats(dome,h){
   if(!dome)return;dome.querySelectorAll(".float").forEach(n=>n.remove());
-  const prods=DB.products.filter(p=>p.status!=="hidden"&&hasImage(p)).slice(0,6),cs=(h&&h.cookies)||[];let html="";
-  for(let i=0;i<heroCkN(h);i++){const c=safeMedia(cs[i]);let inner="";
+  const prods=DB.products.filter(p=>p.status!=="hidden"&&hasImage(p)).slice(0,6),cs=(h&&h.cookies)||[],ph=heroCkShow(h,"ckPh"),pc=heroCkShow(h,"ckPc");let html="",k=0;
+  for(let i=0;i<heroCkN(h);i++){const x=heroCkx(h,i);if(!x.show)continue;const c=safeMedia(cs[i]);let inner="";
     if(c)inner=`<img class="ck ph${/^data:image\/jpeg/i.test(c)?"":" cut"}" src="${esc(c)}" alt="" draggable="false">`;else if(prods[i])inner=plateInner(prods[i]);
     if(!inner)continue;
-    const x=heroCkx(h,i);
-    html+=`<div class="float fx-${x.fx}${i>=heroCkShow(h,"ckPh")?" hid-ph":""}${i>=heroCkShow(h,"ckPc")?" hid-pc":""}" aria-hidden="true" style="left:${HERO_SPOTS[i][0]}%;top:${HERO_SPOTS[i][1]}%;opacity:${x.op/100}"><div class="plate" style="background:${x.bg||(i%2?"#2328C8":"#1A1FB0")}">${inner}</div></div>`}
+    html+=`<div class="float fx-${x.fx}${k>=ph?" hid-ph":""}${k>=pc?" hid-pc":""}" aria-hidden="true" style="left:${HERO_SPOTS[k][0]}%;top:${HERO_SPOTS[k][1]}%;opacity:${x.op/100}"><div class="plate" style="background:${x.bg||(i%2?"#2328C8":"#1A1FB0")}">${inner}</div></div>`;k++}
   dome.insertAdjacentHTML("afterbegin",html);
 }
 function heroFill(dome,h){
