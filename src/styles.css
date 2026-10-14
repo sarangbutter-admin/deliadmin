@@ -958,3 +958,7 @@ body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
 .hrmth{width:64px;height:48px;border-radius:10px;overflow:hidden;background:#EEF0FF;display:grid;place-items:center;font-size:22px}.hrmth img{width:100%;height:100%;object-fit:cover}
 .hrmrow .note{display:block;word-break:break-all}.hrmact{display:flex;gap:6px}
 @media (max-width:560px){.hrmrow{grid-template-columns:56px 1fr}.hrmact{grid-column:1/-1}}
+
+/* performance: compare with an earlier time */
+.db-k .pcd{display:block;margin-top:6px;font-size:12px;font-weight:600;color:#5A5F86}
+.db-k .pcd.up{color:#0E7A3E}.db-k .pcd.down{color:#C8102E}

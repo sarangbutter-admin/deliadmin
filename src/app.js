@@ -1549,31 +1549,56 @@ function viewDashSales(){
     <section class="panel"><h2>Best seller item</h2><p class="sub">Cookies sold per flavor, top selling first.</p>${rankList(best,"cookies")}</section>
     ${moreInsights(set)}</div>`;
 }
-function viewDashPerf(){
-  const [a,b]=srRange(),inR=ms=>ms>=a&&ms<b;
-  const pct=(x,y)=>y?(Math.round(x/y*1000)/10)+"%":"–";
-  const placedL=DB.orders.filter(o=>inR(o.createdAt));
+// performance numbers for any date range [a,b)
+function perfStats(a,b){
+  const inR=ms=>ms>=a&&ms<b,placedL=DB.orders.filter(o=>inR(o.createdAt));
   const placed=placedL.length,paid=placedL.filter(o=>o.paidAt||PAID_ST.includes(o.status)||o.refund).length,done=placedL.filter(o=>o.status==="completed").length;
-  const sys=placedL.filter(o=>o.status==="cancelled"&&o.cancelBy==="system").length;
-  const ownerC=placedL.filter(o=>o.status==="cancelled"&&(o.cancelBy==="owner"||o.cancelBy==="staff")).length;
-  const refunded=placedL.filter(o=>o.refund).length;
-  const prog=placedL.filter(o=>["new","baking","ready"].includes(o.status)).length;
   const cpL=DB.orders.filter(o=>o.complaint&&inR(o.complaint.at||o.createdAt));
-  const cpDone=cpL.filter(o=>o.complaint.status==="resolved").length,cpOpen=cpL.filter(o=>o.complaint.status==="open"||o.complaint.status==="review").length;
   const revs=DB.products.flatMap(p=>(p.reviews||[]).filter(r=>!r.example&&inR(r.at||0)));
-  const avg=revs.length?(revs.reduce((x,r)=>x+(+r.stars||0),0)/revs.length).toFixed(1)+" ★":"–";
-  const t=(n,l,cls)=>`<div class="db-k${cls?" "+cls:""}" style="cursor:default"><strong>${n}</strong><small>${l}</small></div>`;
-  return head("Dashboard","How the shop is doing right now, and what needs you.")+dashTabs()+MOCK+srFilter()+`<div class="stack"><section class="panel"><h2>Performance</h2>
+  const rate=(x,y)=>y?x/y*100:null;
+  return {placed,paid,done,sys:placedL.filter(o=>o.status==="cancelled"&&o.cancelBy==="system").length,
+    ownerC:placedL.filter(o=>o.status==="cancelled"&&(o.cancelBy==="owner"||o.cancelBy==="staff")).length,
+    refunded:placedL.filter(o=>o.refund).length,prog:placedL.filter(o=>["new","baking","ready"].includes(o.status)).length,
+    cp:cpL.length,cpDone:cpL.filter(o=>o.complaint.status==="resolved").length,cpOpen:cpL.filter(o=>o.complaint.status==="open"||o.complaint.status==="review").length,
+    payRate:rate(paid,placed),doneRate:rate(done,placed),cpRate:rate(cpL.length,done),
+    avg:revs.length?revs.reduce((x,r)=>x+(+r.stars||0),0)/revs.length:null,nrev:revs.length};
+}
+A.pcm="prev";A.pcf="";A.pct="";
+A.pc=(()=>{try{return localStorage.getItem("dd-perf-cmp")!=="0"}catch(e){return true}})();
+// the range to compare with: same length just before, one week earlier, one month earlier, or custom dates
+function pcRange(a,b){
+  if(A.pcm==="custom"){if(!A.pcf)return null;const f=fromYmd(A.pcf).getTime(),t=A.pct?fromYmd(A.pct).getTime()+864e5:f+864e5;return [f,Math.max(t,f+864e5)]}
+  if(!a||!isFinite(b))return null;
+  const sh=A.pcm==="week"?7*864e5:A.pcm==="month"?30*864e5:(b-a);return [a-sh,b-sh];
+}
+function pcPanel(rng){
+  const one=ms=>new Date(ms).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}),span=r=>r[1]-r[0]<=864e5?one(r[0]):`${one(r[0])} to ${one(r[1]-864e5)}`;
+  return `<section class="panel"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><label class="sw"><input type="checkbox" data-pcon ${A.pc?"checked":""} aria-label="Compare with an earlier time"><span></span></label><b>Compare with an earlier time</b></div>
+    ${A.pc?`<div class="chips" style="margin-top:10px">${[["prev","Previous period"],["week","Previous week"],["month","Previous month"],["custom","Custom dates"]].map(([k,l])=>`<button class="fchip" type="button" data-pcm="${k}" aria-pressed="${A.pcm===k}">${l}</button>`).join("")}</div>
+    ${A.pcm==="custom"?`<div class="grid2" style="margin-top:10px"><label class="af">From<input class="in" type="date" data-pcf value="${esc(A.pcf)}"></label><label class="af">To<input class="in" type="date" data-pct value="${esc(A.pct)}"></label></div>`:""}
+    <p class="note" style="margin:10px 0 0">${rng?`Comparing with: <b>${esc(span(rng))}</b>. Previous period = the same number of days just before. Previous week = 7 days earlier. Previous month = 30 days earlier.`:A.pcm==="custom"?"Pick the dates to compare with.":"Pick a start and end date above to compare."}</p>`:`<p class="note" style="margin:8px 0 0">Switch on to see how each number changed against an earlier time.</p>`}</section>`;
+}
+function viewDashPerf(){
+  const [a,b]=srRange(),S0=perfStats(a,b),rng=A.pc?pcRange(a,b):null,P=rng?perfStats(rng[0],rng[1]):null;
+  const pf=v=>v===null?"–":(Math.round(v*10)/10)+"%";
+  // dir: 1 = going up is good, -1 = going up is bad, 0 = neutral
+  const dl=(k,dir,kind)=>{if(!P)return "";const x=S0[k],y=P[k];if(x===null||y===null)return `<span class="pcd">was ${kind==="pct"?pf(y):kind==="star"?(y===null?"–":y.toFixed(1)+" ★"):y}</span>`;
+    const d=x-y,cls=!d||!dir?"":(d>0)===(dir>0)?" up":" down",ar=d>0?"▲":d<0?"▼":"=";
+    const txt=!d?"= same":kind==="pct"?`${ar} ${Math.abs(Math.round(d*10)/10)} pts`:kind==="star"?`${ar} ${Math.abs(d).toFixed(1)}`:`${ar} ${Math.abs(d)}${y?` (${d>0?"+":d<0?"−":""}${Math.abs(Math.round(d/y*100))}%)`:""}`;
+    return `<span class="pcd${cls}">${txt} · was ${kind==="pct"?pf(y):kind==="star"?y.toFixed(1)+" ★":y}</span>`};
+  const t=(n,l,cls,k,dir,kind)=>`<div class="db-k${cls?" "+cls:""}" style="cursor:default"><strong>${n}</strong><small>${l}</small>${k?dl(k,dir,kind):""}</div>`;
+  const s=S0;
+  return head("Dashboard","How the shop is doing right now, and what needs you.")+dashTabs()+MOCK+srFilter()+pcPanel(rng)+`<div class="stack"><section class="panel"><h2>Performance</h2>
     <div class="db-kpis perf" style="margin-top:12px">
-      ${t(placed,"Total placed orders")}${t(sys,"Cancelled by system<br>no payment in time","warn")}
-      ${t(cpL.length,"Total complaints","warn")}${t(paid,"Paid orders")}
-      ${t(pct(paid,placed),"Payment rate")}${t(done,"Delivered / picked up")}
-      ${t(pct(done,placed),"Completion rate")}${t(ownerC,"Cancelled by owner")}
-      ${t(refunded,"Refunded")}${t(prog,"Still in progress")}
-      ${t(pct(cpL.length,done),"Complaint rate")}${t(cpDone,"Complaints resolved","good")}
-      ${t(cpOpen,"Complaints not resolved")}${t(avg,`Average rating (${revs.length} review${revs.length===1?"":"s"})`)}
+      ${t(s.placed,"Total placed orders","","placed",1)}${t(s.sys,"Cancelled by system<br>no payment in time","warn","sys",-1)}
+      ${t(s.cp,"Total complaints","warn","cp",-1)}${t(s.paid,"Paid orders","","paid",1)}
+      ${t(pf(s.payRate),"Payment rate","","payRate",1,"pct")}${t(s.done,"Delivered / picked up","","done",1)}
+      ${t(pf(s.doneRate),"Completion rate","","doneRate",1,"pct")}${t(s.ownerC,"Cancelled by owner","","ownerC",-1)}
+      ${t(s.refunded,"Refunded","","refunded",-1)}${t(s.prog,"Still in progress","","prog",0)}
+      ${t(pf(s.cpRate),"Complaint rate","","cpRate",-1,"pct")}${t(s.cpDone,"Complaints resolved","good","cpDone",1)}
+      ${t(s.cpOpen,"Complaints not resolved","","cpOpen",-1)}${t(s.avg===null?"–":s.avg.toFixed(1)+" ★",`Average rating (${s.nrev} review${s.nrev===1?"":"s"})`,"","avg",1,"star")}
     </div>
-    <p class="note" style="margin:12px 0 0">Orders by order date · complaints and reviews by the date they were sent. Payment rate = paid ÷ placed. Completion rate = delivered or picked up ÷ placed. Complaint rate = complaints ÷ delivered or picked up.</p></section></div>`;
+    <p class="note" style="margin:12px 0 0">Orders by order date · complaints and reviews by the date they were sent. Payment rate = paid ÷ placed. Completion rate = delivered or picked up ÷ placed. Complaint rate = complaints ÷ delivered or picked up.${P?" Green = better than before, red = worse. pts = percentage points.":""}</p></section></div>`;
 }
 function viewDashboard(){
   if(A.dt==="sales")return viewDashSales();if(A.dt==="perf")return viewDashPerf();
@@ -2647,6 +2672,7 @@ am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
 am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;const d=b.dataset;
   if(d.dt){A.dt=d.dt;renderAdmin();window.scrollTo(0,0)}
   else if(d.srk){A.sr=d.srk;renderAdmin()}
+  else if(d.pcm){A.pcm=d.pcm;renderAdmin()}
   else if(d.dd){A.dd=d.dd;renderAdmin()}
   else if(d.vr){A.vr=d.vr;renderAdmin()}
   else if(d.dashgo){A.tab=d.dashgo;if(d.dfilter)A.filter=d.dfilter;renderAdmin();window.scrollTo(0,0)}
@@ -2655,7 +2681,7 @@ am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
   else if(d.dconfirm)setOrderStatus(d.dconfirm,"new");
 });
 am.addEventListener("change",e=>{const el=e.target;if(el.dataset.dddate!==undefined){A.dd=el.value||"today";renderAdmin()}
-  else if(el.dataset.srf!==undefined){A.sf=el.value;renderAdmin()}else if(el.dataset.srt!==undefined){A.st=el.value;renderAdmin()}});
+  else if(el.dataset.srf!==undefined){A.sf=el.value;renderAdmin()}else if(el.dataset.srt!==undefined){A.st=el.value;renderAdmin()}else if(el.dataset.pcf!==undefined){A.pcf=el.value;renderAdmin()}else if(el.dataset.pct!==undefined){A.pct=el.value;renderAdmin()}else if(el.dataset.pcon!==undefined){A.pc=el.checked;try{localStorage.setItem("dd-perf-cmp",A.pc?"1":"0")}catch(e){}renderAdmin()}});
 function alPath(path,val){const p=path.split("."),k=p.pop();let o=DB.alerts;p.forEach(x=>o=o[x]);o[k]=val}
 am.addEventListener("input",e=>{const el=e.target;if(el.dataset.alr!==undefined){DB.alerts.vol=+el.value;saveSoon()}});
 am.addEventListener("change",async e=>{const el=e.target;
