@@ -480,6 +480,7 @@ function ctaState(){
   const left=S.size-S.box.length;
   if(S.step===1) return left>0?{label:`Pick ${left} more`,dis:false,go:"pick"}:{label:"Choose a day",dis:false,go:"step2"};
   if(!S.day||!S.time) return {label:"Pick a day and time",dis:false,go:"when"};
+  if(bsPending(S))return {label:`Checkout (${money(total())})`,dis:false,go:"needcourier"};
   return {label:`Checkout (${money(total())})`,dis:false,go:"checkout"};
 }
 function renderStore(){
@@ -525,14 +526,17 @@ function renderStore(){
   if(q.surcharge>0)L+=`<div><dt>Premium flavors</dt><dd>+${money(q.surcharge)}</dd></div>`;
   if(S.step===2){
     S.addons.forEach(id=>{const a=DB.addons.find(x=>x.id===id);if(a)L+=`<div><dt>${esc(a.name)}</dt><dd>+${money(a.price)}</dd></div>`});
-    L+=`<div><dt>${OPT_NAME[optOf(S)]}</dt><dd>${q.feePending?"Choose a courier at checkout":q.fee?money(q.fee):"Free"}</dd></div>`;
+    L+=`<div><dt>${OPT_NAME[optOf(S)]}</dt><dd>${q.feePending?"Choose a courier":q.fee?money(q.fee):"Free"}</dd></div>`;
     if(S.day)L+=`<div><dt>When</dt><dd>${S.mode!=="pickup"&&S.speed==="sameday"?"Today (sameday)":fmtDay(S.day)+(S.time?", "+esc(S.time):"")}</dd></div>`;
+    if(bsOn()&&S.mode==="delivery"){const sh=bsShip(S);
+      L+=`<div class="bscour${q.feePending?" need":""}" id="bsRow"><dt>Courier</dt><dd><button type="button" class="bscbtn" data-bscourier>${sh?`${esc((sh.courierName||sh.courier)+" "+(sh.serviceName||sh.service))} · Change`:S.bsSkip?"Standard delivery · Change":"🛵 Choose courier"}</button></dd></div>`}
   }
   $("#lines").innerHTML=L;
   renderCoupon(q);renderGiftBox();
   $("#total").textContent=money(total());
   const c=ctaState();
-  for(const b of [$("#panelCta"),$("#barCta")]){b.textContent=c.label;b.disabled=c.dis;b.dataset.go=c.go||"";b.classList.toggle("ready",!c.dis&&c.go!=="when");b.classList.toggle("pickmore",c.go==="pick")}
+  for(const b of [$("#panelCta"),$("#barCta")]){b.textContent=c.label;b.disabled=c.dis;b.dataset.go=c.go||"";b.classList.toggle("ready",!c.dis&&c.go!=="when"&&c.go!=="needcourier");b.classList.toggle("pickmore",c.go==="pick")}
+  if(c.go!=="needcourier"){const m=$("#ctaMsg");if(m)m.hidden=true}
   $("#clearBtn").disabled=!S.box.length;
   $("#randBtn").disabled=!availProducts().length;
   $("#randLabel").textContent=full()?"Shuffle box":"Random fill";
@@ -741,7 +745,27 @@ $("#cwSheet").addEventListener("click",e=>{if(e.target.closest("[data-cwok]")){c
 document.addEventListener("keydown",e=>{if(e.key==="Escape")closeCoWarn()});
 function cta(go){if(go==="pick"){if(document.activeElement)document.activeElement.blur();scrollToEl($("#menuGrid"));return}
   if(go==="when"){if(document.activeElement)document.activeElement.blur();const sd=$("#dayBlock").hidden;scrollToEl($(!sd&&!S.day?"#dayBlock":!sd&&S.day&&!$("#timeBlock").hidden?"#timeBlock":"#step2"));return}
+  if(go==="needcourier"){bsNudge();return}
   if(go==="step2")goStep(2);else if(go==="checkout")openCoWarn()}
+/* courier choice in the box panel (delivery + Biteship on): a pop-up that reuses the checkout courier box */
+function bsNudge(){
+  const row=$("#bsRow"),m=$("#ctaMsg");if(m){m.hidden=false;clearTimeout(bsNudge.t);bsNudge.t=setTimeout(()=>{m.hidden=true},6000)}
+  if(row){scrollToEl(row);row.classList.remove("nudge");void row.offsetWidth;row.classList.add("nudge");setTimeout(()=>row.classList.remove("nudge"),2200)}
+  toast("Please choose a courier first");
+}
+function bsPopOpen(){
+  const body=$("#bsPopBody");body.appendChild($("#addrFields"));body.appendChild($("#bsBox"));
+  $("#addrFields").hidden=false;$("#coAddr").required=false;bsBoxOpen();
+  $("#bsPop").hidden=false;document.body.style.overflow="hidden";
+}
+function bsPopClose(){
+  const f=$("#coForm"),err=$("#coErr");f.insertBefore($("#addrFields"),err);f.insertBefore($("#bsBox"),err);
+  $("#bsPop").hidden=true;if($("#sheet").hidden)document.body.style.overflow="";
+  const m=$("#ctaMsg");if(m&&!bsPending(S))m.hidden=true;renderStore();
+}
+document.addEventListener("click",e=>{if(e.target.closest("[data-bscourier]"))bsPopOpen()});
+$("#bsPopX").addEventListener("click",bsPopClose);$("#bsPopDone").addEventListener("click",bsPopClose);
+$("#bsPop").addEventListener("click",e=>{if(e.target.id==="bsPop")bsPopClose()});
 const CUST_KEY="delidome-cust-v1";
 function loadCust(){try{return JSON.parse(localStorage.getItem(CUST_KEY)||"{}")||{}}catch(e){return {}}}
 function saveCust(){try{const r=document.querySelector('input[name="coNotify"]:checked');localStorage.setItem(CUST_KEY,JSON.stringify({name:$("#coName").value,phone:$("#coPhone").value,email:$("#coEmail").value,address:$("#coAddr").value,notify:r?r.value:"both"}))}catch(e){}}

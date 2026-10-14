@@ -1050,3 +1050,14 @@ body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
 
 .bsmap{height:240px;border-radius:12px;margin-top:10px;border:1.5px solid var(--line);overflow:hidden;z-index:0}
 .bsmap .leaflet-control-attribution{font-size:10px}
+
+/* courier row in the box panel */
+.bscbtn{font:inherit;font-weight:700;border-radius:99px;padding:6px 12px;border:2px solid rgba(255,255,255,.6);background:rgba(255,255,255,.12);color:inherit;cursor:pointer;text-align:right}
+.bscour.need .bscbtn{background:#FFE066;color:#000096;border-color:#FFE066;animation:bsglow 1.8s ease-in-out infinite,bswig 4s ease-in-out infinite}
+.bscour.nudge .bscbtn{background:#C8102E;color:#fff;border-color:#fff;animation:bsshake .45s ease-in-out 4,bsblink .3s step-end 6}
+@keyframes bsglow{0%,100%{box-shadow:0 0 0 0 rgba(255,224,102,.75)}50%{box-shadow:0 0 0 8px rgba(255,224,102,0)}}
+@keyframes bswig{0%,86%,100%{transform:rotate(0)}89%{transform:rotate(-4deg)}92%{transform:rotate(4deg)}95%{transform:rotate(-2deg)}}
+@keyframes bsshake{0%,100%{transform:translateX(0)}25%{transform:translateX(-7px)}75%{transform:translateX(7px)}}
+@keyframes bsblink{50%{opacity:.35}}
+.ctamsg{margin:10px 0 0;background:#C8102E;color:#fff;border-radius:12px;padding:8px 12px;font-weight:700;font-size:14px;text-align:center}
+@media (prefers-reduced-motion:reduce){.bscour.need .bscbtn,.bscour.nudge .bscbtn{animation:none}}

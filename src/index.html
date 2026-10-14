@@ -127,6 +127,7 @@
         <div class="giftwrap" id="giftBox" hidden></div>
         <div class="total"><span>Total</span><strong id="total">$0.00</strong></div>
         <button class="btn cta" id="panelCta" type="button">Pick 6 more</button>
+        <p class="ctamsg" id="ctaMsg" role="alert" hidden>Please choose a courier first.</p>
       </aside>
     </div>
   </section>
@@ -168,6 +169,13 @@
   <button class="btn" id="barCta" type="button">Pick 6 more</button>
 </div>
 
+<div class="sheet" id="bsPop" hidden role="dialog" aria-modal="true" aria-labelledby="bsPopTitle">
+  <div class="sheet-card">
+    <div class="sheet-top"><h3 id="bsPopTitle">Choose a courier</h3><button class="x" id="bsPopX" type="button" aria-label="Close">✕</button></div>
+    <div class="form" id="bsPopBody"></div>
+    <button class="btn btn-blue" id="bsPopDone" type="button" style="width:100%;margin-top:14px">Done</button>
+  </div>
+</div>
 <div class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
   <div class="sheet-card">
     <div id="checkoutView">
