@@ -1244,7 +1244,7 @@ function drawDraftBar(){
   const html=busy?`<div class="db-tx"><b>Not published yet</b><span>${keys.map(k=>esc(DRAFT_NAMES[k])).join(", ")}. Customers still see the old version.</span></div><div class="db-act"><button class="btn btn-blue" type="button" data-dbpub>Save &amp; publish</button><button class="ghost" type="button" data-dbdisc>Discard changes</button></div>`
     :`<div class="db-tx"><b>✓ Everything here is published</b><span>Changes you make on this page go live only after you press Save &amp; publish.</span></div><div class="db-act"><button class="btn btn-blue" type="button" disabled>Save &amp; publish</button><button class="ghost" type="button" disabled>Discard changes</button></div>`;
   if(!bar){bar=document.createElement("div");bar.id="draftBar";bar.setAttribute("role","status");am.prepend(bar)}
-  bar.className="draftbar"+(busy?"":" idle");
+  bar.className="draftbar"+(busy?"":" idle")+(["landing","hero"].includes(A.tab)?" still":"");
   if(bar.dataset.sig!==sig){bar.dataset.sig=sig;bar.innerHTML=html}
 }
 function afterSave(){if(SBH.on&&SBH.admin)requestAnimationFrame(()=>{try{drawDraftBar()}catch(e){}})}
