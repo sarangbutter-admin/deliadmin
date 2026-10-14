@@ -814,3 +814,6 @@ body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
 .bsopt{display:flex;justify-content:space-between;align-items:center;gap:10px;text-align:left;padding:10px 12px;border:2px solid var(--line);border-radius:12px;background:var(--white);font:inherit;cursor:pointer}
 .bsopt small{display:block;color:var(--muted)}
 .bsopt[aria-pressed="true"]{border-color:var(--blue);background:var(--ice)}
+
+.bsmap{height:240px;border-radius:12px;margin-top:10px;border:1.5px solid var(--line);overflow:hidden;z-index:0}
+.bsmap .leaflet-control-attribution{font-size:10px}

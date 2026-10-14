@@ -109,6 +109,10 @@ shopHtml=shopHtml.replace(/\s*<a class="adminlink" href="#admin" aria-label="Adm
 wr('site/index.html',shopHtml);
 wr('admin-site/index.html',html.replace('<a class="btn btn-white btn-sm viewshop" href="#shop">View shop →</a>','<a class="btn btn-white btn-sm viewshop" id="viewShop" href="#" target="_blank" rel="noopener noreferrer" style="display:none">View shop ↗</a>').replace('<title>Delidome Cookie Boxes</title>','<title>Team sign in</title>\n<meta name="robots" content="noindex, nofollow">').replace(/<link rel="preconnect"[^>]*>\n?/g,''));
 fs.copyFileSync(R('src/styles.css'),R('admin-site/styles.css'));
+{ // map library for the courier pin (shop only), copied as-is
+  const cp=(d)=>{for(const f of fs.readdirSync(R('src/'+d),{withFileTypes:true})){if(f.isDirectory()){fs.mkdirSync(R('site/'+d+'/'+f.name),{recursive:true});cp(d+'/'+f.name)}else{fs.mkdirSync(R('site/'+d),{recursive:true});fs.copyFileSync(R('src/'+d+'/'+f.name),R('site/'+d+'/'+f.name))}}};
+  cp('vendor/leaflet');
+}
 { // customer css: drop single-line rules that only style things the shop never renders
   const shopText=shopHtml+out+rd('site/sb.js');
   const used=t=>new RegExp('(^|[^\\w-])'+t.replace(/[-]/g,'\\-')+'(?![\\w-])').test(shopText);

@@ -767,8 +767,38 @@ function bsBoxOpen(){
   if(BSD.opts.length&&BSD.opts[0].size!==S.size){BSD.opts=[]}
   bsDraw();if(!BSD.opts.length&&(BSD.area||BSD.lat))bsRates();
 }
+/* free map with a draggable pin (Leaflet + OpenStreetMap), loaded only when the courier box is used */
+let bsLeaf=null,bsMapObj=null,bsPin=null,bsPinT=0;
+function bsLoadLeaflet(){
+  if(bsLeaf)return bsLeaf;
+  bsLeaf=new Promise((res,rej)=>{const l=document.createElement("link");l.rel="stylesheet";l.href="vendor/leaflet/leaflet.css";document.head.appendChild(l);
+    const sc=document.createElement("script");sc.src="vendor/leaflet/leaflet.js";sc.onload=()=>res(window.L);sc.onerror=()=>{bsLeaf=null;rej(new Error("map"))};document.head.appendChild(sc)});
+  return bsLeaf;
+}
+function bsPinSet(lat,lng){
+  BSD.lat=(+lat).toFixed(5);BSD.lng=(+lng).toFixed(5);BSD.label="Pin on the map";S.ship=null;BSD.opts=[];bsDraw();
+  clearTimeout(bsPinT);bsPinT=setTimeout(bsRates,700);
+}
+async function bsMapShow(){
+  const box=$("#bsMap");if(!box||box.hidden&&!(BSD.lat||BSD.area||BSD.mapOpen))return;
+  let L;try{L=await bsLoadLeaflet()}catch(e){box.hidden=true;$("#bsMapHint").hidden=true;return}
+  box.hidden=false;$("#bsMapHint").hidden=false;
+  const has=BSD.lat&&BSD.lng,ll=has?[+BSD.lat,+BSD.lng]:[-6.2,106.75];
+  if(!bsMapObj){
+    L.Icon.Default.imagePath="vendor/leaflet/images/";
+    bsMapObj=L.map(box,{zoomControl:true,attributionControl:true}).setView(ll,has?17:11);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'}).addTo(bsMapObj);
+    bsMapObj.on("click",e=>{if(!bsPin)bsPin=L.marker(e.latlng,{draggable:true}).addTo(bsMapObj).on("dragend",ev=>{const p=ev.target.getLatLng();bsPinSet(p.lat,p.lng)});else bsPin.setLatLng(e.latlng);bsPinSet(e.latlng.lat,e.latlng.lng)});
+  }else{setTimeout(()=>bsMapObj.invalidateSize(),50)}
+  if(has){
+    if(!bsPin)bsPin=L.marker(ll,{draggable:true}).addTo(bsMapObj).on("dragend",ev=>{const p=ev.target.getLatLng();bsPinSet(p.lat,p.lng)});else bsPin.setLatLng(ll);
+    bsMapObj.setView(ll,Math.max(bsMapObj.getZoom(),16));
+  }
+  setTimeout(()=>bsMapObj&&bsMapObj.invalidateSize(),120);
+}
 function bsDraw(){
   const o=$("#bsOpts"),er=$("#bsErr"),pl=$("#bsPlace");
+  if(BSD.lat||BSD.mapOpen)bsMapShow();
   pl.hidden=!BSD.label;pl.innerHTML=BSD.label?`📍 ${esc(BSD.label)} · <a href="https://www.openstreetmap.org/?mlat=${esc(BSD.lat)}&mlon=${esc(BSD.lng)}#map=17/${esc(BSD.lat)}/${esc(BSD.lng)}" target="_blank" rel="noopener">Check on the map</a>`:"";
   if(BSD.busy){o.innerHTML=`<p class="note">Looking for couriers…</p>`}
   else{o.innerHTML=BSD.opts.map((x,i)=>`<button type="button" class="bsopt" data-bsopt="${i}" aria-pressed="${S.ship&&S.ship.sig===x.sig}"><span><b>${esc(x.courierName||x.courier)}</b> ${esc(x.serviceName||x.service)}${x.eta?`<small>${esc(x.eta)}</small>`:""}</span><span class="num">${money(x.price)}</span></button>`).join("")
@@ -805,6 +835,7 @@ $("#bsAreaList").addEventListener("click",e=>{const b=e.target.closest("[data-bs
   BSD.area=a;BSD.lat="";BSD.lng="";BSD.label="";BSD.opts=[];BSD.tried=false;S.ship=null;S.bsSkip=false;$("#bsArea").value=a.name;$("#bsAreaList").hidden=true;
   if($("#coAddr").value.trim().length>=5)bsGeocode();else bsRates()});
 $("#bsFind").addEventListener("click",bsGeocode);
+$("#bsPick").addEventListener("click",()=>{BSD.mapOpen=true;$("#bsMap").hidden=false;bsMapShow()});
 $("#bsGeo").addEventListener("click",()=>{
   if(!navigator.geolocation){BSD.err="Your browser can't share its location.";bsDraw();return}
   BSD.busy=true;BSD.err="";bsDraw();
