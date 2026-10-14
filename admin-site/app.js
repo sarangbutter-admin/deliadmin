@@ -209,6 +209,8 @@ function giftPick(n,at=Date.now(),db=DB,rnd=Math.random){
 }
 const giftImg=id=>{for(const s of DB.sales||[])for(const g of s.gifts||[])if(g&&g.id===id&&g.img)return g.img;return ""};
 const giftChip=(g,extra="")=>{const im=g.img||giftImg(g.id);return `<span class="gc${extra}">${im?`<img src="${esc(imgOk(im))}" alt="" loading="lazy">`:`<i aria-hidden="true">🎁</i>`}<span>${esc(g.name)}${giftQty(g)>1?` ×${giftQty(g)}`:""}</span></span>`};
+const giftCard=(g,extra="")=>{const im=g.img||giftImg(g.id);return `<span class="gcard${extra}">${im?`<img src="${esc(imgOk(im))}" alt="" loading="lazy">`:`<i aria-hidden="true">🎁</i>`}<b>${esc(g.name)}${giftQty(g)>1?` ×${giftQty(g)}`:""}</b><em>FREE</em></span>`};
+const giftLines=n=>giftPlan(n).flatMap(x=>[...x.fixed.map(g=>`🎁 ${g.name}${giftQty(g)>1?" ×"+giftQty(g):""}`),...(x.pool.length?[`🎲 ${x.pick>1?x.pick+" surprise gifts":"1 surprise gift"}`]:[])]);
 const giftsHTML=o=>o.gifts&&o.gifts.length?`<div class="dsec"><h4>🎁 Your gifts</h4><div class="gl">${o.gifts.map(g=>giftChip(g,g.random?" rnd":"")).join("")}</div></div>`:"";
 /* --- optional courier prices from Biteship (does nothing unless the owner switches it on in Shop settings) --- */
 const bsOn=(db=DB)=>!!(SBH.on&&db.settings&&db.settings.biteship&&db.settings.biteship.on);
@@ -534,7 +536,7 @@ function renderStore(){
     <button class="btn btn-blue btn-sm cuse" type="button" data-cuse ${on?"disabled":""}>${on?"Selected":`Use box of ${n}`}</button></div>`}}
   // sizes (with live sale prices)
   $("#sizes").innerHTML = activeSizes().map(s=>{const sale=bestSale(s.n),now=sale?r2(s.price-saleDiscount(sale,s.price)):s.price;
-    return `<button class="size" type="button" data-size="${s.n}" aria-pressed="${s.n===S.size}">${sale?`<span class="saletag">${sale.type==="percent"?"−"+sale.value+"%":"Sale"}</span>`:""}<strong>${s.n}</strong><small>COOKIES</small><span class="num">${sale?`<s>${money(s.price)}</s>`:""}${money(now)}</span></button>`}).join("");
+    return `<button class="size" type="button" data-size="${s.n}" aria-pressed="${s.n===S.size}">${sale?`<span class="saletag">${sale.type==="percent"?"−"+sale.value+"%":"Sale"}</span>`:""}${giftPlan(s.n).length?`<span class="saletag gifttag${sale?" l":""}">🎁 Gift</span>`:""}<strong>${s.n}</strong><small>COOKIES</small><span class="num">${sale?`<s>${money(s.price)}</s>`:""}${money(now)}</span></button>`}).join("");
   document.querySelectorAll(".card").forEach(c=>{const st=c.querySelector(".stepper");if(!st)return;const n=countOf(c.dataset.id);st.querySelector("output").textContent=n;c.classList.toggle("has",n>0);
     st.querySelector('[data-act="dec"]').disabled=n===0;st.querySelector('[data-act="inc"]').disabled=full()||n>=stockLeft(prod(c.dataset.id))});
   $("#fillRest").disabled=full();
@@ -559,6 +561,7 @@ function renderStore(){
   $("#pillCount").textContent=`${S.box.length}/${S.size}`;
   let L=`<div><dt>Box of ${S.size}</dt><dd>${money(q.base)}</dd></div>`;
   if(q.sale)L+=`<div class="saleln"><dt>${esc(q.sale.name)} (${saleOffText(q.sale)})</dt><dd>−${money(q.discount)}</dd></div>`;
+  giftLines(S.size).forEach(t=>{L+=`<div class="saleln giftln"><dt>${esc(t)}</dt><dd>FREE</dd></div>`});
   if(q.coupon&&q.couponDisc>0)L+=`<div class="saleln"><dt>Coupon ${esc(q.coupon.code)}</dt><dd>−${money(q.couponDisc)}</dd></div>`;
   if(q.surcharge>0)L+=`<div><dt>Premium flavors</dt><dd>+${money(q.surcharge)}</dd></div>`;
   if(S.step===2){
@@ -705,8 +708,8 @@ function renderGiftBox(){
   const cl=(v,d)=>/^(#[0-9a-f]{6}|transparent)$/i.test(v||"")?v:d;
   el.hidden=false;
   el.innerHTML=pl.map(x=>{const t=x.sale;
-    return `<div class="gb fx-${["shine","pulse","none"].includes(t.fx)?t.fx:"shine"}" style="--gb:${cl(t.bg,"#FFE066")};--gi:${cl(t.ink,"#000096")}"><span class="gtag">${esc(t.tag||"Gifts")}</span><b class="gt">${esc(t.name)}</b>
-      <p class="gs">Free with your box of ${S.size}:</p><div class="gl">${x.fixed.map(g=>giftChip(g)).join("")}${x.pool.length?`<span class="gc rnd"><i aria-hidden="true">🎲</i><span>${x.pick>1?x.pick+" surprise gifts":"1 surprise gift"}</span></span><div class="gpool">${x.pool.map(g=>giftChip(g," sm")).join("")}</div>`:""}</div></div>`}).join("");
+    return `<div class="gb fx-${["shine","pulse","none"].includes(t.fx)?t.fx:"shine"}" style="--gb:${cl(t.bg,"#FFE066")};--gi:${cl(t.ink,"#000096")}"><div class="gh"><span class="gtag">${esc(t.tag||"Gifts")}</span><b class="gt">${esc(t.name)}</b><span class="gend">Ends in <span class="cd" data-exp="${t.end}">${fmtLeft(t.end-Date.now())}</span></span></div>
+      <p class="gs">🎁 FREE with your box of ${S.size}. No extra cost:</p><div class="gl big">${x.fixed.map(g=>giftCard(g)).join("")}${x.pool.length?`<span class="gcard rnd"><i aria-hidden="true">🎲</i><b>${x.pick>1?x.pick+" surprise gifts":"1 surprise gift"}</b><em>FREE</em></span><div class="gpool">${x.pool.map(g=>giftChip(g," sm")).join("")}</div>`:""}</div></div>`}).join("");
 }
 function renderCoupon(q){
   const ap=$("#cpnAp"),f=$("#cpnForm"),ch=$("#cpnCh");if(!ap)return;
@@ -932,6 +935,7 @@ function renderCoSummary(){
   $("#summary").innerHTML=`<div><span>Box of ${S.size}</span><span class="num">${money(q.base)}</span></div>`+
     Object.entries(counts).map(([id,n])=>{const p=prod(id);return `<div class="m"><span>${n} × ${esc(p.name)}</span><span>${p.surcharge>0?"+"+money(p.surcharge*n):""}</span></div>`}).join("")+
     (q.sale?`<div class="sl"><span>${esc(q.sale.name)} (${saleOffText(q.sale)})</span><span class="num">−${money(q.discount)}</span></div>`:"")+
+    giftLines(S.size).map(t=>`<div class="sl"><span>${esc(t)}</span><span class="num">Free</span></div>`).join("")+
     (q.coupon&&q.couponDisc>0?`<div class="sl"><span>Coupon ${esc(q.coupon.code)}</span><span class="num">−${money(q.couponDisc)}</span></div>`:"")+
     S.addons.map(id=>{const a=DB.addons.find(x=>x.id===id);return a?`<div><span>${esc(a.name)}</span><span class="num">+${money(a.price)}</span></div>`:""}).join("")+
     `<div><span>${OPT_NAME[optOf(S)]}</span><span class="num">${q.feePending?"Choose a courier below":q.fee?money(q.fee):"Free"}</span></div>`+
