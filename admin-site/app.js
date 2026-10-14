@@ -795,7 +795,7 @@ function bsNudge(){
 }
 function bsPopOpen(){
   const body=$("#bsPopBody");body.appendChild($("#addrFields"));body.appendChild($("#bsBox"));
-  $("#addrFields").hidden=false;$("#coAddr").required=false;placeFieldsShow();bsBoxOpen();
+  $("#addrFields").hidden=false;$("#coAddr").required=false;prefillCust();placeFieldsShow();bsBoxOpen();
   $("#bsPop").hidden=false;document.body.style.overflow="hidden";
 }
 // checkout form: one line with the chosen courier and a Change button (the full courier box lives in the pop-up)
@@ -812,15 +812,22 @@ function bsPopClose(){
 document.addEventListener("click",e=>{if(e.target.closest("[data-bscourier]"))bsPopOpen()});
 $("#bsPopX").addEventListener("click",bsPopClose);$("#bsPopDone").addEventListener("click",bsPopClose);
 $("#bsPop").addEventListener("click",e=>{if(e.target.id==="bsPop")bsPopClose()});
+$("#bsPop").addEventListener("input",e=>{if(e.target.id==="coAddr"||e.target.id==="coDNote")saveCust()});
 
 const CUST_KEY="delidome-cust-v1";
 function loadCust(){try{return JSON.parse(localStorage.getItem(CUST_KEY)||"{}")||{}}catch(e){return {}}}
-function saveCust(){try{const r=document.querySelector('input[name="coNotify"]:checked');localStorage.setItem(CUST_KEY,JSON.stringify({name:$("#coName").value,phone:$("#coPhone").value,email:$("#coEmail").value,address:$("#coAddr").value,notify:r?r.value:"both"}))}catch(e){}}
-function prefillCust(){const c=loadCust();[["#coName","name"],["#coPhone","phone"],["#coEmail","email"],["#coAddr","address"]].forEach(([q,k])=>{if(c[k]&&!$(q).value)$(q).value=c[k]});const r=c.notify&&document.querySelector(`input[name="coNotify"][value="${c.notify}"]`);if(r)r.checked=true}
+function saveCust(){try{const r=document.querySelector('input[name="coNotify"]:checked');localStorage.setItem(CUST_KEY,JSON.stringify(Object.assign(loadCust(),{name:$("#coName").value,phone:$("#coPhone").value,email:$("#coEmail").value,address:$("#coAddr").value,dnote:$("#coDNote").value,notify:r?r.value:"both"})))}catch(e){}}
+// remember the delivery area and map pin too, so a repeat order only needs a courier choice
+function saveLoc(){try{const c=loadCust();c.area=BSD.area||null;c.loc=BSD.lat&&BSD.lng?{lat:BSD.lat,lng:BSD.lng,label:BSD.label}:null;localStorage.setItem(CUST_KEY,JSON.stringify(c))}catch(e){}}
+function loadLoc(){const c=loadCust();if(BSD.area||BSD.lat)return;
+  if(c.area&&c.area.name){BSD.area=c.area;const a=document.getElementById("bsArea");if(a&&!a.value)a.value=c.area.name}
+  if(c.loc&&c.loc.lat&&c.loc.lng){BSD.lat=c.loc.lat;BSD.lng=c.loc.lng;BSD.label="Saved from your last order (check it's still right)"}
+  if(c.dnote&&!S.dnote)S.dnote=c.dnote}
+function prefillCust(){const c=loadCust();if(c.dnote&&!S.dnote)S.dnote=c.dnote;[["#coName","name"],["#coPhone","phone"],["#coEmail","email"],["#coAddr","address"]].forEach(([q,k])=>{if(c[k]&&!$(q).value)$(q).value=c[k]});const r=c.notify&&document.querySelector(`input[name="coNotify"][value="${c.notify}"]`);if(r)r.checked=true}
 /* --- checkout: optional courier prices (only when the owner switched Biteship on) --- */
 const BSD={area:null,lat:"",lng:"",label:"",opts:[],busy:false,tried:false,err:"",t:0};
 function bsBoxOpen(){
-  const on=bsOn()&&SBH.on&&S.mode==="delivery";$("#bsBox").hidden=!on;if(!on)return;
+  const on=bsOn()&&SBH.on&&S.mode==="delivery";$("#bsBox").hidden=!on;if(!on)return;loadLoc();
   if(BSD.opts.length&&BSD.opts[0].size!==S.size){BSD.opts=[]}
   bsDraw();if(!BSD.opts.length&&(BSD.area||BSD.lat))bsRates();
 }
@@ -873,7 +880,7 @@ async function bsMapShow(){
   setTimeout(()=>bsMapObj&&bsMapObj.invalidateSize(),120);
 }
 function bsDraw(){
-  const o=$("#bsOpts"),er=$("#bsErr"),pl=$("#bsPlace");
+  const o=$("#bsOpts"),er=$("#bsErr"),pl=$("#bsPlace");if(BSD.area||BSD.lat)saveLoc();
   if(BSD.lat||BSD.mapOpen)bsMapShow();
   pl.hidden=!BSD.label;pl.innerHTML=BSD.label?`📍 ${esc(BSD.label)} · <a href="https://www.openstreetmap.org/?mlat=${esc(BSD.lat)}&mlon=${esc(BSD.lng)}#map=17/${esc(BSD.lat)}/${esc(BSD.lng)}" target="_blank" rel="noopener">Check on the map</a>`:"";
   if(BSD.busy){o.innerHTML=`<p class="note">Looking for couriers…</p>`}
