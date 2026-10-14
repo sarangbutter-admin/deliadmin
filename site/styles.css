@@ -738,3 +738,18 @@ body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
 
 /* performance: compare with an earlier time */
 .db-k .pcd.up{color:#0E7A3E}.db-k .pcd.down{color:#C8102E}
+
+/* check-your-details pop-up (checkout) */
+.sheet.center{place-items:center;padding:16px}
+.cw-card{max-width:400px;text-align:center;border-radius:28px!important;padding:26px 22px 22px!important;animation:cwIn .45s cubic-bezier(.2,1.4,.4,1) both}
+.cw-card h3{font-family:var(--display);font-size:22px;margin:14px 0 8px;color:var(--blue,#000096)}
+.cw-card p{margin:0 0 18px;line-height:1.5;color:var(--ink,#0B0B45)}
+.cw-ring{width:84px;height:84px;margin:0 auto;border-radius:50%;display:grid;place-items:center;background:#FFF4D6;box-shadow:0 0 0 0 rgba(255,184,0,.55);animation:cwPulse 1.6s ease-out infinite}
+.cw-emo{font-size:44px;line-height:1;display:inline-block;animation:cwWiggle 1.2s ease-in-out infinite;transform-origin:50% 80%}
+.cw-act{display:grid;gap:10px}.cw-act .btn{width:100%;min-height:50px}
+@keyframes cwIn{from{transform:scale(.7) translateY(20px);opacity:0}to{transform:none;opacity:1}}
+@keyframes cwPulse{0%{box-shadow:0 0 0 0 rgba(255,184,0,.55)}80%,100%{box-shadow:0 0 0 18px rgba(255,184,0,0)}}
+@keyframes cwWiggle{0%,60%,100%{transform:rotate(0)}10%{transform:rotate(-14deg)}20%{transform:rotate(12deg)}30%{transform:rotate(-8deg)}40%{transform:rotate(5deg)}}
+@media (prefers-reduced-motion:reduce){.cw-card,.cw-ring,.cw-emo{animation:none}}
+.nudge{animation:nudgeShake .5s ease;box-shadow:0 0 0 3px rgba(200,16,46,.45)!important;border-color:#C8102E!important}
+@keyframes nudgeShake{0%,100%{transform:none}20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}

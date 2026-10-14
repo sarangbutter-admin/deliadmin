@@ -140,7 +140,7 @@ function defaultAlerts(){return {on:true,sound:true,vol:70,repeat:false,stay:tru
 function defaultLabel(){return {logo:"",qr:"",qrCaption:"",notes:"",warnOn:true,warn1:"UNBOXING WITH UNCUT VIDEO!",warn2:"CONTACT US IF SEAL BROKEN"}}
 const SLOT_PRESETS=Array.from({length:23},(_,h)=>String(h).padStart(2,"0")+" to "+String(h+1).padStart(2,"0"));
 function migrate(db){
-  if(db.settings){const D={samedayOn:false,samedayLeadH:3,samedayCutoff:15,samedayFee:8,samedayPayMin:60,minPayMin:30,rejPayMin:120,payCdColor:"#C8102E",payCdSize:"L",payCdFx:true,pickupOn:true,pickupLeadH:24,schedOn:true,schedLeadH:24,samedayMsg:"Sorry Sameday closed Today.\nyour order will be send tomorrow.",samedayOk:"OK"};for(const k in D)if(db.settings[k]===undefined)db.settings[k]=D[k];
+  if(db.settings){const D={samedayOn:false,samedayLeadH:3,samedayCutoff:15,samedayFee:8,samedayPayMin:60,minPayMin:30,rejPayMin:120,payCdColor:"#C8102E",payCdSize:"L",payCdFx:true,pickupOn:true,pickupLeadH:24,schedOn:true,schedLeadH:24,samedayMsg:"Sorry Sameday closed Today.\nyour order will be send tomorrow.",samedayOk:"OK",coWarnOn:true,coWarnEmoji:"⚠️",coWarnTitle:"Wait! Check your details",coWarnText:"Please make sure your name, WhatsApp number and address are correct before you place your order. We use them to send you updates and deliver your box.",coWarnOk:"Yes, my details are correct",coWarnBack:"Go back"};for(const k in D)if(db.settings[k]===undefined)db.settings[k]=D[k];
     if(!Array.isArray(db.settings.slots)){const hs=(db.settings.times||[]).map(slotStartMin).filter(m=>m!==null).map(m=>Math.floor(m/60));if(!hs.length)hs.push(10);db.settings.slots=SLOT_PRESETS.map((t,h)=>({t,on:true,limit:0})).filter((x,h)=>hs.includes(h))}
     db.settings.times=db.settings.slots.filter(x=>x.on).map(x=>x.t)}
   db.label=Object.assign(defaultLabel(),db.label||{});
@@ -694,8 +694,19 @@ function scrollToEl(el){
 function goStep(n){if(n===2&&!full())return;S.step=n;renderStore();
   if(document.activeElement)document.activeElement.blur();
   scrollToEl($(n===2?"#step2":"#build"))}
+// point at a field without opening the phone keyboard; the customer taps it when ready
+function nudge(el){if(!el)return;try{el.scrollIntoView({block:"center",behavior:RM?"auto":"smooth"})}catch(e){}el.classList.remove("nudge");void el.offsetWidth;el.classList.add("nudge");setTimeout(()=>el.classList.remove("nudge"),1600)}
+// a friendly "check your details" pop-up before the checkout form (wording set in Shop settings)
+function cwHTML(){const s=DB.settings;return `<div class="cw-ring" aria-hidden="true"><span class="cw-emo">${esc(s.coWarnEmoji||"⚠️")}</span></div><h3 id="cwTitle">${esc(s.coWarnTitle||"")}</h3><p>${esc(s.coWarnText||"").replace(/\n/g,"<br>")}</p>
+    <div class="cw-act"><button class="btn btn-blue" type="button" data-cwok>${esc(s.coWarnOk||"Continue")}</button><button class="btn btn-ghost-blue" type="button" data-cwback>${esc(s.coWarnBack||"Go back")}</button></div>`}
+function openCoWarn(){const s=DB.settings;if(s.coWarnOn===false){openCheckout();return}
+  $("#cwCard").innerHTML=cwHTML();
+  $("#cwSheet").hidden=false;document.body.style.overflow="hidden";if(document.activeElement)document.activeElement.blur()}
+function closeCoWarn(){const m=$("#cwSheet");if(!m||m.hidden)return;m.hidden=true;document.body.style.overflow=""}
+$("#cwSheet").addEventListener("click",e=>{if(e.target.closest("[data-cwok]")){closeCoWarn();openCheckout();return}if(e.target.id==="cwSheet"||e.target.closest("[data-cwback]"))closeCoWarn()});
+document.addEventListener("keydown",e=>{if(e.key==="Escape")closeCoWarn()});
 function cta(go){if(go==="when"){if(document.activeElement)document.activeElement.blur();const sd=$("#dayBlock").hidden;scrollToEl($(!sd&&!S.day?"#dayBlock":!sd&&S.day&&!$("#timeBlock").hidden?"#timeBlock":"#step2"));return}
-  if(go==="step2")goStep(2);else if(go==="checkout")openCheckout()}
+  if(go==="step2")goStep(2);else if(go==="checkout")openCoWarn()}
 
 const CUST_KEY="delidome-cust-v1";
 function loadCust(){try{return JSON.parse(localStorage.getItem(CUST_KEY)||"{}")||{}}catch(e){return {}}}
@@ -720,7 +731,7 @@ function openCheckout(){
   $("#sheetTitle").textContent=eo?"Review changes":"Checkout";$("#placeBtn").textContent=eo?"Save changes":"Place order";
   $("#coNote").textContent=eo?`Your original payment deadline stays the same (${fmtLeft(eo.expiresAt-Date.now())} left).`:`You'll have ${fmtSpan(payDeadlineMs(S)-Date.now())} to pay after placing your order. Unpaid orders are cancelled automatically.`+(S.mode==="delivery"?" Your box may be split into smaller or bigger boxes for delivery safety.":"");
   $("#coErr").hidden=true;$("#checkoutView").hidden=false;$("#doneView").hidden=true;
-  $("#sheet").hidden=false;document.body.style.overflow="hidden";setTimeout(()=>$("#coName").focus(),50);
+  $("#sheet").hidden=false;document.body.style.overflow="hidden";
 }
 function closeSheet(){$("#sheet").hidden=true;document.body.style.overflow="";$("#sheet .sheet-card").style.background="";$("#dnFx")&&($("#dnFx").innerHTML="");endPreview()}
 
@@ -809,9 +820,9 @@ $("#moSheet").addEventListener("input",e=>{if(e.target.id==="moMail"){const v=e.
 $("#coPhone").addEventListener("input",e=>{const v=e.target.value.replace(/\D/g,"");if(v!==e.target.value)e.target.value=v});
 $("#coForm").addEventListener("submit",e=>{
   e.preventDefault();
-  if(!/^\d{8,15}$/.test($("#coPhone").value)){$("#coErr").textContent="WhatsApp number: use numbers only, 8 to 15 digits.";$("#coErr").hidden=false;$("#coPhone").focus();return}
+  if(!/^\d{8,15}$/.test($("#coPhone").value)){$("#coErr").textContent="WhatsApp number: use numbers only, 8 to 15 digits.";$("#coErr").hidden=false;nudge($("#coPhone"));return}
   const f=e.currentTarget;
-  if(!f.checkValidity()){const bad=f.querySelector(":invalid");$("#coErr").textContent=`Please check "${bad.labels[0].textContent}".`;$("#coErr").hidden=false;bad.focus();return}
+  if(!f.checkValidity()){const bad=f.querySelector(":invalid");$("#coErr").textContent=`Please check "${bad.labels[0].textContent}".`;$("#coErr").hidden=false;nudge(bad);return}
   const counts=countItems(S.box),short=Object.entries(counts).find(([id,n])=>{const p=prod(id);return !p||p.status!=="available"||n>stockLeft(p)});
   if(short){const p=prod(short[0]),left=p?stockLeft(p):0;
     $("#coErr").textContent=p&&p.status==="available"&&left>0?`Sorry, only ${left} ${p.name} left. Please change your box.`:`Sorry, ${p?p.name:"that flavor"} just sold out. Please change your box.`;
@@ -2490,6 +2501,12 @@ function viewSettings(){
       <h3 style="margin:18px 0 4px;font-size:15px">Sameday closed pop-up</h3><p class="sub" style="margin:0 0 8px">Shown when a customer taps Sameday shipment after the order-by time. They tap the button to carry on and choose a day and time slot.</p>
       <label class="af">Message<textarea class="in" rows="3" data-k="settings::samedayMsg">${esc(s.samedayMsg)}</textarea></label>
       <label class="af" style="margin-top:8px;max-width:200px">Button name<input class="in" data-k="settings::samedayOk" value="${esc(s.samedayOk)}" maxlength="20"></label>
+      <h3 style="margin:18px 0 4px;font-size:15px">Check-your-details pop-up</h3><p class="sub" style="margin:0 0 8px">Shown in the middle of the screen when a customer taps Checkout, before the form opens.</p>
+      <label class="chk"><input type="checkbox" data-k="settings::coWarnOn" ${s.coWarnOn!==false?"checked":""}> <b>Show this pop-up</b></label>
+      <div class="grid2" style="margin-top:8px"><label class="af">Emoji<input class="in" data-k="settings::coWarnEmoji" value="${esc(s.coWarnEmoji)}" maxlength="8"></label><label class="af">Title<input class="in" data-k="settings::coWarnTitle" value="${esc(s.coWarnTitle)}" maxlength="60"></label></div>
+      <label class="af" style="margin-top:8px">Message<textarea class="in" rows="3" data-k="settings::coWarnText" maxlength="400">${esc(s.coWarnText)}</textarea></label>
+      <div class="grid2" style="margin-top:8px"><label class="af">Continue button<input class="in" data-k="settings::coWarnOk" value="${esc(s.coWarnOk)}" maxlength="40"></label><label class="af">Back button<input class="in" data-k="settings::coWarnBack" value="${esc(s.coWarnBack)}" maxlength="30"></label></div>
+      <button class="ghost" type="button" data-cwprev style="margin-top:8px">Preview pop-up</button>
     </section>
     <section class="panel">
       <div class="phead"><div><h2>Owner alerts</h2><p class="sub">A popup and a sound while the Admin page is open: when a new order is placed, when a customer sends a payment proof, and when a customer files a complaint. Browsers only play sound after you have clicked on the page once.</p></div><button class="btn btn-blue btn-sm" type="button" data-altest>Test alert</button></div>
@@ -2573,6 +2590,7 @@ function viewSettings(){
 }
 
 /* --- admin wiring --- */
+function openCwPreview(){openModal(`<div class="cw-card cw-prev">${cwHTML()}</div><p class="note" style="text-align:center">Preview only. Unsaved changes show here too.</p><div style="text-align:center"><button class="ghost" type="button" data-mclose>Close preview</button></div>`,"cwprev")}
 function slotSync(){const t=DB.settings;t.slots.sort((a,b)=>SLOT_PRESETS.indexOf(a.t)-SLOT_PRESETS.indexOf(b.t));t.times=t.slots.filter(x=>x.on).map(x=>x.t);saveDB()}
 function setK(el){
   const [coll,id,field]=el.dataset.k.split(":");
@@ -2794,6 +2812,7 @@ am.addEventListener("click",e=>{
   else if(d.sdel){delConfirm("this box size",()=>{if(DB.sizes.length<=1){toast("Keep at least one box size");return}needOwner("delete a box size").then(()=>{DB.sizes=DB.sizes.filter(s=>String(s.n)!==d.sdel);saveDB();toast("Size deleted");renderAdmin()}).catch(()=>{})})}
   else if(d.aadd!==undefined){DB.addons.push({id:uid(),name:"New extra",desc:"",price:1,active:false});saveDB();toast("Extra added, turned off");renderAdmin()}
   else if(d.adel){delConfirm("this extra",()=>needOwner("delete an extra").then(()=>{DB.addons=DB.addons.filter(a=>a.id!==d.adel);saveDB();toast("Extra deleted");renderAdmin()}).catch(()=>{}))}
+  else if(d.cwprev!==undefined){openCwPreview()}
   else if(d.slotadd!==undefined){const sl=DB.settings.slots,mx=Math.max(-1,...sl.map(x=>SLOT_PRESETS.indexOf(x.t))),un=SLOT_PRESETS.filter(t=>!sl.some(x=>x.t===t)),u=un.find(t=>SLOT_PRESETS.indexOf(t)>mx)||un[0];if(!u){toast("All 23 time slots are already added.");return}DB.settings.slots.push({t:u,on:true,limit:0});slotSync();toast("Saved");renderAdmin()}
   else if(d.slotdel!==undefined){const i=+d.slotdel,x=DB.settings.slots[i];if(x&&x.on&&DB.settings.slots.filter(y=>y.on).length<2){toast("Keep at least one time slot on.");return}DB.settings.slots.splice(i,1);slotSync();toast("Saved");renderAdmin()}
   else if(d.closed){const i=+d.closed,c=DB.settings.closedWeekdays;DB.settings.closedWeekdays=c.includes(i)?c.filter(x=>x!==i):[...c,i];saveDB();toast("Saved");renderAdmin()}
