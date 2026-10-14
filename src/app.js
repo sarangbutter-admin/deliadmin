@@ -138,7 +138,7 @@ function defaultProofPop(){return {on:true,emoji:"🙏",img:"",cookies:[],fx:tru
   text:"We have received your payment proof for order {code}. We will check it and confirm it shortly. You can follow the progress in My orders.",
   btn:"Track my order",bg:"#ffffff",accent:"#000096",ink:"#0B0B45"}}
 function defaultAlerts(){return {on:true,sound:true,vol:70,repeat:false,stay:true,custom:"",customName:"",
-  ev:{order:{on:true,snd:"register"},proof:{on:true,snd:"chime"},complaint:{on:true,snd:"alarm"}}}}
+  ev:{order:{on:true,snd:"register"},proof:{on:true,snd:"chime"},complaint:{on:true,snd:"alarm"},courier:{on:true,snd:"alarm"}}}}
 function defaultLabel(){return {logo:"",qr:"",qrCaption:"",notes:"",warnOn:true,warn1:"UNBOXING WITH UNCUT VIDEO!",warn2:"CONTACT US IF SEAL BROKEN"}}
 const SLOT_PRESETS=Array.from({length:23},(_,h)=>String(h).padStart(2,"0")+" to "+String(h+1).padStart(2,"0"));
 function migrate(db){
@@ -216,11 +216,25 @@ const bsFallback=(db=DB)=>!(db.settings&&db.settings.biteship&&db.settings.bites
 const bsShip=(c,at=Date.now(),db=DB)=>bsOn(db)&&c.mode==="delivery"&&c.ship&&c.ship.size===c.size&&+c.ship.exp>at?c.ship:null;
 const bsPending=(c,db=DB)=>bsOn(db)&&c.mode==="delivery"&&!c.bsSkip&&!bsShip(c,Date.now(),db);
 const BS_ST={confirmed:"Courier booked",scheduled:"Pickup scheduled",allocated:"Courier assigned",picking_up:"Courier is on the way to pick up",picked:"Picked up",dropping_off:"On the way to you",return_in_transit:"Returning",on_hold:"On hold",delivered:"Delivered",rejected:"Rejected by courier",disposed:"Disposed",courier_not_found:"No courier found",returned:"Returned",cancelled:"Booking cancelled"};
+const BS_FAIL=["courier_not_found","rejected","cancelled","returned","disposed"];
+const bsBadge=o=>{const b=o.bship;if(!b||!b.courier||o.mode!=="delivery")return null;
+  if(b.failed)return {t:"Courier failed",c:"bad"};if(!b.biteshipId)return b.status==="cancelled"?{t:"Courier cancelled",c:"bad"}:{t:"Courier not booked",c:"wait"};
+  const m={confirmed:["Searching driver","wait"],scheduled:["Pickup scheduled","wait"],allocated:["Driver assigned","go"],picking_up:["Driver on the way","go"],picked:["Picked up","go"],dropping_off:["On the way","go"],delivered:["Delivered","done"],on_hold:["On hold","bad"]}[b.status];
+  return m?{t:m[0],c:m[1]}:{t:BS_ST[b.status]||b.status||"Booked",c:"wait"}};
+const bsProof=(b,k)=>{const ov=b.proofOverride&&b.proofOverride[k];if(ov)return {urls:[ov],by:"shop"};const a=(b.proofs&&b.proofs[k])||[];return a.length?{urls:a,by:"courier"}:null};
 const bsHTML=(o,adm)=>{const b=o.bship;if(!b||!b.courier||o.mode!=="delivery")return "";
-  const booked=!!b.biteshipId,st=b.status?(BS_ST[b.status]||b.status):"",nm=esc((b.courierName||b.courier)+" "+(b.serviceName||b.service));
-  const lines=`<dt>Courier</dt><dd>${nm}${b.eta?` · ${esc(b.eta)}`:""}</dd>${st?`<dt>Status</dt><dd><b>${esc(st)}</b></dd>`:booked?"":`<dt>Status</dt><dd>${adm?"Not booked yet":"We'll book your courier once your order is ready"}</dd>`}${b.waybill?`<dt>Waybill</dt><dd>${esc(b.waybill)}</dd>`:""}${b.link?`<dt>Tracking</dt><dd><a href="${esc(safeUrl(b.link))}" target="_blank" rel="noopener">Track the delivery</a></dd>`:""}${adm&&b.price!==undefined?`<dt>Quoted price</dt><dd>${money(b.price)}${b.bookedPrice!==undefined&&booked?` (booked at ${money(b.bookedPrice)})`:""}</dd>`:""}`;
-  const acts=adm?`<div class="colin" style="margin-top:10px;flex-wrap:wrap;gap:8px">${!booked?`<button class="btn btn-blue btn-sm" type="button" data-bsact="book" data-oid="${o.id}" ${PAID_ST.includes(o.status)?"":'disabled title="Confirm the payment first"'}>Book courier now</button>`:`<button class="ghost" type="button" data-bsact="refresh" data-oid="${o.id}">Refresh status</button><button class="danger" type="button" data-bsact="cancel" data-oid="${o.id}">Cancel booking</button>`}</div><p class="note" id="bsMsg" hidden></p>`:"";
-  return `<div class="dsec"><h4>🛵 Courier</h4><dl class="dl">${lines}</dl>${acts}</div>`};
+  const booked=!!b.biteshipId,st=b.status?(BS_ST[b.status]||b.status):"",nm=esc((b.courierName||b.courier)+" "+(b.serviceName||b.service)),dr=b.driver;
+  const fail=b.failed?`<div class="oc-alert cmp" style="margin:0 0 8px">🛵 ${esc(st||"Courier failed")}. ${adm?"Book again below"+(b.retries?" (already retried once)":""):"We're arranging another courier."}</div>`:"";
+  const lines=`<dt>Courier</dt><dd>${nm}${b.eta?` · ${esc(b.eta)}`:""}</dd>${st?`<dt>Status</dt><dd><b>${esc(st)}</b>${b.statusAt?` <small class="note">${fmtAgo(b.statusAt)}</small>`:""}</dd>`:booked?"":`<dt>Status</dt><dd>${adm?"Not booked yet":"We'll call the courier when your cookies are ready"}</dd>`}
+    ${dr&&(dr.name||dr.plate)?`<dt>Driver</dt><dd>${esc(dr.name||"")}${dr.plate?` · ${esc(dr.plate)}`:""}${dr.phone?` · <a href="tel:${esc(dr.phone)}">${esc(dr.phone)}</a>`:""}</dd>`:""}
+    ${b.waybill?`<dt>Waybill</dt><dd>${esc(b.waybill)}</dd>`:""}${b.link&&booked?`<dt>Tracking</dt><dd><a href="${esc(safeUrl(b.link))}" target="_blank" rel="noopener">Track the courier live</a></dd>`:""}
+    ${adm&&b.price!==undefined?`<dt>Price</dt><dd>${money(b.price)} quoted${b.bookedPrice!==undefined&&b.bookedAt?` · ${money(b.bookedPrice)} booked`:""}</dd>`:""}`;
+  const hist=(b.history||[]).length?`<ol class="bshist">${b.history.slice().reverse().map(h=>`<li><b>${esc(BS_ST[h.s]||h.s)}</b><small>${fmtDT(h.at)}${h.by==="shop"?" · by the shop":""}</small></li>`).join("")}</ol>`:"";
+  const pf=k=>{const p=bsProof(b,k),lab=k==="pickup"?"Pickup proof":"Delivery proof";if(!p&&!adm)return "";
+    return `<div class="bspf"><b>${lab}</b>${p?`<div class="bspf-imgs">${p.urls.map(u=>`<a href="${esc(safeUrl(u))}" target="_blank" rel="noopener"><img src="${esc(safeUrl(u))}" alt="${lab}" loading="lazy"></a>`).join("")}</div><small class="note">${p.by==="shop"?"Added by the shop":"From the courier"}</small>`:`<small class="note">${adm?"None from the courier yet.":""}</small>`}
+      ${adm&&ROLE()==="owner"?`<div class="colin" style="flex-wrap:wrap;gap:6px;margin-top:4px"><label class="ghost mqbtn">${b.proofOverride&&b.proofOverride[k]?"Replace":"Add / override"}<input type="file" accept="image/*" hidden data-bsproof="${k}" data-oid="${o.id}"></label>${b.proofOverride&&b.proofOverride[k]?`<button class="danger" type="button" data-bsproofrm="${k}" data-oid="${o.id}">Use courier's</button>`:""}</div>`:""}</div>`};
+  const acts=adm?`<div class="colin" style="margin-top:10px;flex-wrap:wrap;gap:8px">${!booked?`<button class="btn btn-blue btn-sm" type="button" data-bsact="book" data-oid="${o.id}" ${PAID_ST.includes(o.status)&&o.status!=="completed"?"":'disabled title="Confirm the payment first"'}>${b.failed||b.cancelledAt?"Book again":"Request pickup"}</button>`:`<button class="ghost" type="button" data-bsact="refresh" data-oid="${o.id}">Refresh status</button><button class="danger" type="button" data-bsact="cancel" data-oid="${o.id}">Cancel booking</button>`}</div><p class="note" id="bsMsg" hidden></p>`:"";
+  return `<div class="dsec"><h4>🛵 Courier</h4>${fail}<dl class="dl">${lines}</dl>${acts}<div class="bspfs">${pf("pickup")}${pf("delivery")}</div>${hist?`<details class="bshd"${adm?"":" open"}><summary>Courier updates</summary>${hist}</details>`:""}</div>`};
 const freeDelSale=(n,at=Date.now(),db=DB)=>db.sales.find(s=>isFD(s)&&saleStatus(s,at)==="live"&&(s.appliesTo==="all"||+s.appliesTo===n))||null;
 const cpNorm=v=>String(v||"").toUpperCase().replace(/[^A-Z0-9_-]/g,"").slice(0,20);
 const cpOff=c=>c.type==="percent"?`${c.value}% off`:c.type==="amount"?`${money(c.value)} off`:"Free delivery";
@@ -1181,6 +1195,7 @@ async function processProof(file){
   }finally{URL.revokeObjectURL(url)}
 }
 function moSteps(o){
+  if(o.bship&&o.bship.biteshipId&&o.mode==="delivery"&&!o.courier)o.courier=(o.bship.courierName||o.bship.courier)+" "+(o.bship.serviceName||o.bship.service);
   const labels=["Order placed","Payment","Confirmed","Baking",o.mode==="delivery"?"Out for delivery":"Ready for pickup",o.mode==="delivery"?"Delivered":"Picked up"];
   const idx={awaiting:1,review:1,new:2,baking:3,ready:4,completed:5}[o.status]??1;
   const del=o.mode==="delivery",ship=del&&(o.courier||o.awb);
@@ -1995,7 +2010,7 @@ function orderCard(o){
   const canEdit=canEditOrder(o),own=ROLE()==="owner";
   const lbl=paid?(o.labelAt?`<div class="oc-lbl ok">✓ Label printed ${fmtAgo(o.labelAt)}</div>`:`<div class="oc-lbl warn">⚠ Label not printed yet</div>`):(o.status==="cancelled"?"":`<div class="oc-lbl off">Label can be printed after payment is confirmed</div>`);
   return `<article class="oc-card" aria-label="Order ${esc(o.code)}">
-    <div class="oc-h"><span>#${esc(o.code)} · ${esc(c.name)}${o.example?`<span class="ex">Example</span>`:""}${o.complaint?`<span class="ex oc-cp">Complaint</span>`:""}</span><b class="num">${money(o.total)}</b></div>
+    <div class="oc-h"><span>#${esc(o.code)} · ${esc(c.name)}${o.example?`<span class="ex">Example</span>`:""}${o.complaint?`<span class="ex oc-cp">Complaint</span>`:""}${(x=>x?`<span class="ex bsbadge ${x.c}">🛵 ${esc(x.t)}</span>`:"")(bsBadge(o))}</span><b class="num">${money(o.total)}</b></div>
     ${o.refund?`<div class="oc-alert ref">💸 ${o.refund.full?"Refunded":"Partly refunded"}: ${money(o.refund.amount)} · ${fmtAgo(o.refund.at)}${o.refund.note?" · "+esc(o.refund.note):""}</div>`:""}
     ${o.status==="review"&&o.payReq?`<div class="oc-alert appr">⏳ ${own?`${esc(o.payReq.by)} confirmed this payment – needs your approval`:`Payment checked – waiting for owner approval`}</div>${own?`<div class="oc-sts"><button class="btn btn-blue btn-sm" type="button" data-papprove="${o.id}">✓ Approve payment</button><button class="oc-b" type="button" data-preject="${o.id}">Turn down</button></div>`:""}`
       :o.status==="review"&&o.rejReq?`<div class="oc-alert appr rej">⏳ ${own?`${esc(o.rejReq.by)} wants to REJECT this payment proof${o.rejReq.reason?` ("${esc(o.rejReq.reason)}")`:""} – needs your approval`:`Proof rejection sent – waiting for owner approval`}</div>${own?`<div class="oc-sts"><button class="danger" type="button" data-rapprove="${o.id}">✓ Approve rejection</button><button class="oc-b" type="button" data-rdeny="${o.id}">Keep payment (turn down)</button></div>`:""}`
@@ -2079,9 +2094,29 @@ function applyStatus(id,st){
 
 /* --- change status with confirmation --- */
 let SC=null;
+// Biteship orders: marking "Ready" asks to request the pickup; the order moves to Out for delivery once the courier picks it up
+function bsReadyAsk(o){
+  const b=o.bship,nm=esc((b.courierName||b.courier)+" "+(b.serviceName||b.service));
+  A.modal="bsready";$("#modalCard").innerHTML=`<div class="sheet-top"><h3 id="modalTitle">Request pickup?</h3><button class="x" type="button" data-close aria-label="Close">✕</button></div>
+    <p>Order <b>${esc(o.code)}</b> uses <b>${nm}</b>. Request the pickup now and the courier comes to your pickup address.</p>
+    <p class="note">Only do this when the box is packed and ready. The order moves to <b>Out for delivery</b> by itself when the courier picks it up, and to <b>Delivered</b> when it arrives.</p>
+    <p class="err" id="bsReadyErr" hidden></p>
+    <div style="display:grid;gap:8px;margin-top:12px"><button class="btn btn-blue" type="button" data-bsready="${o.id}">🛵 Yes, request pickup now</button>
+      <button class="ghost" type="button" data-close>Not yet</button>
+      <button class="ghost" type="button" data-bsown="${o.id}" style="font-size:13px">Use my own courier instead (type courier + airway bill)</button></div>`;
+  $("#modal").hidden=false;
+}
+$("#modal").addEventListener("click",async e=>{if(A.modal!=="bsready")return;if(e.target.closest("[data-close]")||e.target.id==="modal"){closeModal();return}const b=e.target.closest("[data-bsready],[data-bsown]");if(!b)return;
+  if(b.dataset.bsown){closeModal();const id=b.dataset.bsown;openOrder(id);toast("Type the courier and airway bill in Shipping label. The order moves on by itself.");return}
+  const id=b.dataset.bsready,o=DB.orders.find(x=>x.id===id),er=$("#bsReadyErr");b.disabled=true;b.textContent="Requesting pickup…";
+  try{const r=await SBH.fn("biteship",{action:"book",orderId:id},true);bsApply(o,r);closeModal();toast("Pickup requested. Searching for a driver.");renderAdmin();if(A.openOrder===id)openOrder(id)}
+  catch(err){b.disabled=false;b.textContent="🛵 Yes, request pickup now";er.hidden=false;er.textContent=err.message}});
+function bsApply(o,r){if(!o||!r)return;if(r.bship)o.bship=r.bship;if(r.status)o.status=r.status;if(r.completedAt)o.completedAt=r.completedAt;if(r.msgs)o.msgs=r.msgs;
+  const b=o.bship;if(b&&b.biteshipId){o.courier=((b.courierName||b.courier)+" "+(b.serviceName||b.service)).slice(0,40);if(b.waybill)o.awb=b.waybill}}
 function setOrderStatus(id,st,extra){
   const o=DB.orders.find(x=>x.id===id);if(!o)return;
   if(o.status===st){renderAdmin();return}
+  if(st==="ready"&&o.mode==="delivery"&&o.bship&&o.bship.courier&&!o.bship.biteshipId&&SBH.on&&!(extra&&extra.ownCourier)){bsReadyAsk(o);renderAdmin();return}
   const why=stepWhy(o,st);if(why){toast(why);renderAdmin();return}
   if(ROLE()!=="owner"&&o.status==="review"&&st==="new"){   // staff: ask an owner to approve
     if(!SBH.on){toast("Sent to the owner for approval");return}
@@ -2717,6 +2752,9 @@ function bsPanel(){
     <p class="note" style="margin:0 0 6px">Couriers price by weight. Leave blank to use ${c.gramsPerCookie||100} g per cookie + ${c.boxGrams||200} g for the box.</p>
     <div class="grid3">${DB.sizes.slice().sort((x,y)=>x.n-y.n).map(z=>`<label class="af">Box of ${z.n} (grams)<input class="in" type="number" min="0" step="10" data-bsw="${z.n}" value="${esc((c.weights&&c.weights[z.n])||"")}" placeholder="${z.n*(+c.gramsPerCookie||100)+(+c.boxGrams||200)}"></label>`).join("")}</div>
     <div class="grid3" style="margin-top:10px">${inp("Length (cm)","dims.l",d.l,"25","number")}${inp("Width (cm)","dims.w",d.w,"25","number")}${inp("Height (cm)","dims.h",d.h,"10","number")}</div>
+    <h3 style="margin:18px 0 4px;font-size:15px">Pickup and problems</h3>
+    <div style="display:flex;gap:10px;align-items:center;margin:4px 0"><label class="sw"><input type="checkbox" data-bsauto ${c.autoRetry?"checked":""} aria-label="Book again automatically"><span></span></label><span class="stlabel">If no driver is found, book again automatically once (after 1 minute)</span></div>
+    <p class="note" style="margin:0">You get a sound and pop-up alert either way. Press <b>Save courier settings</b> after changing this.</p>
     <h3 style="margin:18px 0 4px;font-size:15px">5. Price</h3>
     <div class="grid2">${inp("Add to every courier price","markup",c.markup,"0","number")}${inp("Round up to the nearest","roundTo",c.roundTo,"500","number")}</div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px"><button class="btn btn-blue" type="button" data-bsa="savecfg">Save courier settings</button></div>
@@ -2780,7 +2818,7 @@ function viewSettings(){
         <label class="chk"><input type="checkbox" data-alc="stay" ${al.stay?"checked":""}> Keep popups until I dismiss them (otherwise they close after 10 seconds)</label>
         <label class="chk"><input type="checkbox" data-alc="repeat" ${al.repeat?"checked":""}> Repeat the sound every 20 seconds until I dismiss</label>
         <label class="af" style="margin-top:6px">Volume<input class="in" type="range" min="10" max="100" step="5" data-alr value="${al.vol}"></label>
-        <div style="margin-top:8px">${[["order","New order placed"],["proof","Payment proof submitted"],["complaint","Customer complaint"]].map(([k,l])=>`<div class="alrow"><span class="sw"><input type="checkbox" data-alc="ev.${k}.on" ${al.ev[k].on?"checked":""} aria-label="Alert for ${l}"><span></span></span><b style="font-size:14px">${l}</b><select class="in" data-alsel="ev.${k}.snd" aria-label="Sound for ${l}" style="min-width:140px">${SND_OPTS.map(([v,n])=>`<option value="${v}" ${al.ev[k].snd===v?"selected":""}>${n}</option>`).join("")}${al.custom?`<option value="custom" ${al.ev[k].snd==="custom"?"selected":""}>Your sound</option>`:""}</select><button class="ghost" type="button" data-alplay="${k}">▶ Play</button></div>`).join("")}</div>
+        <div style="margin-top:8px">${[["order","New order placed"],["proof","Payment proof submitted"],["complaint","Customer complaint"],["courier","Courier problem (no driver, cancelled)"]].map(([k,l])=>`<div class="alrow"><span class="sw"><input type="checkbox" data-alc="ev.${k}.on" ${al.ev[k].on?"checked":""} aria-label="Alert for ${l}"><span></span></span><b style="font-size:14px">${l}</b><select class="in" data-alsel="ev.${k}.snd" aria-label="Sound for ${l}" style="min-width:140px">${SND_OPTS.map(([v,n])=>`<option value="${v}" ${al.ev[k].snd===v?"selected":""}>${n}</option>`).join("")}${al.custom?`<option value="custom" ${al.ev[k].snd==="custom"?"selected":""}>Your sound</option>`:""}</select><button class="ghost" type="button" data-alplay="${k}">▶ Play</button></div>`).join("")}</div>
         <div class="af" style="margin-top:10px">Your own sound (MP3, WAV or OGG, under 400 KB)<div class="colin" style="flex-wrap:wrap"><label class="ghost mqbtn">${al.custom?"Replace sound":"Upload sound"}<input type="file" accept="audio/*" hidden data-alsnd></label>${al.custom?`<span class="note" style="margin:0">${esc(al.customName||"Your sound")}</span><button class="danger" type="button" data-alsndrm>Remove</button>`:""}</div></div>
       </div>
     </section>
@@ -3801,10 +3839,15 @@ am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
 $("#drawer").addEventListener("click",async e=>{const b=e.target.closest("[data-bsact]");if(!b)return;
   const id=b.dataset.oid,act=b.dataset.bsact,o=DB.orders.find(x=>x.id===id),msg=$("#bsMsg");if(!o)return;
   const go=async()=>{b.disabled=true;if(msg){msg.hidden=false;msg.style.color="";msg.textContent=act==="book"?"Booking the courier…":act==="cancel"?"Cancelling…":"Checking…"}
-    try{const r=await SBH.fn("biteship",{action:act,orderId:id},true);o.bship=r.bship;if(act==="book"||(r.bship&&r.bship.waybill)){o.courier=o.courier||((o.bship.courierName||o.bship.courier)+" "+(o.bship.serviceName||o.bship.service));if(r.bship.waybill)o.awb=r.bship.waybill}
-      toast(act==="book"?"Courier booked":act==="cancel"?"Courier booking cancelled":"Status updated");openOrder(id)}
+    try{const r=await SBH.fn("biteship",{action:act,orderId:id},true);bsApply(o,r);
+      toast(act==="book"?"Pickup requested. Searching for a driver.":act==="cancel"?"Courier booking cancelled":"Status updated");renderAdmin();openOrder(id)}
     catch(err){b.disabled=false;if(msg){msg.hidden=false;msg.style.color="var(--red)";msg.textContent=err.message}}};
   if(act==="cancel")armed(b,go);else go()});
+$("#drawer").addEventListener("change",async e=>{const el=e.target;if(el.dataset.bsproof===undefined)return;const f=el.files[0];if(!f)return;
+  const id=el.dataset.oid,o=DB.orders.find(x=>x.id===id);toast("Uploading the photo…");
+  try{const url=await SBK.upload(await lpResize(f,1400,true));const r=await SBH.fn("biteship",{action:"proof",orderId:id,kind:el.dataset.bsproof,url},true);bsApply(o,r);toast("Proof photo saved");openOrder(id)}catch(err){toast(err.message)}});
+$("#drawer").addEventListener("click",async e=>{const b=e.target.closest("[data-bsproofrm]");if(!b)return;const id=b.dataset.oid,o=DB.orders.find(x=>x.id===id);
+  try{const r=await SBH.fn("biteship",{action:"proof",orderId:id,kind:b.dataset.bsproofrm,url:""},true);bsApply(o,r);toast("Showing the courier's photo again");openOrder(id)}catch(err){toast(err.message)}});
 $("#drawer").addEventListener("input",e=>{const el=e.target;if(el.dataset.ship&&A.openOrder){const o=DB.orders.find(x=>x.id===A.openOrder);if(o){o[el.dataset.ship]=el.value;saveSoon()}}});
 $("#drawer").addEventListener("click",e=>{const b=e.target.closest("[data-printone]");if(b){const o=DB.orders.find(x=>x.id===b.dataset.printone);if(o)printLabels([o],DB.label)}});
 am.addEventListener("dragover",e=>{const t=e.target.closest("[data-drop]");if(!t)return;e.preventDefault();t.classList.add("drag")});
@@ -3955,7 +3998,7 @@ am.addEventListener("input",e=>{const el=e.target;
   if(el.dataset.bsc||el.dataset.bsw)BSA.dirty=true;
   if(el.dataset.bsc){const path=el.dataset.bsc.split("."),c=BSA.cfg;let t=c;for(let i=0;i<path.length-1;i++)t=t[path[i]]=t[path[i]]||{};t[path[path.length-1]]=el.type==="number"?(el.value===""?"":+el.value):el.value}
   else if(el.dataset.bsw){BSA.cfg.weights=BSA.cfg.weights||{};BSA.cfg.weights[el.dataset.bsw]=el.value===""?"":+el.value}});
-am.addEventListener("change",e=>{const el=e.target;if(!el.dataset.bsset)return;const b=DB.settings.biteship=DB.settings.biteship||{on:false,fallback:true};
+am.addEventListener("change",e=>{const el=e.target;if(el.dataset.bsauto!==undefined){BSA.cfg.autoRetry=el.checked;BSA.dirty=true;return}if(!el.dataset.bsset)return;const b=DB.settings.biteship=DB.settings.biteship||{on:false,fallback:true};
   if(el.dataset.bsset==="on"&&el.checked&&!(BSA.hasKey&&BSA.cfg.origin&&BSA.cfg.origin.name&&BSA.cfg.origin.phone&&BSA.cfg.origin.address)){el.checked=false;toast("Save your API key and pickup details first");return}
   b[el.dataset.bsset]=el.checked;saveSoon()});
 am.addEventListener("click",async e=>{const b=e.target.closest("button");if(!b)return;const d=b.dataset;
@@ -4266,18 +4309,19 @@ function alEvents(){
   DB.orders.forEach(o=>{if(o.example)return;
     if(o.createdAt>=ABOOT)ev.push({type:"order",id:o.id,at:o.createdAt});
     if(o.proof&&o.proof.at>=ABOOT)ev.push({type:"proof",id:o.id,at:o.proof.at});
-    if(o.complaint&&o.complaint.at>=ABOOT)ev.push({type:"complaint",id:o.id,at:o.complaint.at})});
+    if(o.complaint&&o.complaint.at>=ABOOT)ev.push({type:"complaint",id:o.id,at:o.complaint.at});
+    if(o.bship&&o.bship.failAt>=ABOOT)ev.push({type:"courier",id:o.id,at:o.bship.failAt})});
   return ev.map(x=>({...x,key:x.type+"|"+x.id+"|"+x.at}));
 }
 function alAckAll(){alEvents().forEach(x=>AACK.add(x.key));alSaveAck();ALQ=ALQ.filter(x=>x.test);renderAlerts()}
-const AL_META={order:["🍪","New order placed"],proof:["🧾","Payment proof submitted"],complaint:["⚠️","New customer complaint"]};
+const AL_META={order:["🍪","New order placed"],proof:["🧾","Payment proof submitted"],complaint:["⚠️","New customer complaint"],courier:["🛵","Courier problem: book again"]};
 function alPush(x){
   if(ALQ.some(q=>q.key===x.key))return;ALQ.push(x);renderAlerts();alSound([x]);
   if(!DB.alerts.stay)setTimeout(()=>alDismiss(x.key),10000);
 }
 function alSound(list){
   const a=DB.alerts;if(!a.sound||!list.length)return;
-  const pr={complaint:3,proof:2,order:1},top=list.reduce((m,x)=>(pr[x.type]||0)>(pr[m.type]||0)?x:m,list[0]);
+  const pr={courier:4,complaint:3,proof:2,order:1},top=list.reduce((m,x)=>(pr[x.type]||0)>(pr[m.type]||0)?x:m,list[0]);
   alPlay(top.test?a.ev.order.snd:a.ev[top.type].snd);
 }
 function alScan(){
@@ -4295,7 +4339,7 @@ function renderAlerts(){
   const money_=o=>o?money(o.total):"";
   const shown=ALQ.slice(-4).reverse();
   st.innerHTML=shown.map(x=>{const o=DB.orders.find(y=>y.id===x.id),m=AL_META[x.type]||AL_META.order,nm=o?(x.type==="proof"&&o.proof?o.proof.name:o.customer.name):"Sample customer";
-    const line=x.type==="complaint"&&o&&o.complaint?o.complaint.reason:(o?money_(o):"$0.00");
+    const line=x.type==="complaint"&&o&&o.complaint?o.complaint.reason:x.type==="courier"&&o&&o.bship?(BS_ST[o.bship.status]||"No courier")+(o.bship.retries?" · retried once":""):(o?money_(o):"$0.00");
     return `<div class="al-card ${x.type}" role="alert"><div class="al-t"><i aria-hidden="true">${m[0]}</i>${m[1]}</div><div class="al-b"><b>${o?esc(o.code):"DD-TEST"}</b> · ${esc(nm)} · ${esc(line)}<small>${fmtAgo(x.at)}${x.test?" · test alert":""}</small></div><div class="al-r">${o?`<button class="btn btn-blue btn-sm" type="button" data-alview="${x.key}">View</button>`:""}<button class="ghost" type="button" data-aldis="${x.key}">Dismiss</button></div></div>`}).join("")+(ALQ.length>1?`<button class="al-more" type="button" data-aldisall>${ALQ.length>4?`+${ALQ.length-4} more · `:""}Dismiss all</button>`:"");
   document.title=ALQ.length?`(${ALQ.length}) ${AL_BASE}`:AL_BASE;
 }

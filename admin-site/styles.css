@@ -1068,3 +1068,13 @@ body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
 .bssumrow small{display:block;color:var(--muted)}
 .bssumrow.need{border-color:#FFE066;background:#FFF9DB}
 #bsPop{z-index:1002}
+
+/* courier details on orders */
+.bshist{list-style:none;margin:6px 0 0;padding:0 0 0 14px;border-left:2px solid var(--line)}
+.bshist li{margin:0 0 6px}.bshist small{display:block;color:var(--muted)}
+.bshd summary{cursor:pointer;font-weight:700;margin-top:8px}
+.bspfs{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.bspf-imgs{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0}
+.bspf-imgs img{width:84px;height:84px;object-fit:cover;border-radius:10px;border:1px solid var(--line)}
+.bsbadge{border-radius:99px}.bsbadge.wait{background:#FFF3C4;color:#7A5A00}.bsbadge.go{background:#E2E8FF;color:#000096}.bsbadge.done{background:#DDF5E5;color:#0A6B34}.bsbadge.bad{background:#C8102E;color:#fff}
+.bspf>b{display:block}

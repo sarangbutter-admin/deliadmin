@@ -1,7 +1,7 @@
 // Delidome: optional Biteship courier integration.
 // Deploy:  supabase functions deploy biteship
 // The API key is saved by the owner in Shop settings -> Courier delivery (stored in a private table, never sent to the website).
-import { admin, bs, bsErr, cors, hmacHex, INSTANT, ipOf, json, kv, limited, settings, STATUS_TXT, teamRole } from "../_shared/common.ts";
+import { admin, applyUpdate, bookOrder, boxOf, bs, bsErr, cors, driverOf, findProofs, hmacHex, INSTANT, ipOf, json, kv, limited, settings, teamRole } from "../_shared/common.ts";
 
 const num = (v: unknown, d = 0) => (Number.isFinite(+(v as number)) ? +(v as number) : d);
 const clean = (s: unknown, n: number) => String(s ?? "").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, n);
@@ -9,13 +9,6 @@ const clean = (s: unknown, n: number) => String(s ?? "").replace(/[\u0000-\u001f
 async function load(db: ReturnType<typeof admin>) {
   const [set, cfg, keyRow] = await Promise.all([settings(db), kv(db, "biteship_cfg"), kv(db, "biteship_key")]);
   return { set, cfg: cfg || {}, key: keyRow && keyRow.v ? String(keyRow.v) : "" };
-}
-
-// weight (grams) and size (cm) of a box
-function boxOf(cfg: any, size: number) {
-  const w = cfg.weights && num(cfg.weights[String(size)]) > 0 ? num(cfg.weights[String(size)]) : size * num(cfg.gramsPerCookie, 100) + num(cfg.boxGrams, 200);
-  const d = cfg.dims || {};
-  return { weight: Math.max(100, Math.round(w)), length: num(d.l, 25), width: num(d.w, 25), height: num(d.h, 10) };
 }
 
 Deno.serve(async (req) => {
@@ -148,70 +141,51 @@ Deno.serve(async (req) => {
       return json({ ok: true, mode: key.startsWith("biteship_test") ? "test" : key.startsWith("biteship_live") ? "live" : "unknown", couriers: [...new Set(list)].slice(0, 60) });
     }
 
-    if (action === "book" || action === "cancel" || action === "refresh") {
-      if (!key) return json({ error: "Save your Biteship API key first." }, 400);
+    if (action === "book" || action === "cancel" || action === "refresh" || action === "proof") {
       const id = clean(body.orderId, 40);
       const { data: row } = await db.from("orders").select("id,data").eq("id", id).maybeSingle();
       if (!row) return json({ error: "Order not found." }, 404);
-      const o: any = row.data, sh: any = o.bship;
-      const save = async (patch: any, extra: any = {}) => {
-        const next = { ...o, ...extra, bship: { ...(o.bship || {}), ...patch } };
-        await db.from("orders").update({ data: next, updated_at: Date.now() }).eq("id", id);
-        return next.bship;
-      };
+      const o: any = row.data, sh: any = o.bship || {};
 
+      // owner adds or replaces a pickup / delivery proof photo (empty url removes the override)
+      if (action === "proof") {
+        if (role !== "owner") return json({ error: "Only an owner can change proof photos." }, 403);
+        const kind = body.kind === "delivery" ? "delivery" : "pickup", url = clean(body.url, 500);
+        if (url && !/^https:\/\//i.test(url)) return json({ error: "Bad picture link." }, 400);
+        const nsh = { ...sh, proofOverride: { ...(sh.proofOverride || {}), [kind]: url } };
+        await db.from("orders").update({ data: { ...o, bship: nsh }, updated_at: Date.now() }).eq("id", id);
+        return json({ ok: true, bship: nsh });
+      }
+
+      if (!key) return json({ error: "Save your Biteship API key first." }, 400);
       if (action === "book") {
-        if (!sh || !sh.courier) return json({ error: "This order has no courier chosen." }, 400);
-        if (sh.biteshipId) return json({ error: "A courier is already booked for this order." }, 400);
-        if (!["new", "baking", "ready"].includes(o.status)) return json({ error: "Confirm the payment first. Couriers are booked for paid orders." }, 400);
-        const org = cfg.origin || {};
-        if (!org.name || !org.phone || !org.address) return json({ error: "Fill in your pickup details in Shop settings first." }, 400);
-        const box = boxOf(cfg, num(o.size));
-        const c = o.customer || {};
-        const payload: any = {
-          shipper_contact_name: clean(org.name, 60), shipper_contact_phone: clean(org.phone, 20), shipper_organization: clean(org.business || org.name, 60),
-          origin_contact_name: clean(org.name, 60), origin_contact_phone: clean(org.phone, 20), origin_address: clean(org.address, 250), origin_note: clean(org.note, 200),
-          destination_contact_name: clean(c.name, 60), destination_contact_phone: clean(c.phone, 20), destination_contact_email: clean(c.email, 100),
-          destination_address: clean(c.address, 250), destination_note: clean((o.note ? o.note + " " : "") + "Order " + o.code, 200),
-          courier_company: sh.courier, courier_type: sh.service, delivery_type: "now",
-          order_note: "Delidome order " + o.code + " (cookies, handle with care)",
-          metadata: { orderCode: o.code },
-          items: [{ name: "Cookie box of " + o.size, description: "Fragile baked goods", value: Math.round(num(o.base)), quantity: 1, weight: box.weight, length: box.length, width: box.width, height: box.height }],
-        };
-        if (Number.isFinite(num(org.lat, NaN)) && Number.isFinite(num(org.lng, NaN)) && org.lat !== "" && org.lng !== "") payload.origin_coordinate = { latitude: num(org.lat), longitude: num(org.lng) };
-        else if (org.postal) payload.origin_postal_code = Math.round(num(org.postal));
-        if (sh.lat && sh.lng) payload.destination_coordinate = { latitude: num(sh.lat), longitude: num(sh.lng) };
-        if (sh.postal) payload.destination_postal_code = Math.round(num(sh.postal));
-        const r = await bs(key, "POST", "/v1/orders", payload);
-        if (!r.ok || !r.body) return json({ error: bsErr(r) }, 502);
-        const b = r.body, cr = b.courier || {};
-        const ship = await save({
-          biteshipId: clean(b.id, 60), trackingId: clean(cr.tracking_id, 60), waybill: clean(cr.waybill_id, 60), link: clean(cr.link, 300),
-          status: clean(b.status, 30) || "confirmed", bookedAt: Date.now(), bookedPrice: num(b.price, num(sh.price)),
-        }, { courier: clean((sh.courierName || sh.courier) + " " + (sh.serviceName || sh.service), 40), awb: clean(cr.waybill_id, 40) || o.awb || "" });
-        return json({ ok: true, bship: ship });
+        const r = await bookOrder(db, key, cfg, row);
+        if ((r as any).error) return json({ error: (r as any).error }, 400);
+        return json({ ok: true, bship: (r as any).bship, status: (r as any).order.status });
       }
 
       if (action === "refresh") {
-        if (!sh || !sh.biteshipId) return json({ error: "No courier booked yet." }, 400);
+        if (!sh.biteshipId) return json({ error: "No courier booked right now." }, 400);
         const r = await bs(key, "GET", "/v1/orders/" + encodeURIComponent(sh.biteshipId));
+        console.log("refresh", o.code, r.status, r.ok ? r.body?.status : bsErr(r));
         if (!r.ok || !r.body) return json({ error: bsErr(r) }, 502);
         const b = r.body, cr = b.courier || {};
-        const ship = await save({
-          status: clean(b.status, 30) || sh.status, waybill: clean(cr.waybill_id, 60) || sh.waybill, link: clean(cr.link, 300) || sh.link,
-          trackingId: clean(cr.tracking_id, 60) || sh.trackingId, bookedPrice: num(b.price, sh.bookedPrice),
-        }, cr.waybill_id ? { awb: clean(cr.waybill_id, 40) } : {});
-        return json({ ok: true, bship: ship });
+        const next = await applyUpdate(db, row, { status: b.status, waybill: cr.waybill_id, link: cr.link, trackingId: cr.tracking_id, price: b.price, driver: driverOf(b) || undefined, proofs: findProofs(b) }, true);
+        return json({ ok: true, bship: next.bship, status: next.status, completedAt: next.completedAt || null, msgs: next.msgs });
       }
 
-      // cancel
-      if (!sh || !sh.biteshipId) return json({ error: "No courier booked." }, 400);
+      // cancel (by the shop)
+      if (!sh.biteshipId) return json({ error: "No courier booked." }, 400);
       const why = { cancellation_reason_code: "others", cancellation_reason: clean(body.reason || "Cancelled by the shop", 120) };
       let r = await bs(key, "DELETE", "/v1/orders/" + encodeURIComponent(sh.biteshipId), why);
       if (!r.ok && (r.status === 404 || r.status === 405)) r = await bs(key, "POST", "/v1/orders/" + encodeURIComponent(sh.biteshipId) + "/cancel", why);
+      console.log("cancel", o.code, r.status, r.ok ? "ok" : bsErr(r));
       if (!r.ok) return json({ error: bsErr(r) }, 502);
-      const ship = await save({ status: "cancelled", cancelledAt: Date.now(), biteshipId: "" , prevBiteshipId: sh.biteshipId });
-      return json({ ok: true, bship: ship });
+      const now = Date.now();
+      const nsh = { ...sh, status: "cancelled", statusAt: now, cancelledAt: now, prevIds: [...(sh.prevIds || []), sh.biteshipId].slice(-10), biteshipId: "", failed: false,
+        history: [...(sh.history || []), { s: "cancelled", at: now, by: "shop" }].slice(-25) };
+      await db.from("orders").update({ data: { ...o, bship: nsh }, updated_at: now }).eq("id", id);
+      return json({ ok: true, bship: nsh });
     }
 
     return json({ error: "Unknown action" }, 400);
@@ -220,4 +194,3 @@ Deno.serve(async (req) => {
     return json({ error: "Something went wrong. Please try again." }, 500);
   }
 });
-void STATUS_TXT;
