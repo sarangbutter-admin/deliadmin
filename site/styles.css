@@ -718,3 +718,20 @@ body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
 /* time slots */
 .slotrow .note{margin-left:auto}.slotrow .ghost{flex:0 0 auto}
 .sd-card{text-align:center;max-width:380px}.sd-card .sdmsg{font-size:17px;line-height:1.5;margin:6px 0 20px;color:var(--ink,#000096)}.sd-card .btn{min-width:140px}
+
+/* top banner: slides + shapes */
+.dome .hm .hs{position:absolute;inset:0;background-size:cover;background-position:center;opacity:0;transition:opacity .9s ease}
+.dome .hm .hs.on{opacity:1}
+.dome .hm .hs video{width:100%;height:100%;object-fit:cover;display:block}
+.dome.shape-rounded{border-radius:32px}
+.dome.shape-pill{border-radius:min(180px,24vw)}
+.dome.shape-capsule{border-radius:min(48vw,520px)}
+.dome.shape-capsule,.dome.shape-oval{padding-bottom:clamp(88px,14vw,150px)}
+.dome.shape-oval{border-radius:50%;padding-left:clamp(36px,9vw,120px);padding-right:clamp(36px,9vw,120px)}
+.dome.shape-leaf{border-radius:min(40vw,360px) 28px min(40vw,360px) 28px}
+.dome.shape-none{border-radius:0}
+.dome.shape-none.nomedia{color:var(--ink)}
+.dome.shape-none.nomedia .btn-white{background:var(--blue);color:#fff}
+.dome.shape-none.nomedia .btn-ghost{color:var(--blue);border-color:var(--blue)}
+.dome.shape-none.nomedia .float{display:none}
+.hrmrow .note{display:block;word-break:break-all}.hrmact{display:flex;gap:6px}

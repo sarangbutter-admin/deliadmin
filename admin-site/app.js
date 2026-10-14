@@ -1346,8 +1346,8 @@ function viewAnnouncer(){
 
 /* --- Top banner / hero (owner) --- */
 A.hr=null;
-const hrDraft=()=>A.hr||(A.hr=anClone(DB.page.hero));
-const hrDirty=()=>A.hr&&JSON.stringify(A.hr)!==JSON.stringify(DB.page.hero);
+const hrDraft=()=>A.hr||(A.hr=heroNorm(DB.page.hero));
+const hrDirty=()=>A.hr&&JSON.stringify(A.hr)!==JSON.stringify(heroNorm(DB.page.hero));
 function hrDraw(){
   const el=document.getElementById("hrPrev");if(!el)return;const pg=DB.page,wrap=el.parentNode;
   wrap.style.setProperty("--blue",pg.brand);wrap.style.setProperty("--display",lpFamily(pg.headFont,pg));wrap.style.setProperty("--body",lpFamily(pg.bodyFont,pg));
@@ -1378,12 +1378,18 @@ function viewHero(){
       <div class="grid2" style="margin-top:10px">${inp("Button 1 label (empty hides it)","btn1",30)}${inp("Button 2 label (empty hides it)","btn2",30)}</div>
       <div class="grid2" style="margin-top:10px">${col("Banner color","bg",h.bg||pg.brand)}${col("Text color","color",h.color||"#ffffff")}</div>
     </section>
-    <section class="panel"><h2>Background picture or video</h2>
-      <label class="af" style="margin-top:10px">Media<select class="in" data-hr="mediaType" data-hrrr="1"><option value="none" ${mt==="none"?"selected":""}>None (solid color)</option><option value="image" ${mt==="image"?"selected":""}>Image</option><option value="video" ${mt==="video"?"selected":""}>Video</option></select></label>
-      ${mt!=="none"?`<div class="colin" style="margin-top:10px"><label class="ghost mqbtn">${src?"Replace":"Upload"} ${mt}<input type="file" accept="${mt==="image"?"image/*":"video/mp4,video/webm"}" hidden data-hrmedia></label>${src?`<button class="danger" type="button" data-hrmediarm>Remove</button>`:""}</div>
-        <label class="af" style="margin-top:10px">Or paste a link (https)<input class="in" data-hr="src" value="${isData?"":esc(src)}" placeholder="${isData?"Uploaded file":"https://..."}"></label>
-        ${mt==="video"?`<p class="note">Uploaded videos are limited to 3 MB. For longer ones paste an .mp4 link.</p>`:""}
-        <label class="af" style="margin-top:10px">Darken the picture: ${h.overlay}%<input type="range" min="0" max="80" step="5" value="${h.overlay}" data-hr="overlay" data-hrnum="1"></label>`:""}
+    <section class="panel"><h2>Shape</h2><p class="sub">The shape of the banner. Its color is the Banner color above. "No shape" removes it.</p>
+      <div class="chips" style="margin-top:10px">${heroShapes().map(([k,l])=>`<button class="fchip" type="button" data-hrshape="${k}" aria-pressed="${(h.shape||"dome")===k}">${l}</button>`).join("")}</div>
+    </section>
+    <section class="panel"><h2>Pictures and videos</h2><p class="sub">Shown behind the words. Add as many as you like (up to 8). Uploaded videos: 3 MB each, or paste an .mp4 link.</p>
+      <div class="stack" style="gap:8px;margin-top:10px">${h.media.map((m,i)=>{const sm=safeMedia(m.src);return `<div class="pmcard hrmrow"><div class="hrmth">${m.type==="video"?`<span aria-hidden="true">🎬</span>`:`<img src="${esc(imgOk(sm))}" alt="">`}</div>
+        <div><b>${m.type==="video"?"Video":"Picture"} ${i+1}</b><small class="note">${/^data:/i.test(m.src)?"Uploaded":esc(String(m.src).slice(0,60))}</small></div>
+        <div class="hrmact"><button class="ghost" type="button" data-hrmup="${i}" ${i?"":"disabled"} aria-label="Move up">↑</button><button class="ghost" type="button" data-hrmdn="${i}" ${i<h.media.length-1?"":"disabled"} aria-label="Move down">↓</button><button class="danger" type="button" data-hrmrm="${i}">Remove</button></div></div>`}).join("")||`<p class="note">None yet. The banner shows its solid color.</p>`}</div>
+      <div class="colin" style="margin-top:10px;flex-wrap:wrap;gap:8px"><label class="ghost mqbtn">+ Add picture<input type="file" accept="image/*" hidden data-hradd="image"></label><label class="ghost mqbtn">+ Add video<input type="file" accept="video/mp4,video/webm" hidden data-hradd="video"></label></div>
+      <div class="colin" style="margin-top:10px"><input class="in" id="hrLink" placeholder="Or paste a link (https://... .jpg / .mp4)"><button class="ghost" type="button" data-hrlink>Add link</button></div>
+      ${h.media.length>1?`<div style="display:flex;gap:10px;align-items:center;margin-top:14px;flex-wrap:wrap"><label class="sw"><input type="checkbox" data-hr="carousel" data-hrrr="1" ${h.carousel!==false?"checked":""} aria-label="Carousel"><span></span></label><span class="stlabel">Carousel: play them one after another${h.carousel!==false?"":" (off: only the first one shows)"}</span>
+        ${h.carousel!==false?`<label class="af" style="margin:0;max-width:170px"><div class="money-in"><input class="in" type="number" min="2" max="30" step="1" data-hr="carouselSec" data-hrnum="1" value="${+h.carouselSec||5}"><span style="padding-right:10px">sec each</span></div></label>`:""}</div>`:""}
+      ${h.media.length?`<label class="af" style="margin-top:10px">Darken the picture: ${h.overlay}%<input type="range" min="0" max="80" step="5" value="${h.overlay}" data-hr="overlay" data-hrnum="1"></label>`:""}
     </section>
     <section class="panel"><h2>Floating cookies</h2>
       <div style="display:flex;gap:10px;align-items:center;margin:10px 0"><label class="sw"><input type="checkbox" data-hr="floats" ${h.floats?"checked":""} aria-label="Show floating cookies"><span></span></label><span class="stlabel">Show floating cookies</span></div>
@@ -2572,19 +2578,29 @@ am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
 
 am.addEventListener("input",e=>{const el=e.target;if(!el.dataset.hr)return;hrSet(el)});
 function hrSet(el){const h=hrDraft(),k=el.dataset.hr;h[k]=el.type==="checkbox"?el.checked:el.dataset.hrnum?+el.value:el.value;
-  if(k==="src"&&!el.value)h.src="";hrDraw();if(el.dataset.hrrr)renderAdmin();else if(el.dataset.hrnum){const l=el.closest("label");if(l&&l.firstChild)l.firstChild.textContent=`Darken the picture: ${h.overlay}%`}}
+  if(k==="src"&&!el.value)h.src="";hrDraw();if(el.dataset.hrrr)renderAdmin();else if(k==="overlay"){const l=el.closest("label");if(l&&l.firstChild)l.firstChild.textContent=`Darken the picture: ${h.overlay}%`}}
 am.addEventListener("change",async e=>{const el=e.target;
   if(el.dataset.hr){hrSet(el);return}
   if(el.dataset.hrck!==undefined){const f=el.files[0];if(!f)return;try{hrDraft().cookies[+el.dataset.hrck]=await lpResize(f,360);renderAdmin();toast("Added to the preview. Press Save to publish.")}catch(err){toast(err.message)}return}
+  if(el.dataset.hradd){const f=el.files[0];if(!f)return;const h=hrDraft(),ty=el.dataset.hradd;el.value="";
+    if(h.media.length>=8){toast("Up to 8 pictures and videos.");return}
+    try{let src;if(ty==="video"){if(f.size>3*1024*1024){toast("That video is over 3 MB. Paste a link to an .mp4 instead.");return}src=await readData(f)}else src=await lpResize(f,1600);
+      const used=h.media.reduce((a,m)=>a+(/^data:/i.test(m.src)?m.src.length:0),0);if(used+src.length>8e6){toast("That's too much uploaded media. Remove one, or paste a link instead.");return}
+      h.media.push({type:ty,src});renderAdmin();toast("Added to the preview. Press Save to publish.")}catch(err){toast(err.message)}return}
   if(el.dataset.hrmedia!==undefined){const f=el.files[0];if(!f)return;const h=hrDraft();
     try{if(h.mediaType==="video"){if(f.size>3*1024*1024){toast("That video is over 3 MB. Paste a link to an .mp4 instead.");el.value="";return}h.src=await readData(f)}else h.src=await lpResize(f,1600);renderAdmin();toast("Added to the preview. Press Save to publish.")}catch(err){toast(err.message)}}});
 am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;const d=b.dataset;
   if(d.gotab){A.tab=d.gotab;renderAdmin();scrollTo(0,0)}
   else if(d.hrckrm!==undefined){hrDraft().cookies[+d.hrckrm]="";renderAdmin()}
   else if(d.hrmediarm!==undefined){hrDraft().src="";renderAdmin()}
-  else if(d.hrsave!==undefined){const prev=DB.page.hero;DB.page.hero=anClone(A.hr);if(saveDB()){if(SBH.publish)SBH.publish(["page"]);toast("Top banner published to the shop");A.hr=null;renderAdmin()}else{DB.page.hero=prev;toast("Not enough storage space. Try smaller pictures.")}}
+  else if(d.hrshape){hrDraft().shape=d.hrshape;renderAdmin()}
+  else if(d.hrmrm!==undefined){hrDraft().media.splice(+d.hrmrm,1);renderAdmin()}
+  else if(d.hrmup!==undefined||d.hrmdn!==undefined){const m=hrDraft().media,i=+(d.hrmup??d.hrmdn),j=d.hrmup!==undefined?i-1:i+1;if(m[j]){[m[i],m[j]]=[m[j],m[i]];renderAdmin()}}
+  else if(d.hrlink!==undefined){const v=($("#hrLink")||{}).value||"",u=safeMedia(v.trim()),h=hrDraft();if(!u||!/^https:\/\//i.test(u)){toast("Paste a link that starts with https://");return}if(h.media.length>=8){toast("Up to 8 pictures and videos.");return}
+    const ty=/\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(u)?"video":"image";h.media.push({type:ty,src:u});renderAdmin();toast("Added to the preview. Press Save to publish.")}
+  else if(d.hrsave!==undefined){const prev=DB.page.hero;DB.page.hero=heroNorm(A.hr);if(saveDB()){if(SBH.publish)SBH.publish(["page"]);toast("Top banner published to the shop");A.hr=null;renderAdmin()}else{DB.page.hero=prev;toast("Not enough storage space. Try smaller pictures.")}}
   else if(d.hrdisc!==undefined){A.hr=null;renderAdmin();toast("Changes discarded")}
-  else if(d.hrreset!==undefined){armed(b,()=>{A.hr=anClone(defaultPage().hero);renderAdmin();toast("Reset in the preview. Press Save to publish.")})}
+  else if(d.hrreset!==undefined){armed(b,()=>{A.hr=heroNorm(defaultPage().hero);renderAdmin();toast("Reset in the preview. Press Save to publish.")})}
 });
 
 am.addEventListener("input",e=>{const el=e.target;if(!el.dataset.an)return;anSet(el)});
@@ -2956,7 +2972,7 @@ am.addEventListener("click",e=>{
 /* --- landing page editor --- */
 const LP_DEFAULT_SVG=`<svg viewBox="0 0 30 24" aria-hidden="true"><path d="M3 21a12 12 0 0 1 24 0Z" fill="currentColor"/><circle cx="15" cy="5" r="2.6" fill="currentColor"/><rect x="1" y="20.5" width="28" height="3" rx="1.5" fill="currentColor"/></svg>`;
 function defaultPage(){return {name:"delidome",logo:"",brand:"#000096",bg:"#ffffff",ink:"#0B0B45",headFont:"display",bodyFont:"body",fonts:[],
-  hero:{eyebrow:"Baked fresh every morning",title:"Warm cookies, boxed your way.",lede:"Pick a box, fill it with the flavors you love, and choose when you want it. Pickup or local delivery.",btn1:"Build a box",btn2:"See the flavors",bg:"",color:"#ffffff",mediaType:"none",src:"",overlay:35,floats:true,cookies:["","","","","",""]},
+  hero:{eyebrow:"Baked fresh every morning",title:"Warm cookies, boxed your way.",lede:"Pick a box, fill it with the flavors you love, and choose when you want it. Pickup or local delivery.",btn1:"Build a box",btn2:"See the flavors",bg:"",color:"#ffffff",mediaType:"none",src:"",overlay:35,floats:true,cookies:["","","","","",""],media:[],carousel:true,carouselSec:5,shape:"dome"},
   strip:{items:[{t:"Boxes of {sizes}",on:true},{t:"Order by {cutoff} for the next day",on:true},{t:"Closed {closed}",on:true}]},
   build:{title:"Build your box",intro:"Choose a size, fill every spot, then tell us when you want it. Each box is baked the morning it leaves the oven room."},
   blocks:[],
@@ -3003,12 +3019,23 @@ function heroFill(dome,h){
   ey.textContent=h.eyebrow;ey.hidden=!h.eyebrow;ti.textContent=h.title;le.textContent=h.lede;le.hidden=!h.lede;
   ab[0].textContent=h.btn1;ab[0].hidden=!h.btn1;ab[1].textContent=h.btn2;ab[1].hidden=!h.btn2;
   dome.style.background=h.bg||"";dome.style.color=h.color||"";dome.classList.toggle("nofloat",!h.floats);
-  const hm=q(".hm"),src=safeMedia(h.src);let hasM=false;hm.innerHTML="";hm.style.backgroundImage="";
-  if(h.mediaType==="image"&&src){hm.style.backgroundImage=`url("${imgOk(src).replace(/["()\\\s]/g,c=>encodeURIComponent(c))}")`;hasM=true}
-  else if(h.mediaType==="video"&&src){const v=videoHTML(src,{bg:true});if(v){hm.innerHTML=v;hasM=true}}
+  const hm=q(".hm");hm.innerHTML="";hm.style.backgroundImage="";clearInterval(dome._car);
+  let list=heroList(h);if(!(h.carousel!==false))list=list.slice(0,1);
+  list.forEach((m,i)=>{const src=safeMedia(m.src),sl=document.createElement("div");sl.className="hs"+(i?"":" on");
+    if(m.type==="video"){const v=videoHTML(src,{bg:true});if(!v)return;sl.innerHTML=v}
+    else sl.style.backgroundImage=`url("${imgOk(src).replace(/["()\\\s]/g,c=>encodeURIComponent(c))}")`;
+    hm.appendChild(sl)});
+  const sls=hm.querySelectorAll(".hs"),hasM=sls.length>0;
+  if(sls.length>1){let k=0;dome._car=setInterval(()=>{if(!dome.isConnected){clearInterval(dome._car);return}sls[k].classList.remove("on");k=(k+1)%sls.length;sls[k].classList.add("on")},Math.max(2,Math.min(30,+h.carouselSec||5))*1000)}
+  const shp=heroShapes().some(x=>x[0]===h.shape)?h.shape:"dome";heroShapes().forEach(x=>dome.classList.remove("shape-"+x[0]));dome.classList.add("shape-"+shp);dome.classList.toggle("nomedia",!hasM);
+  if(shp==="none"){dome.style.background=hasM?"#000":"transparent";if(!hasM&&/^#fff(fff)?$/i.test(h.color||"#ffffff"))dome.style.color=""}
   q(".ho").style.opacity=hasM?(Math.max(0,Math.min(90,+h.overlay||0))/100):0;
   heroFloats(dome,h);
 }
+function heroShapes(){return [["dome","Dome (arch top)"],["rounded","Rounded box"],["pill","Pill"],["capsule","Capsule (round top and bottom)"],["oval","Oval"],["leaf","Leaf"],["none","No shape"]]}
+function heroList(h){const L=(h.media||[]).filter(m=>m&&safeMedia(m.src));if(L.length)return L;
+  return h.mediaType&&h.mediaType!=="none"&&safeMedia(h.src)?[{type:h.mediaType,src:h.src}]:[]}
+function heroNorm(h){const c=anClone(h);if(!Array.isArray(c.media))c.media=[];if(!c.media.length&&c.mediaType&&c.mediaType!=="none"&&c.src)c.media=[{type:c.mediaType,src:c.src}];c.mediaType="none";c.src="";return c}
 let favKey="";
 function lpFavicon(pg){
   let l=document.querySelector('link[rel="icon"]');if(!l){l=document.createElement("link");l.rel="icon";document.head.appendChild(l)}

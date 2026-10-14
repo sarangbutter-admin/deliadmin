@@ -1248,7 +1248,7 @@ function mqBuild(el){
 function mqFit(){document.querySelectorAll(".marq").forEach(el=>{if(el._m&&!el.hidden)mqBuild(el);else if(el._ai&&!el.hidden)anMqBuild(el)})}
 const LP_DEFAULT_SVG=`<svg viewBox="0 0 30 24" aria-hidden="true"><path d="M3 21a12 12 0 0 1 24 0Z" fill="currentColor"/><circle cx="15" cy="5" r="2.6" fill="currentColor"/><rect x="1" y="20.5" width="28" height="3" rx="1.5" fill="currentColor"/></svg>`;
 function defaultPage(){return {name:"delidome",logo:"",brand:"#000096",bg:"#ffffff",ink:"#0B0B45",headFont:"display",bodyFont:"body",fonts:[],
-  hero:{eyebrow:"Baked fresh every morning",title:"Warm cookies, boxed your way.",lede:"Pick a box, fill it with the flavors you love, and choose when you want it. Pickup or local delivery.",btn1:"Build a box",btn2:"See the flavors",bg:"",color:"#ffffff",mediaType:"none",src:"",overlay:35,floats:true,cookies:["","","","","",""]},
+  hero:{eyebrow:"Baked fresh every morning",title:"Warm cookies, boxed your way.",lede:"Pick a box, fill it with the flavors you love, and choose when you want it. Pickup or local delivery.",btn1:"Build a box",btn2:"See the flavors",bg:"",color:"#ffffff",mediaType:"none",src:"",overlay:35,floats:true,cookies:["","","","","",""],media:[],carousel:true,carouselSec:5,shape:"dome"},
   strip:{items:[{t:"Boxes of {sizes}",on:true},{t:"Order by {cutoff} for the next day",on:true},{t:"Closed {closed}",on:true}]},
   build:{title:"Build your box",intro:"Choose a size, fill every spot, then tell us when you want it. Each box is baked the morning it leaves the oven room."},
   blocks:[],
@@ -1294,12 +1294,23 @@ function heroFill(dome,h){
   ey.textContent=h.eyebrow;ey.hidden=!h.eyebrow;ti.textContent=h.title;le.textContent=h.lede;le.hidden=!h.lede;
   ab[0].textContent=h.btn1;ab[0].hidden=!h.btn1;ab[1].textContent=h.btn2;ab[1].hidden=!h.btn2;
   dome.style.background=h.bg||"";dome.style.color=h.color||"";dome.classList.toggle("nofloat",!h.floats);
-  const hm=q(".hm"),src=safeMedia(h.src);let hasM=false;hm.innerHTML="";hm.style.backgroundImage="";
-  if(h.mediaType==="image"&&src){hm.style.backgroundImage=`url("${imgOk(src).replace(/["()\\\s]/g,c=>encodeURIComponent(c))}")`;hasM=true}
-  else if(h.mediaType==="video"&&src){const v=videoHTML(src,{bg:true});if(v){hm.innerHTML=v;hasM=true}}
+  const hm=q(".hm");hm.innerHTML="";hm.style.backgroundImage="";clearInterval(dome._car);
+  let list=heroList(h);if(!(h.carousel!==false))list=list.slice(0,1);
+  list.forEach((m,i)=>{const src=safeMedia(m.src),sl=document.createElement("div");sl.className="hs"+(i?"":" on");
+    if(m.type==="video"){const v=videoHTML(src,{bg:true});if(!v)return;sl.innerHTML=v}
+    else sl.style.backgroundImage=`url("${imgOk(src).replace(/["()\\\s]/g,c=>encodeURIComponent(c))}")`;
+    hm.appendChild(sl)});
+  const sls=hm.querySelectorAll(".hs"),hasM=sls.length>0;
+  if(sls.length>1){let k=0;dome._car=setInterval(()=>{if(!dome.isConnected){clearInterval(dome._car);return}sls[k].classList.remove("on");k=(k+1)%sls.length;sls[k].classList.add("on")},Math.max(2,Math.min(30,+h.carouselSec||5))*1000)}
+  const shp=heroShapes().some(x=>x[0]===h.shape)?h.shape:"dome";heroShapes().forEach(x=>dome.classList.remove("shape-"+x[0]));dome.classList.add("shape-"+shp);dome.classList.toggle("nomedia",!hasM);
+  if(shp==="none"){dome.style.background=hasM?"#000":"transparent";if(!hasM&&/^#fff(fff)?$/i.test(h.color||"#ffffff"))dome.style.color=""}
   q(".ho").style.opacity=hasM?(Math.max(0,Math.min(90,+h.overlay||0))/100):0;
   heroFloats(dome,h);
 }
+function heroShapes(){return [["dome","Dome (arch top)"],["rounded","Rounded box"],["pill","Pill"],["capsule","Capsule (round top and bottom)"],["oval","Oval"],["leaf","Leaf"],["none","No shape"]]}
+function heroList(h){const L=(h.media||[]).filter(m=>m&&safeMedia(m.src));if(L.length)return L;
+  return h.mediaType&&h.mediaType!=="none"&&safeMedia(h.src)?[{type:h.mediaType,src:h.src}]:[]}
+function heroNorm(h){const c=anClone(h);if(!Array.isArray(c.media))c.media=[];if(!c.media.length&&c.mediaType&&c.mediaType!=="none"&&c.src)c.media=[{type:c.mediaType,src:c.src}];c.mediaType="none";c.src="";return c}
 let favKey="";
 function lpFavicon(pg){
   let l=document.querySelector('link[rel="icon"]');if(!l){l=document.createElement("link");l.rel="icon";document.head.appendChild(l)}
