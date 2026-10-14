@@ -57,7 +57,7 @@ function rng(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15
 function seedDB(){
   const now=Date.now(), H=3600e3;
   const db={v:1,
-    settings:{currency:"$",tz:"Asia/Jakarta",deliveryFee:5,deliveryKm:10,samedayOn:false,samedayLeadH:3,samedayCutoff:15,samedayFee:8,samedayPayMin:60,minPayMin:30,payCdColor:"#C8102E",payCdSize:"L",payCdFx:true,pickupOn:true,pickupLeadH:24,schedOn:true,schedLeadH:24,cutoffHour:20,closedWeekdays:[1],lowStockAt:10,customOn:true,customMin:14,customStep:2,customMax:48,customPer:3.25,payWindowH:24,complaintWindowH:24,waCountry:"62",payBank:"Example Bank\nAccount 123 456 7890\nName: Delidome Cookies",
+    settings:{currency:"$",tz:"Asia/Jakarta",deliveryFee:5,deliveryKm:10,samedayOn:false,samedayLeadH:3,samedayCutoff:15,samedayFee:8,samedayPayMin:60,minPayMin:30,rejPayMin:120,payCdColor:"#C8102E",payCdSize:"L",payCdFx:true,pickupOn:true,pickupLeadH:24,schedOn:true,schedLeadH:24,cutoffHour:20,closedWeekdays:[1],lowStockAt:10,customOn:true,customMin:14,customStep:2,customMax:48,customPer:3.25,payWindowH:24,complaintWindowH:24,waCountry:"62",payBank:"Example Bank\nAccount 123 456 7890\nName: Delidome Cookies",
       times:["10 to 11am","12 to 1pm","3 to 4pm","5 to 6pm"],
       address:"12 Example Street, Your City. Look for the blue dome sign.",
       hours:[["Tue to Fri","10am to 6pm"],["Saturday","9am to 5pm"],["Sunday","10am to 3pm"],["Monday","Closed"]]},
@@ -139,7 +139,7 @@ function defaultAlerts(){return {on:true,sound:true,vol:70,repeat:false,stay:tru
   ev:{order:{on:true,snd:"register"},proof:{on:true,snd:"chime"},complaint:{on:true,snd:"alarm"}}}}
 function defaultLabel(){return {logo:"",qr:"",qrCaption:"",notes:"",warnOn:true,warn1:"UNBOXING WITH UNCUT VIDEO!",warn2:"CONTACT US IF SEAL BROKEN"}}
 function migrate(db){
-  if(db.settings){const D={samedayOn:false,samedayLeadH:3,samedayCutoff:15,samedayFee:8,samedayPayMin:60,minPayMin:30,payCdColor:"#C8102E",payCdSize:"L",payCdFx:true,pickupOn:true,pickupLeadH:24,schedOn:true,schedLeadH:24};for(const k in D)if(db.settings[k]===undefined)db.settings[k]=D[k]}
+  if(db.settings){const D={samedayOn:false,samedayLeadH:3,samedayCutoff:15,samedayFee:8,samedayPayMin:60,minPayMin:30,rejPayMin:120,payCdColor:"#C8102E",payCdSize:"L",payCdFx:true,pickupOn:true,pickupLeadH:24,schedOn:true,schedLeadH:24};for(const k in D)if(db.settings[k]===undefined)db.settings[k]=D[k]}
   db.label=Object.assign(defaultLabel(),db.label||{});
   db.thanks=Object.assign(defaultThanks(),db.thanks||{});
   if(!Array.isArray(db.broadcasts))db.broadcasts=[];
@@ -1728,8 +1728,8 @@ function stepWhy(o,st){
   if(st==="ready"&&del&&!(String(o.courier||"").trim()&&String(o.awb||"").trim()))return "Type the courier and the airway bill number first. The order moves to Out for delivery by itself.";
   const SEQ=["awaiting","review","new","baking","ready","completed"],ci=SEQ.indexOf(cur),si=SEQ.indexOf(st);
   if(st==="new"&&ci>=0&&ci<3&&cur!=="review")return "Confirm payment needs the customer's payment proof first.";
-  if(si>3&&ci>=0&&ci<3)return "Confirm the payment first. Orders can't skip steps.";
-  if(ci>=3&&si>ci+1)return "Orders move one step at a time. They can't skip a step.";
+  if(si>=3&&ci>=0&&ci<2)return "Confirm the payment first. Baking and the next steps only open after Payment confirmed.";
+  if(ci>=2&&si>ci+1)return "Orders move one step at a time. They can't skip a step.";
   if(own)return "";
   if(cur==="review"&&st==="new")return o.rejReq?"A proof rejection is already waiting for the owner.":o.payReq?"Already waiting for the owner's approval.":"";
   if(cur==="review"&&st==="awaiting")return o.payReq?"A payment confirmation is already waiting for the owner.":o.rejReq?"Already waiting for the owner's approval.":"";
@@ -1874,7 +1874,7 @@ $("#modal").addEventListener("click",e=>{
   if(e.target.closest("[data-scok]")&&SC&&!SC.done){
     const o=DB.orders.find(x=>x.id===SC.id);if(!o)return;
     const chv=(document.querySelector('input[name="scNotify"]:checked')||{value:"none"}).value,text=$("#scText").value.trim(),channels=chanList(chv);
-    const ex=SC.extra;delete o.rejReq;delete o.payReq;if(ex&&ex.reject){o.rejected={at:Date.now(),reason:ex.reason||""};o.expiresAt=payDeadlineMs(o)}
+    const ex=SC.extra;delete o.rejReq;delete o.payReq;if(ex&&ex.reject){o.rejected={at:Date.now(),reason:ex.reason||""};o.expiresAt=Math.max(payDeadlineMs(o),Date.now()+Math.max(5,+DB.settings.rejPayMin||120)*60e3)}
     if(ex&&ex.manual){}
     applyStatus(SC.id,SC.st);
     if(channels.length&&text)logMsg(o,channels,SC.st,text,"staff");
@@ -2350,6 +2350,7 @@ function viewSettings(){
       <div class="grid2" style="align-items:start"><label class="af">Payment window<div class="money-in"><input class="in" type="number" min="1" step="1" data-k="settings::payWindowH" value="${s.payWindowH}"><span style="padding-right:10px">hours</span></div><small class="note">The most time a customer gets to pay. It shrinks automatically when the order is due sooner (pickup or delivery time minus lead time).</small></label></div>
       <div class="grid2" style="margin-top:12px;align-items:start"><label class="af">Sameday payment time<div class="money-in"><input class="in" type="number" min="1" step="5" data-k="settings::samedayPayMin" value="${s.samedayPayMin}"><span style="padding-right:10px">minutes</span></div><small class="note">Sameday shipment orders must be paid within this time.</small></label>
         <label class="af">Shortest time to pay<div class="money-in"><input class="in" type="number" min="1" step="5" data-k="settings::minPayMin" value="${s.minPayMin}"><span style="padding-right:10px">minutes</span></div><small class="note">Time slots that leave less than this (after the lead time) are greyed out.</small></label></div>
+      <div class="grid2" style="margin-top:12px;align-items:start"><label class="af">Time to send a new proof after a rejection<div class="money-in"><input class="in" type="number" min="5" step="5" data-k="settings::rejPayMin" value="${s.rejPayMin}"><span style="padding-right:10px">minutes</span></div><small class="note">When you reject a payment proof, the countdown starts again: the normal time to pay, and never less than this.</small></label></div>
       <h3 style="margin:18px 0 4px;font-size:15px">Payment countdown look</h3><p class="sub" style="margin:0 0 8px">The "time left to pay" timer that customers see on their order, on the order placed page and in the notification bell.</p>
       <div class="grid3" style="align-items:end"><label class="af">Timer color<input type="color" data-k="settings::payCdColor" value="${esc(s.payCdColor||"#C8102E")}" style="width:100%;height:42px"></label>
         <label class="af">Timer size<select class="in" data-k="settings::payCdSize">${[["M","Medium"],["L","Large"],["XL","Extra large"]].map(([v,l])=>`<option value="${v}" ${s.payCdSize===v?"selected":""}>${l}</option>`).join("")}</select></label>
@@ -2411,8 +2412,8 @@ function setK(el){
   let v=el.type==="checkbox"?el.checked:el.type==="number"?Math.max(0,parseFloat(el.value)||0):el.value;
   if(field==="cutoffHour"||field==="samedayCutoff")v=+v;
   if(/^(sameday|pickup|sched)LeadH$/.test(field))v=Math.min(720,Math.round(v));
-  if(field==="payWindowH"||field==="complaintWindowH"||field==="samedayPayMin"||field==="minPayMin")v=Math.max(1,v);
-  if(field==="stock"||field==="lowStockAt"||field==="samedayPayMin"||field==="minPayMin"||field==="payWindowH"||field==="complaintWindowH"||/^custom(Min|Step|Max)$/.test(field))v=Math.round(v);
+  if(field==="payWindowH"||field==="complaintWindowH"||field==="samedayPayMin"||field==="minPayMin"||field==="rejPayMin")v=Math.max(1,v);
+  if(field==="stock"||field==="lowStockAt"||field==="samedayPayMin"||field==="minPayMin"||field==="rejPayMin"||field==="payWindowH"||field==="complaintWindowH"||/^custom(Min|Step|Max)$/.test(field))v=Math.round(v);
   if(coll==="settings"){DB.settings[field]=v;const t=DB.settings;if(/^custom/.test(field)){t.customMin=Math.max(1,t.customMin);t.customStep=Math.max(1,t.customStep);if(t.customMax<t.customMin)t.customMax=t.customMin}}
   else{const item=coll==="sizes"?DB.sizes.find(x=>String(x.n)===id):DB[coll].find(x=>x.id===id);if(item)item[field]=v}
   return {coll,field};
