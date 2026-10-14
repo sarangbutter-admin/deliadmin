@@ -2013,7 +2013,11 @@ function createSale(){
 /* --- Flavors --- */
 const lookOptions = p => `${p.img?`<option value="photo" ${p.art==="photo"?"selected":""}>Look: Your photo</option>`:""}${Object.entries(ART).map(([k,a])=>`<option value="${k}" ${p.art===k?"selected":""}>Look: ${a.label}</option>`).join("")}<option value="none" ${p.art==="none"?"selected":""}>Look: None (no image)</option>`;
 const catOptions = sel => `<option value="">No category</option>`+DB.categories.map(c=>`<option value="${c.id}" ${sel===c.id?"selected":""}>${esc(c.name)}</option>`).join("");
+const pIsSold=p=>p.status!=="hidden"&&(p.status==="soldout"||(p.track&&(p.stock||0)<=0));
+const pIsLow=p=>isLow(p)&&!pIsSold(p);
+const PST={all:()=>true,low:pIsLow,sold:pIsSold,hidden:p=>p.status==="hidden"};
 function productMatches(p){
+  if(!(PST[A.pst||"all"]||PST.all)(p))return false;
   if(A.pcat==="none"&&catName(p.cat))return false;
   if(A.pcat!=="all"&&A.pcat!=="none"&&p.cat!==A.pcat)return false;
   const q=A.pq.trim().toLowerCase();
@@ -2060,6 +2064,7 @@ function viewProducts(){
   <section class="panel">
     <div class="phead"><div><h2>Menu</h2><p class="sub" id="pCount">${pCountText()}</p></div>
       <div class="chips"><button class="ghost" type="button" data-pcatmanage>Manage categories</button><button class="btn btn-blue btn-sm" type="button" data-padd>+ Add flavor</button></div></div>
+    <div class="seg p-tabs" role="tablist" aria-label="Stock" style="margin:4px 0 12px">${[["all","All"],["low","Low stock"],["sold","Sold out"],["hidden","Hidden"]].map(([k,l])=>`<button type="button" role="tab" data-pst="${k}" aria-pressed="${(A.pst||"all")===k}" class="pst-${k}">${l} <i>${DB.products.filter(PST[k]).length}</i></button>`).join("")}</div>
     <div class="ptools"><input class="search" id="pSearch" type="search" placeholder="Search flavor or category" value="${esc(A.pq)}" aria-label="Search flavors and categories"></div>
     <div class="chips" style="margin-bottom:6px">${chip("all","All",DB.products.length)}${DB.categories.map(c=>chip(c.id,esc(c.name),DB.products.filter(p=>p.cat===c.id).length)).join("")}${noCat&&DB.categories.length?chip("none","No category",noCat):""}</div>
     <details class="helpd"><summary>How prices, stock and photos work</summary><p>Extra price is charged per cookie on top of the box price; leave it at 0 for regular flavors. Stock counts cookies: each order takes them out and a cancelled order puts them back, and at 0 the flavor shows "Out of stock" by itself. Upload or drag a photo onto any flavor; it's cropped square and resized to 400 px, and a PNG with a transparent background shows as a cut-out. Look: None shows an empty circle.</p></details>
@@ -2605,6 +2610,7 @@ am.addEventListener("click",e=>{
   else if(d.padd!==undefined){openAddFlavor()}
   else if(d.pcatmanage!==undefined){openCats()}
   else if(d.pcat){A.pcat=d.pcat;renderAdmin()}
+  else if(d.pst){A.pst=d.pst;renderAdmin()}
   else if(d.pclear!==undefined){A.pq="";A.pcat="all";renderAdmin()}
   else if(d.sadd!==undefined){const n=Math.round(+$("#newN").value),p=+$("#newP").value,err=$("#sizeErr");
     if(!(n>=1&&n<=24)){err.textContent="Box size must be between 1 and 24 cookies.";err.hidden=false;return}

@@ -910,3 +910,7 @@ body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
 .fchip.fc-rej[aria-pressed="true"]{background:#C8102E;color:#fff;border-color:#C8102E}
 .draftbar.idle{background:#EEF7F1;border-color:#9AD3AE;color:#0a4d27;box-shadow:none}
 .draftbar button[disabled]{opacity:.45;cursor:not-allowed}
+.p-tabs{display:flex;flex-wrap:wrap;gap:6px}
+.p-tabs button i{font-style:normal;opacity:.7;margin-left:4px}
+.p-tabs .pst-low:not([aria-pressed="true"]){color:#B35A00}
+.p-tabs .pst-sold:not([aria-pressed="true"]){color:#C8102E}
