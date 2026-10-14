@@ -441,7 +441,7 @@ function renderStoreStatic(){
 function ctaState(){
   const left=S.size-S.box.length;
   if(S.step===1) return left>0?{label:`Pick ${left} more`,dis:true}:{label:"Choose a day",dis:false,go:"step2"};
-  if(!S.day||!S.time) return {label:"Pick a day and time",dis:true};
+  if(!S.day||!S.time) return {label:"Pick a day and time",dis:false,go:"when"};
   return {label:`Checkout (${money(total())})`,dis:false,go:"checkout"};
 }
 function renderStore(){
@@ -494,7 +494,7 @@ function renderStore(){
   renderCoupon(q);
   $("#total").textContent=money(total());
   const c=ctaState();
-  for(const b of [$("#panelCta"),$("#barCta")]){b.textContent=c.label;b.disabled=c.dis;b.dataset.go=c.go||"";b.classList.toggle("ready",!c.dis)}
+  for(const b of [$("#panelCta"),$("#barCta")]){b.textContent=c.label;b.disabled=c.dis;b.dataset.go=c.go||"";b.classList.toggle("ready",!c.dis&&c.go!=="when")}
   $("#clearBtn").disabled=!S.box.length;
   $("#randBtn").disabled=!availProducts().length;
   $("#randLabel").textContent=full()?"Shuffle box":"Random fill";
@@ -681,7 +681,8 @@ function scrollToEl(el){
 function goStep(n){if(n===2&&!full())return;S.step=n;renderStore();
   if(document.activeElement)document.activeElement.blur();
   scrollToEl($(n===2?"#step2":"#build"))}
-function cta(go){if(go==="step2")goStep(2);else if(go==="checkout")openCheckout()}
+function cta(go){if(go==="when"){if(document.activeElement)document.activeElement.blur();const sd=$("#dayBlock").hidden;scrollToEl($(!sd&&!S.day?"#dayBlock":!sd&&S.day&&!$("#timeBlock").hidden?"#timeBlock":"#step2"));return}
+  if(go==="step2")goStep(2);else if(go==="checkout")openCheckout()}
 const CUST_KEY="delidome-cust-v1";
 function loadCust(){try{return JSON.parse(localStorage.getItem(CUST_KEY)||"{}")||{}}catch(e){return {}}}
 function saveCust(){try{const r=document.querySelector('input[name="coNotify"]:checked');localStorage.setItem(CUST_KEY,JSON.stringify({name:$("#coName").value,phone:$("#coPhone").value,email:$("#coEmail").value,address:$("#coAddr").value,notify:r?r.value:"both"}))}catch(e){}}
