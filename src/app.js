@@ -1948,6 +1948,28 @@ $("#modal").addEventListener("click",e=>{
     closeModal();CPY=null;setOrderStatus(o.id,"awaiting",{reject:true,reason:r});return}
 });
 
+/* --- deleting flavors, extras, box sizes and categories: owner only, type a random code to confirm --- */
+let DELC=null;
+function delConfirm(what,fn){
+  if(ROLE()!=="owner"){toast("Only an owner can delete this.");return}
+  const A2="ABCDEFGHJKLMNPQRSTUVWXYZ23456789",code=Array.from({length:5},()=>A2[Math.floor(Math.random()*A2.length)]).join("");
+  const back=A.modal==="cats";DELC={code,fn,back};
+  openModal(`<div class="sheet-top"><h3 id="modalTitle">Delete ${esc(what)}?</h3><button class="x" type="button" data-delno aria-label="Close">✕</button></div>
+  <p style="margin:0 0 10px">This can't be undone. To confirm, type the code below.</p>
+  <div class="delcode" aria-label="Code ${code.split("").join(" ")}">${code}</div>
+  <label class="af" style="margin-top:10px">Type the code<input class="in" id="delIn" maxlength="5" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="5 characters"></label>
+  <p class="err" id="delErr" hidden>The code doesn't match.</p>
+  <div class="mo-row" style="margin-top:14px;gap:10px;justify-content:flex-end"><button class="ghost" type="button" data-delno>Cancel</button><button class="danger" type="button" data-delok disabled>Delete</button></div>`,"delconfirm");
+  setTimeout(()=>{const i=$("#delIn");i&&i.focus()},50);
+}
+$("#modal").addEventListener("input",e=>{if(A.modal!=="delconfirm"||e.target.id!=="delIn"||!DELC)return;const ok=e.target.value.trim().toUpperCase()===DELC.code;$("[data-delok]").disabled=!ok;$("#delErr").hidden=ok||e.target.value.trim().length<5});
+$("#modal").addEventListener("click",e=>{
+  if(A.modal!=="delconfirm"||!DELC)return;
+  if(e.target.closest("[data-delno]")||e.target.id==="modal"){const bk=DELC.back;DELC=null;closeModal();if(bk)openCats();return}
+  if(e.target.closest("[data-delok]")){if(($("#delIn").value||"").trim().toUpperCase()!==DELC.code){$("#delErr").hidden=false;return}
+    const {fn,back}=DELC;DELC=null;closeModal();if(back)openCats();fn()}
+},true);
+
 /* --- Flash sales --- */
 function viewSales(){
   const D=A.draft,now=Date.now();
@@ -2023,33 +2045,37 @@ function productMatches(p){
   const q=A.pq.trim().toLowerCase();
   return !q||[p.name,p.desc,catName(p.cat)].join(" ").toLowerCase().includes(q);
 }
-function prow(p){return `<div class="prow" data-prow="${p.id}">
+function prow(p){const ed=A.pedit===p.id,own=ROLE()==="owner",r=ratingOf(p);return `<div class="prow simple${ed?" editing":""}" data-prow="${p.id}">
       <div class="pthumb" data-drop="${p.id}">${plateHTML(p)}
         <label class="upl">${p.img?"Replace photo":"Upload photo"}<input type="file" accept="image/*" data-upload="${p.id}" aria-label="Upload photo for ${esc(p.name)}"></label>
-        ${p.img?`<button class="linkbtn sm" type="button" data-rmimg="${p.id}">Remove photo</button>`:""}
-        <button class="linkbtn sm" type="button" data-pbg="${p.id}">🎨 Background</button>
       </div>
       <div class="pfields">
-        <div class="grid3">
+        <div class="grid2">
           <label class="af">Name<input class="in" data-k="products:${p.id}:name" value="${esc(p.name)}" maxlength="40"></label>
-          <label class="af">Category<select class="in" data-k="products:${p.id}:cat">${catOptions(p.cat)}</select></label>
           <label class="af">Extra price per cookie<div class="money-in"><span>+${DB.settings.currency}</span><input class="in" type="number" min="0" step="0.25" data-k="products:${p.id}:surcharge" value="${p.surcharge}"></div></label>
         </div>
-        <label class="af">Description<input class="in" data-k="products:${p.id}:desc" value="${esc(p.desc)}" maxlength="90"></label>
-        <div class="bdgpick"><span class="lblx">Badges</span>${(DB.badges.list||[]).map(b=>{const on=(p.badges||[]).includes(b.id),auto=b.id==="best"&&bestIds().includes(p.id)&&!on;return `<button type="button" class="bdgtog${on?" on":""}${auto?" auto":""}" data-pbadge="${p.id}:${esc(b.id)}" aria-pressed="${on}" title="${auto?"Added automatically (top seller)":on?"Tap to remove":"Tap to add"}">${badgeHTML(b)}${auto?"<small>auto</small>":""}</button>`}).join("")}<button type="button" class="linkbtn sm" data-gotab="badges">Edit badges</button></div>
+        <p class="pmeta">${esc(catName(p.cat)||"No category")} · ${r.n?`★ ${r.avg.toFixed(1)} (${r.n})`:"no reviews"} · position ${DB.products.indexOf(p)+1} of ${DB.products.length}${(p.badges||[]).length?` · ${(p.badges||[]).length} badge${(p.badges||[]).length>1?"s":""}`:""}</p>
         <div class="stockrow">
           <label class="sw"><input type="checkbox" data-k="products:${p.id}:track" ${p.track?"checked":""} aria-label="Track stock for ${esc(p.name)}"><span></span></label><span class="stlabel">Track stock</span>
           ${p.track?`<div class="stepin"><button class="ghost" type="button" data-stk="${p.id}:-1" aria-label="One less">−</button><input class="in" type="number" min="0" step="1" data-k="products:${p.id}:stock" value="${p.stock}" aria-label="Cookies in stock for ${esc(p.name)}"><button class="ghost" type="button" data-stk="${p.id}:1" aria-label="One more">+</button></div><button class="ghost" type="button" data-stk="${p.id}:12">+12</button>${p.stock<=0?`<span class="spill out">Out of stock</span>`:p.stock<=DB.settings.lowStockAt?`<span class="spill low">Low: ${p.stock} left</span>`:`<span class="spill ok">${p.stock} in stock</span>`}`:`<span class="note">Unlimited. Turn on to count cookies.</span>`}
         </div>
         <div class="pfoot">
-          <div class="left">
-            <div class="seg" role="group" aria-label="Availability">${[["available","Available"],["soldout","Sold out"],["hidden","Hidden"]].map(([k,l])=>`<button type="button" data-pstatus="${p.id}:${k}" aria-pressed="${p.status===k}">${l}</button>`).join("")}</div>
-            <select class="in" style="width:auto" data-k="products:${p.id}:art" aria-label="Cookie look">${lookOptions(p)}</select>
-            <select class="in" style="width:auto" data-move="${p.id}" aria-label="Move ${esc(p.name)} in the menu"><option value="">Menu position ${DB.products.indexOf(p)+1} of ${DB.products.length}</option><option value="top">Move to top</option><option value="up">Move up one</option><option value="down">Move down one</option><option value="middle">Move to middle</option><option value="bottom">Move to bottom</option></select>
-            <button class="ghost" type="button" data-rvadmin="${p.id}">${(()=>{const r=ratingOf(p);return r.n?`Reviews · ★ ${r.avg.toFixed(1)} (${r.n})`:"Reviews · none yet"})()}</button>
-          </div>
-          <button class="danger" type="button" data-pdel="${p.id}">Delete</button>
+          <div class="left"><div class="seg" role="group" aria-label="Availability">${[["available","Available"],["soldout","Sold out"],["hidden","Hidden"]].map(([k,l])=>`<button type="button" data-pstatus="${p.id}:${k}" aria-pressed="${p.status===k}">${l}</button>`).join("")}</div></div>
+          <div class="left"><button class="btn btn-blue btn-sm" type="button" data-pedit="${p.id}" aria-expanded="${ed}">${ed?"Close":"✎ Edit"}</button>${own?`<button class="danger" type="button" data-pdel="${p.id}">Delete</button>`:""}</div>
         </div>
+        ${ed?`<div class="pedit">
+          <div class="grid2">
+            <label class="af">Category<select class="in" data-k="products:${p.id}:cat">${catOptions(p.cat)}</select></label>
+            <label class="af">Look<select class="in" data-k="products:${p.id}:art" aria-label="Cookie look">${lookOptions(p)}</select></label>
+          </div>
+          <label class="af">Description<input class="in" data-k="products:${p.id}:desc" value="${esc(p.desc)}" maxlength="90"></label>
+          <div class="bdgpick"><span class="lblx">Badges</span>${(DB.badges.list||[]).map(b=>{const on=(p.badges||[]).includes(b.id),auto=b.id==="best"&&bestIds().includes(p.id)&&!on;return `<button type="button" class="bdgtog${on?" on":""}${auto?" auto":""}" data-pbadge="${p.id}:${esc(b.id)}" aria-pressed="${on}" title="${auto?"Added automatically (top seller)":on?"Tap to remove":"Tap to add"}">${badgeHTML(b)}${auto?"<small>auto</small>":""}</button>`}).join("")}<button type="button" class="linkbtn sm" data-gotab="badges">Edit badges</button></div>
+          <div class="grid2" style="align-items:end">
+            <label class="af">Move in the menu<select class="in" data-move="${p.id}" aria-label="Move ${esc(p.name)} in the menu"><option value="">Menu position ${DB.products.indexOf(p)+1} of ${DB.products.length}</option><option value="top">Move to top</option><option value="up">Move up one</option><option value="down">Move down one</option><option value="middle">Move to middle</option><option value="bottom">Move to bottom</option></select></label>
+            <div class="af">Reviews<button class="ghost" type="button" data-rvadmin="${p.id}">${(()=>{const r=ratingOf(p);return r.n?`Reviews · ★ ${r.avg.toFixed(1)} (${r.n})`:"Reviews · none yet"})()}</button></div>
+          </div>
+          <div class="chips">${p.img?`<button class="ghost" type="button" data-rmimg="${p.id}">Remove photo</button>`:""}<button class="ghost" type="button" data-pbg="${p.id}">🎨 Photo background</button></div>
+        </div>`:""}
       </div>
     </div>`}
 function productRows(){
@@ -2181,7 +2207,7 @@ function renderCats(focusNew){
   const cats=DB.categories;
   $("#modalCard").innerHTML=`<div class="sheet-top"><h3 id="modalTitle">Categories</h3><button class="x" type="button" data-mclose aria-label="Close">✕</button></div>
     <p class="note" style="margin-top:6px">Categories group flavors in the shop menu and make them easy to find here. Deleting one keeps its flavors, just without a category.</p>
-    <div style="margin-top:12px">${cats.length?cats.map(c=>`<div class="catrow"><input class="in" data-catname="${c.id}" value="${esc(c.name)}" maxlength="30" aria-label="Category name"><span class="note">${DB.products.filter(p=>p.cat===c.id).length} flavors</span><button class="danger" type="button" data-catdel="${c.id}">Delete</button></div>`).join(""):`<div class="empty">No categories yet.</div>`}</div>
+    <div style="margin-top:12px">${cats.length?cats.map(c=>`<div class="catrow"><input class="in" data-catname="${c.id}" value="${esc(c.name)}" maxlength="30" aria-label="Category name"><span class="note">${DB.products.filter(p=>p.cat===c.id).length} flavors</span>${ROLE()==="owner"?`<button class="danger" type="button" data-catdel="${c.id}">Delete</button>`:""}</div>`).join(""):`<div class="empty">No categories yet.</div>`}</div>
     <div class="catrow" style="grid-template-columns:minmax(0,1fr) auto;margin-top:10px"><input class="in" id="newCatName" maxlength="30" placeholder="New category name" aria-label="New category name"><button class="btn btn-blue btn-sm" type="button" data-catadd>Add</button></div>
     <p class="err" id="catErr" hidden></p>
     <div class="modal-actions"><button class="btn btn-blue" type="button" data-mclose>Done</button></div>`;
@@ -2266,7 +2292,7 @@ function viewBoxes(){
         <td style="width:150px"><div class="money-in"><span>${DB.settings.currency}</span><input class="in" type="number" min="0" step="0.5" data-k="sizes:${s.n}:price" value="${s.price}" aria-label="Price for box of ${s.n}"></div></td>
         <td>${sale?`<span class="spill live">${money(s.price-saleDiscount(sale,s.price))}</span>`:`<span class="note">No</span>`}</td>
         <td><label class="sw"><input type="checkbox" data-k="sizes:${s.n}:active" ${s.active?"checked":""} aria-label="Box of ${s.n} available"><span></span></label></td>
-        <td class="r"><button class="danger" type="button" data-sdel="${s.n}">Delete</button></td></tr>`}).join("")}
+        <td class="r">${ROLE()==="owner"?`<button class="danger" type="button" data-sdel="${s.n}">Delete</button>`:""}</td></tr>`}).join("")}
       </tbody></table></div>
       <div class="grid3" style="margin-top:14px;align-items:end">
         <label class="af">New size (cookies)<input class="in" type="number" min="1" max="24" id="newN" placeholder="e.g. 9"></label>
@@ -2294,7 +2320,7 @@ function viewBoxes(){
         <td><input class="in" data-k="addons:${a.id}:desc" value="${esc(a.desc)}" aria-label="Extra description"></td>
         <td style="width:130px"><div class="money-in"><span>+${DB.settings.currency}</span><input class="in" type="number" min="0" step="0.5" data-k="addons:${a.id}:price" value="${a.price}" aria-label="Extra price"></div></td>
         <td><label class="sw"><input type="checkbox" data-k="addons:${a.id}:active" ${a.active?"checked":""} aria-label="${esc(a.name)} active"><span></span></label></td>
-        <td class="r"><button class="danger" type="button" data-adel="${a.id}">Delete</button></td></tr>`).join("")}
+        <td class="r">${ROLE()==="owner"?`<button class="danger" type="button" data-adel="${a.id}">Delete</button>`:""}</td></tr>`).join("")}
       </tbody></table></div>`:`<div class="empty">No extras yet.</div>`}
     </section>
   </div>`;
@@ -2605,21 +2631,22 @@ am.addEventListener("click",e=>{
   else if(d.saleStart){const s=DB.sales.find(x=>x.id===d.saleStart),len=s.end-s.start;s.start=Date.now();s.end=s.start+len;saveDB();toast("Flash sale is live");renderAdmin()}
   else if(d.saleDel){armed(b,()=>{DB.sales=DB.sales.filter(x=>x.id!==d.saleDel);saveDB();toast("Sale deleted");renderAdmin()})}
   else if(d.pstatus){const [id,st]=d.pstatus.split(":");prod(id).status=st;saveDB();toast("Saved");renderAdmin()}
-  else if(d.pdel!==undefined){armed(b,()=>needOwner("delete a flavor").then(()=>{DB.products=DB.products.filter(p=>p.id!==d.pdel);saveDB();toast("Flavor deleted");renderAdmin()}).catch(()=>{}))}
+  else if(d.pdel!==undefined){delConfirm("this flavor",()=>needOwner("delete a flavor").then(()=>{DB.products=DB.products.filter(p=>p.id!==d.pdel);saveDB();toast("Flavor deleted");renderAdmin()}).catch(()=>{}))}
   else if(d.rvadmin){openAdminReviews(d.rvadmin)}
   else if(d.padd!==undefined){openAddFlavor()}
   else if(d.pcatmanage!==undefined){openCats()}
   else if(d.pcat){A.pcat=d.pcat;renderAdmin()}
   else if(d.pst){A.pst=d.pst;renderAdmin()}
+  else if(d.pedit){A.pedit=A.pedit===d.pedit?null:d.pedit;renderAdmin();const r=document.querySelector(`[data-prow="${d.pedit}"]`);if(r&&A.pedit)r.scrollIntoView({block:"start",behavior:RM?"auto":"smooth"})}
   else if(d.pclear!==undefined){A.pq="";A.pcat="all";renderAdmin()}
   else if(d.sadd!==undefined){const n=Math.round(+$("#newN").value),p=+$("#newP").value,err=$("#sizeErr");
     if(!(n>=1&&n<=24)){err.textContent="Box size must be between 1 and 24 cookies.";err.hidden=false;return}
     if(DB.sizes.some(s=>s.n===n)){err.textContent=`There's already a box of ${n}.`;err.hidden=false;return}
     if(!(p>0)){err.textContent="Set a price above 0.";err.hidden=false;return}
     DB.sizes.push({n,price:p,active:true});saveDB();toast(`Box of ${n} added`);renderAdmin()}
-  else if(d.sdel){armed(b,()=>{if(DB.sizes.length<=1){toast("Keep at least one box size");return}needOwner("delete a box size").then(()=>{DB.sizes=DB.sizes.filter(s=>String(s.n)!==d.sdel);saveDB();toast("Size deleted");renderAdmin()}).catch(()=>{})})}
+  else if(d.sdel){delConfirm("this box size",()=>{if(DB.sizes.length<=1){toast("Keep at least one box size");return}needOwner("delete a box size").then(()=>{DB.sizes=DB.sizes.filter(s=>String(s.n)!==d.sdel);saveDB();toast("Size deleted");renderAdmin()}).catch(()=>{})})}
   else if(d.aadd!==undefined){DB.addons.push({id:uid(),name:"New extra",desc:"",price:1,active:false});saveDB();toast("Extra added, turned off");renderAdmin()}
-  else if(d.adel){armed(b,()=>needOwner("delete an extra").then(()=>{DB.addons=DB.addons.filter(a=>a.id!==d.adel);saveDB();toast("Extra deleted");renderAdmin()}).catch(()=>{}))}
+  else if(d.adel){delConfirm("this extra",()=>needOwner("delete an extra").then(()=>{DB.addons=DB.addons.filter(a=>a.id!==d.adel);saveDB();toast("Extra deleted");renderAdmin()}).catch(()=>{}))}
   else if(d.closed){const i=+d.closed,c=DB.settings.closedWeekdays;DB.settings.closedWeekdays=c.includes(i)?c.filter(x=>x!==i):[...c,i];saveDB();toast("Saved");renderAdmin()}
   else if(d.pbg){openBg(d.pbg);return}
   else if(d.pbadge){const [pid,bid]=d.pbadge.split(":"),p=prod(pid);if(!p)return;const l=p.badges||[];p.badges=l.includes(bid)?l.filter(x=>x!==bid):[...l,bid];if(!p.badges.length)delete p.badges;saveDB();renderAdmin();return}
@@ -3343,7 +3370,7 @@ $("#modal").addEventListener("click",e=>{
   else if(d.catadd!==undefined)addCat();
   else if(d.rvadd!==undefined)addAdminReview();
   else if(d.rvdel){armed(b,()=>{const p=prod(A.rvPid);p.reviews=p.reviews.filter(r=>r.id!==d.rvdel);saveDB();toast("Review deleted");renderAdminReviews();renderAdmin()})}
-  else if(d.catdel){armed(b,()=>needOwner("delete a category").then(()=>{const id=d.catdel;DB.products.forEach(p=>{if(p.cat===id)p.cat=""});DB.categories=DB.categories.filter(c=>c.id!==id);if(A.pcat===id)A.pcat="all";saveDB();toast("Category deleted");renderCats();renderAdmin()}).catch(()=>{}))}
+  else if(d.catdel){delConfirm("this category",()=>needOwner("delete a category").then(()=>{const id=d.catdel;DB.products.forEach(p=>{if(p.cat===id)p.cat=""});DB.categories=DB.categories.filter(c=>c.id!==id);if(A.pcat===id)A.pcat="all";saveDB();toast("Category deleted");openCats();renderAdmin()}).catch(()=>{}))}
 });
 $("#modal").addEventListener("submit",e=>{if(e.target.id==="npForm"){e.preventDefault();saveNewFlavor()}});
 $("#modal").addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.id==="newCatName"){e.preventDefault();addCat()}});
