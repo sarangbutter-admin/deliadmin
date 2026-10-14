@@ -440,7 +440,7 @@ function renderStoreStatic(){
 }
 function ctaState(){
   const left=S.size-S.box.length;
-  if(S.step===1) return left>0?{label:`Pick ${left} more`,dis:true}:{label:"Choose a day",dis:false,go:"step2"};
+  if(S.step===1) return left>0?{label:`Pick ${left} more`,dis:false,go:"pick"}:{label:"Choose a day",dis:false,go:"step2"};
   if(!S.day||!S.time) return {label:"Pick a day and time",dis:false,go:"when"};
   return {label:`Checkout (${money(total())})`,dis:false,go:"checkout"};
 }
@@ -494,7 +494,7 @@ function renderStore(){
   renderCoupon(q);
   $("#total").textContent=money(total());
   const c=ctaState();
-  for(const b of [$("#panelCta"),$("#barCta")]){b.textContent=c.label;b.disabled=c.dis;b.dataset.go=c.go||"";b.classList.toggle("ready",!c.dis&&c.go!=="when")}
+  for(const b of [$("#panelCta"),$("#barCta")]){b.textContent=c.label;b.disabled=c.dis;b.dataset.go=c.go||"";b.classList.toggle("ready",!c.dis&&c.go!=="when");b.classList.toggle("pickmore",c.go==="pick")}
   $("#clearBtn").disabled=!S.box.length;
   $("#randBtn").disabled=!availProducts().length;
   $("#randLabel").textContent=full()?"Shuffle box":"Random fill";
@@ -692,7 +692,8 @@ function openCoWarn(){const s=DB.settings;if(s.coWarnOn===false){openCheckout();
 function closeCoWarn(){const m=$("#cwSheet");if(!m||m.hidden)return;m.hidden=true;document.body.style.overflow=""}
 $("#cwSheet").addEventListener("click",e=>{if(e.target.closest("[data-cwok]")){closeCoWarn();openCheckout();return}if(e.target.id==="cwSheet"||e.target.closest("[data-cwback]"))closeCoWarn()});
 document.addEventListener("keydown",e=>{if(e.key==="Escape")closeCoWarn()});
-function cta(go){if(go==="when"){if(document.activeElement)document.activeElement.blur();const sd=$("#dayBlock").hidden;scrollToEl($(!sd&&!S.day?"#dayBlock":!sd&&S.day&&!$("#timeBlock").hidden?"#timeBlock":"#step2"));return}
+function cta(go){if(go==="pick"){if(document.activeElement)document.activeElement.blur();scrollToEl($("#menuGrid"));return}
+  if(go==="when"){if(document.activeElement)document.activeElement.blur();const sd=$("#dayBlock").hidden;scrollToEl($(!sd&&!S.day?"#dayBlock":!sd&&S.day&&!$("#timeBlock").hidden?"#timeBlock":"#step2"));return}
   if(go==="step2")goStep(2);else if(go==="checkout")openCoWarn()}
 const CUST_KEY="delidome-cust-v1";
 function loadCust(){try{return JSON.parse(localStorage.getItem(CUST_KEY)||"{}")||{}}catch(e){return {}}}
