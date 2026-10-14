@@ -37,7 +37,13 @@ Deno.serve(async (req) => {
       if (action === "areas") {
         const q = clean(body.q, 80);
         if (q.length < 3) return json({ areas: [] });
-        const r = await bs(key, "GET", "/v1/maps/areas?countries=ID&type=double&input=" + encodeURIComponent(q));
+        let r = await bs(key, "GET", "/v1/maps/areas?countries=ID&type=single&input=" + encodeURIComponent(q));
+        console.log("areas", q, r.status, r.ok ? (r.body?.areas || []).length : bsErr(r));
+        if (r.ok && !(r.body?.areas || []).length) {
+          // retry with just the most specific part (e.g. "Cisauk" from "Cisauk, Tangerang, Banten 15345")
+          const first = q.split(/[,.]/)[0].trim();
+          if (first && first !== q) { r = await bs(key, "GET", "/v1/maps/areas?countries=ID&type=single&input=" + encodeURIComponent(first)); console.log("areas retry", first, r.status, (r.body?.areas || []).length); }
+        }
         if (!r.ok) return json({ error: bsErr(r) }, 502);
         const areas = ((r.body && r.body.areas) || []).slice(0, 8).map((a: any) => ({
           id: clean(a.id, 60), name: clean(a.name, 160), postal: clean(a.postal_code, 12),
@@ -46,13 +52,20 @@ Deno.serve(async (req) => {
       }
 
       if (action === "geocode") {
-        const q = [clean(body.address, 200), clean(body.area, 160), "Indonesia"].filter(Boolean).join(", ");
-        const r = await fetch(NOMINATIM + "?format=json&limit=1&countrycodes=id&q=" + encodeURIComponent(q), {
-          headers: { "User-Agent": "delidome-shop/1.0 (delivery quote)", "Accept-Language": "en" },
-        });
-        const j: any[] = r.ok ? await r.json().catch(() => []) : [];
-        if (!j.length) return json({ found: false });
-        return json({ found: true, lat: (+j[0].lat).toFixed(5), lng: (+j[0].lon).toFixed(5), label: clean(j[0].display_name, 200) });
+        // try the full address first, then just the area (less exact: we say so)
+        const find = async (q: string) => {
+          const r = await fetch(NOMINATIM + "?format=json&limit=1&countrycodes=id&q=" + encodeURIComponent(q), {
+            headers: { "User-Agent": "delidome-shop/1.0 (delivery quote)", "Accept-Language": "en" },
+          });
+          const j: any[] = r.ok ? await r.json().catch(() => []) : [];
+          console.log("geocode", r.status, j.length);
+          return j[0];
+        };
+        const addr = clean(body.address, 200), area = clean(body.area, 160).replace(/\b\d{5}\b/g, "").trim();
+        let hit = await find([addr, area, "Indonesia"].filter(Boolean).join(", ")), approx = false;
+        if (!hit && area) { hit = await find(area + ", Indonesia"); approx = true; }
+        if (!hit) return json({ found: false });
+        return json({ found: true, approx, lat: (+hit.lat).toFixed(5), lng: (+hit.lon).toFixed(5), label: clean(hit.display_name, 200) });
       }
 
       // rates
@@ -74,14 +87,19 @@ Deno.serve(async (req) => {
         const r = await bs(key, "POST", "/v1/rates/couriers", {
           origin_latitude: num(o.lat), origin_longitude: num(o.lng), destination_latitude: lat, destination_longitude: lng, couriers: inst.join(","), items,
         });
+        console.log("rates instant", r.status, r.ok ? (r.body?.pricing || []).length : bsErr(r));
         if (r.ok && r.body && Array.isArray(r.body.pricing)) pricing.push(...r.body.pricing); else lastErr = bsErr(r);
-      }
+      } else if (inst.length) console.log("rates instant skipped: missing coordinates", Number.isFinite(lat), Number.isFinite(num(o.lat, NaN)));
       if (reg.length && postal && o.postal) {
         const r = await bs(key, "POST", "/v1/rates/couriers", {
           origin_postal_code: Math.round(num(o.postal)), destination_postal_code: Math.round(num(postal)), couriers: reg.join(","), items,
         });
         if (r.ok && r.body && Array.isArray(r.body.pricing)) pricing.push(...r.body.pricing); else lastErr = lastErr || bsErr(r);
       }
+      if (!pricing.length && !lastErr && inst.length && !(Number.isFinite(lat) && Number.isFinite(lng)))
+        return json({ options: [], error: "Press \"Find my address on the map\" so we can show Gojek and Grab prices." });
+      if (!pricing.length && !lastErr && inst.length && !Number.isFinite(num(o.lat, NaN)))
+        return json({ options: [], error: "The shop's pickup location isn't set yet." });
       if (!pricing.length) return json({ options: [], error: lastErr || "No courier is available for this address." });
 
       const markup = Math.max(0, num(cfg.markup, 0)), step = Math.max(1, num(cfg.roundTo, 500));
@@ -112,6 +130,7 @@ Deno.serve(async (req) => {
     if (action === "test") {
       if (!key) return json({ error: "Save your Biteship API key first." });
       const r = await bs(key, "GET", "/v1/couriers");
+      console.log("test", r.status, r.ok ? "ok" : bsErr(r));
       if (!r.ok) return json({ ok: false, error: bsErr(r) });
       const list = ((r.body && r.body.couriers) || []).map((c: any) => String(c.courier_code || "").toLowerCase());
       return json({ ok: true, mode: key.startsWith("biteship_test") ? "test" : key.startsWith("biteship_live") ? "live" : "unknown", couriers: [...new Set(list)].slice(0, 60) });

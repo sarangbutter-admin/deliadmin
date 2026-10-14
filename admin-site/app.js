@@ -787,11 +787,11 @@ async function bsRates(){
   BSD.busy=false;bsDraw();renderCoSummary();renderStore();
 }
 async function bsGeocode(){
-  const addr=$("#coAddr").value.trim();if(!addr&&!BSD.area){BSD.err="Type your address (and pick your area) first.";bsDraw();return}
+  const addr=$("#coAddr").value.trim(),areaTxt=BSD.area?BSD.area.name:$("#bsArea").value.trim();if(!addr&&!areaTxt){BSD.err="Type your address (and your area) first.";bsDraw();return}
   BSD.busy=true;BSD.err="";bsDraw();
-  try{const r=await SBH.fn("biteship",{action:"geocode",address:addr,area:BSD.area?BSD.area.name:""});BSD.busy=false;BSD.tried=true;
-    if(r.found){BSD.lat=r.lat;BSD.lng=r.lng;BSD.label=r.label;S.ship=null;BSD.opts=[];await bsRates();return}
-    BSD.err="We couldn't find that address on the map. Check the spelling or use your current location.";
+  try{const r=await SBH.fn("biteship",{action:"geocode",address:addr,area:areaTxt});BSD.busy=false;BSD.tried=true;
+    if(r.found){BSD.lat=r.lat;BSD.lng=r.lng;BSD.label=(r.approx?"Near: ":"")+r.label+(r.approx?" (approximate, please check on the map)":"");S.ship=null;BSD.opts=[];await bsRates();return}
+    BSD.err="We couldn't find that address on the map. Pick your area from the list, check the spelling, or use your current location.";
   }catch(e){BSD.busy=false;BSD.err=e.message}
   bsDraw();
 }
