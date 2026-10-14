@@ -1005,3 +1005,5 @@ body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
 .cpwheel{margin-left:auto;cursor:pointer}
 .cpprev{width:42px;height:42px;border-radius:10px;border:2px solid var(--line);flex:none}
 .cpact{display:flex;gap:10px;justify-content:flex-end;margin-top:16px}
+
+.dt-tabs{scroll-margin-top:12px}

@@ -2708,7 +2708,7 @@ am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
 am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
   if(b.dataset.bakeprint!==undefined)printBake(A.bakeDay);else if(b.dataset.bakedl!==undefined)downloadBake(A.bakeDay)});
 am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;const d=b.dataset;
-  if(d.dt){A.dt=d.dt;renderAdmin();window.scrollTo(0,0)}
+  if(d.dt){A.dt=d.dt;renderAdmin();const t=document.querySelector(".dt-tabs");if(t)t.scrollIntoView({block:"start",behavior:"smooth"});else window.scrollTo(0,0)}
   else if(d.srk){A.sr=d.srk;renderAdmin()}
   else if(d.pcm){A.pcm=d.pcm;renderAdmin()}
   else if(d.dd){A.dd=d.dd;renderAdmin()}
