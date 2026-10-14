@@ -255,8 +255,8 @@ function plateInner(p){
   if(!hasImage(p))return "";
   return cookieSVG(artOf(p),seedOf(p.id));
 }
-const HEX6=/^#[0-9a-f]{6}$/i;
-const lumOf=h=>{const c=[1,3,5].map(i=>{const v=parseInt(h.slice(i,i+2),16)/255;return v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4)});return .2126*c[0]+.7152*c[1]+.0722*c[2]};
+const HEX6=/^(#[0-9a-f]{6}|transparent)$/i;
+const lumOf=h=>{if(h==="transparent")return 1;const c=[1,3,5].map(i=>{const v=parseInt(h.slice(i,i+2),16)/255;return v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4)});return .2126*c[0]+.7152*c[1]+.0722*c[2]};
 const BG_DIRS={diag:"linear-gradient(135deg,",down:"linear-gradient(180deg,",right:"linear-gradient(90deg,",radial:"radial-gradient(circle,"};
 // the circle behind a flavor: automatic colour, or the owner's own colour / gradient / picture / none
 function plateBg(p,b){
@@ -3002,7 +3002,7 @@ async function mqSmall(file){
 am.addEventListener("input",e=>{
   const el=e.target,m=DB.marquee;
   if(el.dataset.mq==="texts"){m.texts=el.value.split("\n").map(x=>x.trim().slice(0,90)).filter(Boolean).slice(0,12);mqPreview();mqSave()}
-  else if(el.dataset.mqc){const k=el.dataset.mqc,v=el.value.trim();if(!HEX6.test(v.startsWith("#")?v:"#"+v))return;const h=(v.startsWith("#")?v:"#"+v).toLowerCase();m[k]=h;
+  else if(el.dataset.mqc){const k=el.dataset.mqc,h=hexNorm(el.value);if(!HEX6.test(h))return;m[k]=h;
     am.querySelectorAll(`[data-mqc="${k}"]`).forEach(o=>{if(o!==el&&o.value.toLowerCase()!==h)o.value=h});mqPreview();mqSave()}
 });
 am.addEventListener("change",async e=>{
@@ -3073,7 +3073,7 @@ const HERO_SPOTS=[[3,6],[85,4],[-4,46],[90,40],[2,84],[86,82],[22,2],[68,2],[14,
 const HERO_FX=[["bob","Float"],["spin","Spin"],["pulse","Pulse"],["wiggle","Wiggle"],["none","Still"]];
 const heroCkN=h=>Math.max(6,Math.min(12,+(h&&h.ckn)||6));
 const heroCkShow=(h,k)=>{const v=h&&h[k];return v===undefined||v===""||v===null?(k==="ckPh"?6:12):Math.max(0,Math.min(12,Math.round(+v)||0))};
-const heroCkx=(h,i)=>{const x=(h&&h.ckx&&h.ckx[i])||{};return{show:x.show!==false,bg:/^#[0-9a-f]{6}$/i.test(x.bg||"")?x.bg:"",op:Math.max(10,Math.min(100,+x.op||95)),fx:HERO_FX.some(f=>f[0]===x.fx)?x.fx:"bob"}};
+const heroCkx=(h,i)=>{const x=(h&&h.ckx&&h.ckx[i])||{};return{show:x.show!==false,bg:/^(#[0-9a-f]{6}|transparent)$/i.test(x.bg||"")?x.bg:"",op:Math.max(10,Math.min(100,+x.op||95)),fx:HERO_FX.some(f=>f[0]===x.fx)?x.fx:"bob"}};
 function heroFloats(dome,h){
   if(!dome)return;dome.querySelectorAll(".float").forEach(n=>n.remove());
   const prods=DB.products.filter(p=>p.status!=="hidden"&&hasImage(p)).slice(0,6),cs=(h&&h.cookies)||[],ph=heroCkShow(h,"ckPh"),pc=heroCkShow(h,"ckPc");let html="",k=0;
@@ -3149,7 +3149,8 @@ function renderLanding(){
 
 const lpGet=path=>path.split(".").reduce((o,k)=>o==null?o:o[k],DB.page);
 function lpSet(path,v){const ks=path.split(".");let o=DB.page;for(let i=0;i<ks.length-1;i++)o=o[ks[i]];o[ks[ks.length-1]]=v}
-const HEX_OK=/^#[0-9a-f]{6}$/i;
+const hexNorm=v=>{v=String(v||"").trim().toLowerCase();if(v==="transparent"||v==="none")return"transparent";return v.startsWith("#")?v:"#"+v};
+const HEX_OK=/^(#[0-9a-f]{6}|transparent)$/i;
 const lpIn=(label,path,o={})=>`<label class="af">${label}${o.rows?`<textarea class="in" rows="${o.rows}" data-lp="${path}" maxlength="${o.max||600}" placeholder="${esc(o.ph||"")}">${esc(lpGet(path)||"")}</textarea>`:`<input class="in" data-lp="${path}" maxlength="${o.max||120}" value="${esc(lpGet(path)||"")}" placeholder="${esc(o.ph||"")}">`}</label>`;
 function lpCol(label,path,fallback,optional){
   const raw=lpGet(path)||"",v=HEX_OK.test(raw)?raw:fallback;
@@ -3233,7 +3234,7 @@ am.addEventListener("input",e=>{
   if(el.dataset.lp&&el.type!=="range"&&el.tagName!=="SELECT"&&el.type!=="checkbox"){lpSet(el.dataset.lp,el.value);lpSave()}
   else if(el.dataset.lpc){const path=el.dataset.lpc,raw=el.value.trim();
     if(raw===""&&el.dataset.lpopt){lpSet(path,"");lpSave();return}
-    const v=raw.startsWith("#")?raw:"#"+raw;if(!HEX_OK.test(v))return;const hx=v.toLowerCase();lpSet(path,hx);
+    const hx=hexNorm(raw);if(!HEX_OK.test(hx))return;lpSet(path,hx);
     am.querySelectorAll(`[data-lpc="${path}"]`).forEach(o=>{if(o!==el&&o.value.toLowerCase()!==hx)o.value=hx});lpSave()}
 });
 am.addEventListener("change",async e=>{
@@ -3647,27 +3648,68 @@ am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b||A.tab!
   else if(d.bdreset!==undefined){armed(b,()=>{const keep=DB.badges;DB.badges=Object.assign(defaultBadges(),{autoBest:keep.autoBest,bestTop:keep.bestTop});const ids=DB.badges.list.map(x=>x.id);DB.products.forEach(p=>{if(p.badges){p.badges=p.badges.filter(x=>ids.includes(x));if(!p.badges.length)delete p.badges}});BD.edit=null;saveDB();renderAdmin();toast("Badges reset")})}
 });
 
+/* --- colour picker pop-up: swatches, HEX code, Transparent (replaces the phone's own colour box everywhere) --- */
+const CP_SW=["#000096","#1A1FB0","#2328C8","#2563EB","#06B6D4","#16A34A","#84CC16","#FACC15","#F97316","#C8102E","#EC4899","#7C3AED","#000000","#475569","#94A3B8","#FFFFFF"];
+const cpShow=v=>v==="transparent"?"transparent":String(v||"").toUpperCase();
+const cpRecent=()=>{try{return JSON.parse(localStorage.getItem("dd_cp_recent")||"[]").filter(x=>HEX6.test(x)).slice(0,8)}catch(e){return[]}};
+function cpAttach(c){
+  if(c._cp)return;c._cp=1;const val=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value"),b=document.createElement("button");
+  const cur=c.value;c.type="text";c.value=cur;c.style.display="none";c.tabIndex=-1;
+  b.type="button";b.className="cpbtn";b.innerHTML="<i></i>";b.setAttribute("aria-label",(c.getAttribute("aria-label")||"Colour")+": choose colour");
+  const paint=()=>{const v=c.value;b.classList.toggle("tr",v==="transparent");b.firstChild.style.background=v==="transparent"?"":v};
+  Object.defineProperty(c,"value",{get(){return val.get.call(this)},set(v){val.set.call(this,v);paint()},configurable:true});
+  c.parentNode.insertBefore(b,c);paint();b.addEventListener("click",()=>cpOpen(c));
+}
+function cpOpen(c){
+  const old=document.getElementById("cpov");if(old)old.remove();
+  let v=HEX6.test(c.value)?c.value.toLowerCase():"#000096";const ov=document.createElement("div");ov.id="cpov";ov.className="cpov";
+  const sw=x=>`<button type="button" class="cpsw" data-c="${x}" style="background:${x}" aria-label="${x}"></button>`,rec=cpRecent();
+  ov.innerHTML=`<div class="cpcard" role="dialog" aria-modal="true" aria-label="Select colour"><h3>Select colour</h3>
+    <div class="cpgrid">${CP_SW.map(sw).join("")}</div>
+    ${rec.length?`<p class="note" style="margin:10px 0 6px">Recently chosen</p><div class="cpgrid">${rec.map(sw).join("")}</div>`:""}
+    <div class="cprow"><button type="button" class="cpsw tr" data-c="transparent" aria-label="Transparent"></button><button type="button" class="ghost" data-c="transparent">Transparent</button>
+      <label class="ghost cpwheel">Colour wheel<input type="color" hidden></label></div>
+    <label class="af" style="margin-top:10px">HEX code<div class="cprow" style="margin:0"><i class="cpprev" id="cpPrev"></i><input class="in" id="cpHex" maxlength="11" spellcheck="false" autocomplete="off" placeholder="#000096"></div></label>
+    <div class="cpact"><button type="button" class="ghost" data-cpx>Cancel</button><button type="button" class="btn btn-blue" id="cpSet" data-cpset>Set</button></div></div>`;
+  document.body.appendChild(ov);
+  const hx=ov.querySelector("#cpHex"),pv=ov.querySelector("#cpPrev"),st=ov.querySelector("#cpSet"),wheel=ov.querySelector("input[type=color]");
+  const show=()=>{pv.classList.toggle("tr",v==="transparent");pv.style.background=v==="transparent"?"":v;hx.value=cpShow(v);hx.classList.remove("bad");st.disabled=false;ov.querySelectorAll(".cpsw").forEach(n=>n.classList.toggle("on",n.dataset.c.toLowerCase()===v))};
+  const close=()=>{ov.remove();document.removeEventListener("keydown",esc)},esc=e=>{if(e.key==="Escape")close()};document.addEventListener("keydown",esc);
+  wheel.value=HEX6.test(v)&&v!=="transparent"?v:"#000096";
+  wheel.addEventListener("input",()=>{v=wheel.value.toLowerCase();show()});
+  hx.addEventListener("input",()=>{let t=hexNorm(hx.value);if(/^#[0-9a-f]{3}$/.test(t))t="#"+t.slice(1).split("").map(q=>q+q).join("");
+    if(HEX6.test(t)){v=t;pv.classList.toggle("tr",v==="transparent");pv.style.background=v==="transparent"?"":v;hx.classList.remove("bad");st.disabled=false;ov.querySelectorAll(".cpsw").forEach(n=>n.classList.toggle("on",n.dataset.c.toLowerCase()===v))}
+    else{hx.classList.toggle("bad",hx.value.trim()!=="");st.disabled=true}});
+  ov.addEventListener("click",e=>{if(e.target===ov){close();return}const b=e.target.closest("button");if(!b)return;
+    if(b.dataset.c){v=b.dataset.c.toLowerCase();show()}
+    else if(b.dataset.cpx!==undefined)close();
+    else if(b.dataset.cpset!==undefined){if(!HEX6.test(v))return;c.value=v;
+      if(v!=="transparent")try{const r=[v,...cpRecent().filter(x=>x!==v)].slice(0,8);localStorage.setItem("dd_cp_recent",JSON.stringify(r))}catch(err){}
+      c.dispatchEvent(new Event("input",{bubbles:true}));c.dispatchEvent(new Event("change",{bubbles:true}));close()}});
+  show();
+}
 /* --- every colour picker also gets a hex code box (type #RRGGBB or pick) --- */
 function hexify(){
   document.querySelectorAll('#adminView input[type=color]:not([data-hexed]),#modal input[type=color]:not([data-hexed])').forEach(c=>{
     c.dataset.hexed="1";
     const par=c.parentElement;
-    if(par&&(par.classList.contains("colin")||par.classList.contains("bgcol"))&&par.querySelector("input.in"))return; // already has one
+    if(par&&(par.classList.contains("colin")||par.classList.contains("bgcol"))&&par.querySelector("input.in")){cpAttach(c);return} // already has one
     const wrap=document.createElement("span");wrap.className="hexwrap";
     c.parentNode.insertBefore(wrap,c);wrap.appendChild(c);
     const t=document.createElement("input");
-    Object.assign(t,{className:"in hexin",maxLength:7,value:c.value.toUpperCase(),placeholder:"#000000",spellcheck:false,autocomplete:"off"});
+    Object.assign(t,{className:"in hexin",maxLength:11,value:cpShow(c.value),placeholder:"#000000",spellcheck:false,autocomplete:"off"});
     t.setAttribute("aria-label","Hex colour code");t.setAttribute("inputmode","text");
     wrap.appendChild(t);
-    const sync=()=>{if(document.activeElement!==t){t.value=c.value.toUpperCase();t.classList.remove("bad")}};
+    const sync=()=>{if(document.activeElement!==t){t.value=cpShow(c.value);t.classList.remove("bad")}};
     c.addEventListener("input",sync);c.addEventListener("change",sync);
     t.addEventListener("input",e=>{e.stopPropagation();
-      let v=t.value.trim();if(v&&v[0]!=="#")v="#"+v;
+      let v=t.value.trim();if(v&&v[0]!=="#"&&!/^(transparent|none)$/i.test(v))v="#"+v;if(/^(transparent|none)$/i.test(v))v="transparent";
       if(/^#[0-9a-f]{3}$/i.test(v))v="#"+v.slice(1).split("").map(x=>x+x).join("");
       const good=HEX6.test(v);t.classList.toggle("bad",t.value.trim()!==""&&!good&&t.value.trim().replace("#","").length>=6);
       if(good&&c.value.toLowerCase()!==v.toLowerCase()){c.value=v.toLowerCase();c.dispatchEvent(new Event("input",{bubbles:true}));c.dispatchEvent(new Event("change",{bubbles:true}))}});
     t.addEventListener("change",e=>{e.stopPropagation();sync()});
-    t.addEventListener("blur",()=>{if(!HEX6.test(t.value.trim().replace(/^([^#])/,"#$1"))){t.value=c.value.toUpperCase();t.classList.remove("bad")}});
+    cpAttach(c);
+    t.addEventListener("blur",()=>{if(!HEX6.test(hexNorm(t.value))){t.value=cpShow(c.value);t.classList.remove("bad")}});
   });
 }
 new MutationObserver(()=>hexify()).observe(document.body,{childList:true,subtree:true});

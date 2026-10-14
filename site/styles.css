@@ -761,3 +761,6 @@ body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
 @media (prefers-reduced-motion:reduce){.cw-card,.cw-ring,.cw-emo{animation:none}}
 .nudge{animation:nudgeShake .5s ease;box-shadow:0 0 0 3px rgba(200,16,46,.45)!important;border-color:#C8102E!important}
 @keyframes nudgeShake{0%,100%{transform:none}20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}
+
+/* colour pop-up */
+.cpsw.on{outline:3px solid var(--blue);outline-offset:1px}

@@ -249,8 +249,8 @@ function plateInner(p){
   if(!hasImage(p))return "";
   return cookieSVG(artOf(p),seedOf(p.id));
 }
-const HEX6=/^#[0-9a-f]{6}$/i;
-const lumOf=h=>{const c=[1,3,5].map(i=>{const v=parseInt(h.slice(i,i+2),16)/255;return v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4)});return .2126*c[0]+.7152*c[1]+.0722*c[2]};
+const HEX6=/^(#[0-9a-f]{6}|transparent)$/i;
+const lumOf=h=>{if(h==="transparent")return 1;const c=[1,3,5].map(i=>{const v=parseInt(h.slice(i,i+2),16)/255;return v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4)});return .2126*c[0]+.7152*c[1]+.0722*c[2]};
 const BG_DIRS={diag:"linear-gradient(135deg,",down:"linear-gradient(180deg,",right:"linear-gradient(90deg,",radial:"radial-gradient(circle,"};
 // the circle behind a flavor: automatic colour, or the owner's own colour / gradient / picture / none
 function plateBg(p,b){
@@ -1295,7 +1295,7 @@ const HERO_SPOTS=[[3,6],[85,4],[-4,46],[90,40],[2,84],[86,82],[22,2],[68,2],[14,
 const HERO_FX=[["bob","Float"],["spin","Spin"],["pulse","Pulse"],["wiggle","Wiggle"],["none","Still"]];
 const heroCkN=h=>Math.max(6,Math.min(12,+(h&&h.ckn)||6));
 const heroCkShow=(h,k)=>{const v=h&&h[k];return v===undefined||v===""||v===null?(k==="ckPh"?6:12):Math.max(0,Math.min(12,Math.round(+v)||0))};
-const heroCkx=(h,i)=>{const x=(h&&h.ckx&&h.ckx[i])||{};return{show:x.show!==false,bg:/^#[0-9a-f]{6}$/i.test(x.bg||"")?x.bg:"",op:Math.max(10,Math.min(100,+x.op||95)),fx:HERO_FX.some(f=>f[0]===x.fx)?x.fx:"bob"}};
+const heroCkx=(h,i)=>{const x=(h&&h.ckx&&h.ckx[i])||{};return{show:x.show!==false,bg:/^(#[0-9a-f]{6}|transparent)$/i.test(x.bg||"")?x.bg:"",op:Math.max(10,Math.min(100,+x.op||95)),fx:HERO_FX.some(f=>f[0]===x.fx)?x.fx:"bob"}};
 function heroFloats(dome,h){
   if(!dome)return;dome.querySelectorAll(".float").forEach(n=>n.remove());
   const prods=DB.products.filter(p=>p.status!=="hidden"&&hasImage(p)).slice(0,6),cs=(h&&h.cookies)||[],ph=heroCkShow(h,"ckPh"),pc=heroCkShow(h,"ckPc");let html="",k=0;
