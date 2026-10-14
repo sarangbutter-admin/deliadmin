@@ -464,13 +464,14 @@
 
   // payment-proof and complaint pictures are fetched when the owner opens them
   H.adminFiles = async function (o) {
-    var need = (o.proof && !o.proof.img) || (o.complaint && o.complaint.photoCount > 0 && !(o.complaint.photos || []).length) || (o.place && o.place.photo && !o.place.img);
+    var need = (o.proof && !o.proof.img) || (o.complaint && o.complaint.photoCount > 0 && !(o.complaint.photos || []).length) || (o.place && o.place.photo && !o.place.img) || (o.refund && o.refund.proof && !o.refund.img);
     if (!need) return;
     try {
       var f = await K.rpc("admin_order_files", { p_id: o.id }, true);
       if (o.proof && f.proof) o.proof.img = f.proof;
       if (o.complaint && f.photos) o.complaint.photos = f.photos;
       if (o.place && f.place) o.place.img = f.place;
+      if (o.refund && f.refund) o.refund.img = f.refund;
     } catch (e) { toast("Couldn't load the picture: " + e.message); }
   };
   // change one order right away (used for staff payment checks and owner approvals)
@@ -482,8 +483,8 @@
   };
   H.flush = flush;
   // owner records a refund (full or part) on a paid order
-  H.refundOrder = async function (id, amount, note, msgs) {
-    var d = await K.rpc("admin_refund_order", { p_id: id, p_amount: amount, p_note: note || "", p_msgs: msgs || [] }, true);
+  H.refundOrder = async function (id, amount, note, msgs, img) {
+    var d = await K.rpc("admin_refund_order", { p_id: id, p_amount: amount, p_note: note || "", p_msgs: msgs || [], p_img: img || "" }, true);
     setOrderIn(DB.orders, d);
     var o = DB.orders.find(function (x) { return x.id === id; }); if (o) SN.orders[id] = snapOrder(o);
     return d;

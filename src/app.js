@@ -1993,7 +1993,7 @@ function viewOrders(){
 
 function openOrder(id){
   const o=DB.orders.find(x=>x.id===id);if(!o)return;A.openOrder=id;
-  if(SBH.on&&!o._ft&&((o.proof&&!o.proof.img)||(o.complaint&&o.complaint.photoCount>0&&!(o.complaint.photos||[]).length)||(o.place&&o.place.photo&&!o.place.img))){o._ft=1;SBH.adminFiles(o).then(()=>{if(A.openOrder===id)openOrder(id)})}
+  if(SBH.on&&!o._ft&&((o.proof&&!o.proof.img)||(o.complaint&&o.complaint.photoCount>0&&!(o.complaint.photos||[]).length)||(o.place&&o.place.photo&&!o.place.img)||(o.refund&&o.refund.proof&&!o.refund.img))){o._ft=1;SBH.adminFiles(o).then(()=>{if(A.openOrder===id)openOrder(id)})}
   const d=$("#drawer");
   d.innerHTML=`<div class="drawer-card" role="dialog" aria-modal="true" aria-label="Order ${esc(o.code)}">
     <div class="sheet-top"><div><h3>${esc(o.code)}</h3><span class="note">Placed ${fmtDT(o.createdAt)}${o.example?" · Example":""}</span></div><button class="x" type="button" data-close aria-label="Close">✕</button></div>
@@ -2007,7 +2007,7 @@ function openOrder(id){
       ${(o.msgs||[]).length?`<div class="ditems">${o.msgs.slice().reverse().map(m=>`<div style="display:grid;gap:2px"><span class="note"><b>${CHANNELS[m.channel]}</b> · ${fmtDT(m.at)} · ${m.by==="system"?"automatic":"staff"}</span><span style="font-size:14px">${esc(m.text)}</span>${m.channel==="whatsapp"?`<a href="${esc(waLink(o,m.text))}" target="_blank" rel="noopener" class="note">Send again on WhatsApp</a>`:`<a href="${esc(mailLink(o,m.text))}" class="note">Send again by email</a>`}</div>`).join("")}</div>`:`<p class="hint" style="margin:0">No messages yet. They're logged when you change the status.</p>`}</div>
     ${o.complaint?`<div class="dsec"><h4>Complaint</h4><p class="hint" style="margin:0 0 8px">${esc(o.complaint.reason)} · ${CP_STATUS[o.complaint.status]}</p><button class="btn btn-blue btn-sm" type="button" data-cpgo>View complaint</button></div>`:""}
     ${o.cancelReason?`<div class="dsec"><h4>Cancelled</h4><p class="hint" style="margin:0">${esc(o.cancelReason)}</p></div>`:""}
-    ${o.refund?`<div class="dsec"><h4>Refund</h4><dl class="dl"><dt>Status</dt><dd><b>${o.refund.full?"Refunded":"Partly refunded"}</b></dd><dt>Amount</dt><dd>${money(o.refund.amount)} of ${money(o.total)}</dd><dt>When</dt><dd>${fmtDT(o.refund.at)}${o.refund.by?` · by ${esc(o.refund.by)}`:""}</dd>${o.refund.note?`<dt>Note</dt><dd>${esc(o.refund.note)}</dd>`:""}</dl></div>`:canRefund(o)?`<div class="dsec"><h4>Refund</h4><p class="hint" style="margin:0 0 8px">Paid orders can be refunded in full or in part. The customer is told in the shop.</p><button class="btn btn-blue btn-sm" type="button" data-refund="${o.id}">💸 Refund this order</button></div>`:""}
+    ${o.refund?`<div class="dsec"><h4>Refund</h4><dl class="dl"><dt>Status</dt><dd><b>${o.refund.full?"Refunded":"Partly refunded"}</b></dd><dt>Amount</dt><dd>${money(o.refund.amount)} of ${money(o.total)}</dd><dt>When</dt><dd>${fmtDT(o.refund.at)}${o.refund.by?` · by ${esc(o.refund.by)}`:""}</dd>${o.refund.note?`<dt>Note</dt><dd>${esc(o.refund.note)}</dd>`:""}</dl>${o.refund.img?`<a href="${esc(imgOk(o.refund.img))}" target="_blank" rel="noopener" style="display:block;margin-top:10px"><img class="proofimg" src="${esc(imgOk(o.refund.img))}" alt="Refund proof"></a>`:o.refund.proof?`<p class="note" style="margin:8px 0 0">Loading the refund proof…</p>`:""}</div>`:canRefund(o)?`<div class="dsec"><h4>Refund</h4><p class="hint" style="margin:0 0 8px">Paid orders can be refunded in full or in part. The customer is told in the shop.</p><button class="btn btn-blue btn-sm" type="button" data-refund="${o.id}">💸 Refund this order</button></div>`:""}
     <div class="dsec"><h4>Shipping label</h4>${o.mode==="delivery"?`<div class="grid2"><label class="af">Courier<input class="in" data-ship="courier" maxlength="30" value="${esc(o.courier||"")}" placeholder="e.g. JNE"></label><label class="af">Airway bill / tracking no.<input class="in" data-ship="awb" maxlength="40" value="${esc(o.awb||"")}" placeholder="e.g. JP1234567890"></label></div>`:`<p class="hint" style="margin:0 0 8px">Pickup order: the label shows the pickup time.</p>`}<button class="btn btn-blue btn-sm" type="button" data-printone="${o.id}" style="margin-top:10px">Print label</button></div>
     <div class="dsec"><h4>Customer</h4><dl class="dl"><dt>Name</dt><dd>${esc(o.customer.name)}</dd><dt>WhatsApp</dt><dd>${esc(o.customer.phone)}</dd><dt>Email</dt><dd>${esc(o.customer.email)}</dd>${o.customer.address?`<dt>Address</dt><dd>${esc(o.customer.address)}</dd>`:""}</dl></div>
     <div class="dsec"><h4>When</h4><dl class="dl"><dt>${modeName(o)}</dt><dd>${esc(whenTxt(o))}</dd>${o.note?`<dt>Note</dt><dd>${esc(o.note)}</dd>`:""}</dl></div>
@@ -2268,6 +2268,7 @@ function renderRefund(){
   <p style="margin:0 0 12px"><b>${esc(o.code)}</b> · ${esc(c.name)} · paid ${money(o.total)}</p>
   <div class="grid2"><label class="af">Refund amount<div class="money-in"><span>${esc(DB.settings.currency)}</span><input class="in" id="rfAmt" type="number" min="0.01" step="0.01" max="${o.total}" value="${o.total}"></div></label>
     <label class="af">Note for the customer (optional)<input class="in" id="rfNote" maxlength="120" placeholder="e.g. sent back to your bank"></label></div>
+  <div class="af" style="margin-top:12px">Refund proof picture (required)<div class="colin" style="flex-wrap:wrap;gap:8px;align-items:center"><label class="ghost mqbtn">📷 <span id="rfFileTx">${RF.img?"Change picture":"Upload picture"}</span><input type="file" accept="image/*" hidden id="rfFile"></label><img id="rfPrev" class="lpthumb" style="max-height:72px;max-width:120px" alt="Refund proof" ${RF.img?`src="${esc(RF.img)}"`:"hidden"}></div><small class="note">The transfer receipt or screenshot. Only the shop team can see it.</small></div>
   <p class="note" style="margin:6px 0 0">Make the bank or e-wallet transfer yourself first. This only records it. A refund can't be undone here.</p>
   <div class="af" style="gap:8px;margin-top:12px">Also message the customer by<div class="stack" style="gap:8px">${opt("whatsapp","WhatsApp",c.phone)}${opt("email","Email",c.email)}${opt("both","Both")}${opt("none","Don't send a message")}</div><p class="note" style="margin:0">The shop bell and order history are updated either way.</p></div>
   <p class="err" id="rfErr" hidden></p>
@@ -2275,18 +2276,26 @@ function renderRefund(){
 }
 document.addEventListener("click",async e=>{
   const rb=e.target.closest("[data-refund]");
-  if(rb){const o=DB.orders.find(x=>x.id===rb.dataset.refund);if(!o||!canRefund(o))return;RF={id:o.id,done:false};openModal("","refund");renderRefund();return}
+  if(rb){const o=DB.orders.find(x=>x.id===rb.dataset.refund);if(!o||!canRefund(o))return;RF={id:o.id,done:false,img:""};openModal("","refund");renderRefund();return}
   if(A.modal!=="refund"||!RF||!e.target.closest("[data-rfok]"))return;
   const o=DB.orders.find(x=>x.id===RF.id),er=$("#rfErr"),btn=e.target.closest("[data-rfok]");if(!o)return;
   const amt=Math.round((+$("#rfAmt").value||0)*100)/100,note=$("#rfNote").value.trim();
   if(!(amt>0&&amt<=o.total+.005)){er.textContent=`Enter an amount from 0.01 up to ${money(o.total)}.`;er.hidden=false;return}
+  if(!RF.img){er.textContent="Upload the refund proof picture first (the transfer receipt or screenshot).";er.hidden=false;return}
   const chv=(document.querySelector('input[name="rfNotify"]:checked')||{value:"none"}).value,channels=chanList(chv),text=refundMsgText(o,amt,note);
   btn.disabled=true;btn.textContent="Saving…";
   try{
-    if(SBH.on)await SBH.refundOrder(o.id,amt,note,channels.map(ch=>({channel:ch,text})));
-    else{o.refund={amount:amt,full:amt>=o.total-.005,at:Date.now(),note,by:"Owner"};logMsg(o,channels,"refunded",text,"staff");saveDB()}
+    if(SBH.on)await SBH.refundOrder(o.id,amt,note,channels.map(ch=>({channel:ch,text})),RF.img);
+    else{o.refund={amount:amt,full:amt>=o.total-.005,at:Date.now(),note,by:"Owner",proof:true,img:RF.img};logMsg(o,channels,"refunded",text,"staff");saveDB()}
     RF.done=true;RF.text=text;RF.channels=channels;renderRefund();renderAdmin();if(A.openOrder===o.id)openOrder(o.id);
   }catch(err){er.textContent=err.message||"Couldn't save the refund.";er.hidden=false;btn.disabled=false;btn.textContent="Mark as refunded"}
+});
+
+document.addEventListener("change",async e=>{
+  const f=e.target.closest&&e.target.closest("#rfFile");if(!f||A.modal!=="refund"||!RF)return;
+  const er=$("#rfErr"),file=f.files&&f.files[0];f.value="";if(!file)return;
+  try{RF.img=await processProof(file);er.hidden=true;const pv=$("#rfPrev");pv.src=RF.img;pv.hidden=false;$("#rfFileTx").textContent="Change picture"}
+  catch(err){er.textContent=err.message||"Couldn't use that picture.";er.hidden=false}
 });
 
 /* --- Check payment pop-up: view the proof, approve or reject with a reason --- */
