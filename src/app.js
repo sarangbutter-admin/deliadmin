@@ -1370,11 +1370,15 @@ function hrDraw(){
 function viewHero(){
   const pg=DB.page,h=hrDraft(),prods=DB.products.filter(p=>p.status!=="hidden"&&hasImage(p)).slice(0,6);
   const inp=(label,path,max,rows)=>`<label class="af">${label}${rows?`<textarea class="in" rows="${rows}" data-hr="${path}" maxlength="${max}">${esc(h[path])}</textarea>`:`<input class="in" data-hr="${path}" maxlength="${max}" value="${esc(h[path])}">`}</label>`;
-  const slot=i=>{const c=safeMedia(h.cookies[i]),pr=prods[i];
+  const slot=i=>{const c=safeMedia(h.cookies[i]),pr=prods[i],x=heroCkx(h,i);
     const thumb=c?`<img src="${esc(c)}" alt="" style="width:100%;height:100%;object-fit:contain">`:pr?`<div class="plate" style="background:#1A1FB0;width:100%">${plateInner(pr)}</div>`:`<span class="note">Empty</span>`;
     return `<div class="pmcard" style="text-align:center;gap:8px"><b style="font-size:13px">Cookie ${i+1}</b><div style="width:72px;height:72px;margin:0 auto;display:grid;place-items:center;background:#EEF0FF;border-radius:50%;overflow:hidden">${thumb}</div>
       <span class="note" style="margin:0">${c?"Your image":pr?"Default (flavor photo)":"Nothing to show"}</span>
-      <label class="ghost mqbtn" style="justify-self:center">${c?"Replace":"Upload"}<input type="file" accept="image/*" hidden data-hrck="${i}"></label>${c?`<button class="danger" type="button" data-hrckrm="${i}">Use default</button>`:""}</div>`};
+      <label class="ghost mqbtn" style="justify-self:center">${c?"Replace":"Upload"}<input type="file" accept="image/*" hidden data-hrck="${i}"></label>${c?`<button class="danger" type="button" data-hrckrm="${i}">Use default</button>`:""}
+      <label class="af" style="margin:0;text-align:left;font-size:12px">Background<input type="color" data-hrx="${i}.bg" value="${x.bg||(i%2?"#2328C8":"#1A1FB0")}" style="width:100%;height:34px"></label>
+      <label class="af" style="margin:0;text-align:left;font-size:12px">Opacity: ${x.op}%<input type="range" min="10" max="100" step="5" value="${x.op}" data-hrx="${i}.op"></label>
+      <label class="af" style="margin:0;text-align:left;font-size:12px">Effect<select class="in" data-hrx="${i}.fx">${HERO_FX.map(([k,l])=>`<option value="${k}"${x.fx===k?" selected":""}>${l}</option>`).join("")}</select></label>
+      ${i>=6?`<button class="danger" type="button" data-hrckdel="${i}">Remove cookie</button>`:""}</div>`};
   const mt=h.mediaType,src=h.src||"",isData=/^data:/i.test(src);
   const col=(l,k,v)=>`<label class="af">${l}<input type="color" data-hr="${k}" value="${v}" style="width:100%;height:42px"></label>`;
   return head("Top banner","The big dome at the top of your shop. Edit everything here and check the preview. Nothing changes in the shop until you press Save.")+MOCK+`
@@ -1409,8 +1413,9 @@ function viewHero(){
     ${pg.strip.items.length<6?`<button class="ghost" type="button" data-lpsadd style="justify-self:start">+ Add item</button>`:""}</div><p class="note" style="margin:8px 0 0">Saved as a draft. Press Save &amp; publish at the top to show it in the shop.</p></section>
     <section class="panel"><h2>Floating cookies</h2>
       <div style="display:flex;gap:10px;align-items:center;margin:10px 0"><label class="sw"><input type="checkbox" data-hr="floats" ${h.floats?"checked":""} aria-label="Show floating cookies"><span></span></label><span class="stlabel">Show floating cookies</span></div>
-      <p class="sub" style="margin:0 0 10px">Upload your own picture for any spot. Spots you leave alone keep showing your flavor photos, as before.</p>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px">${[0,1,2,3,4,5].map(slot).join("")}</div>
+      <p class="sub" style="margin:0 0 10px">Upload a photo from your phone or computer for any spot. It is resized and saved as WebP automatically. Each cookie keeps its round frame; choose its background color, opacity and effect. Spots you leave alone keep showing your flavor photos.</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px">${Array.from({length:heroCkN(h)},(_,i)=>i).map(slot).join("")}</div>
+      ${heroCkN(h)<12?`<button class="ghost" type="button" data-hrckadd style="margin-top:10px">+ Add cookie (${heroCkN(h)} of 12)</button>`:`<p class="note" style="margin:10px 0 0">12 cookies is the most.</p>`}
     </section>
   </div>`;
 }
@@ -2624,12 +2629,16 @@ am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
     saveDB();A.cp=null;toast("Coupon saved");renderAdmin()}
 });
 
-am.addEventListener("input",e=>{const el=e.target;if(!el.dataset.hr)return;hrSet(el)});
+function hrSetX(el){const h=hrDraft(),[i,k]=el.dataset.hrx.split("."),n=+i;if(!Array.isArray(h.ckx))h.ckx=[];while(h.ckx.length<=n)h.ckx.push({});
+  const x=h.ckx[n]=h.ckx[n]||{};x[k]=k==="op"?+el.value:el.value;hrDraw();
+  if(k==="op"){const l=el.closest("label");if(l&&l.firstChild)l.firstChild.textContent=`Opacity: ${x.op}%`}}
+am.addEventListener("input",e=>{const el=e.target;if(el.dataset.hrx){hrSetX(el);return}if(!el.dataset.hr)return;hrSet(el)});
 function hrSet(el){const h=hrDraft(),k=el.dataset.hr;h[k]=el.type==="checkbox"?el.checked:el.dataset.hrnum?+el.value:el.value;
   if(k==="src"&&!el.value)h.src="";hrDraw();if(el.dataset.hrrr)renderAdmin();else if(k==="overlay"){const l=el.closest("label");if(l&&l.firstChild)l.firstChild.textContent=`Darken the picture: ${h.overlay}%`}}
 am.addEventListener("change",async e=>{const el=e.target;
+  if(el.dataset.hrx){hrSetX(el);return}
   if(el.dataset.hr){hrSet(el);return}
-  if(el.dataset.hrck!==undefined){const f=el.files[0];if(!f)return;try{hrDraft().cookies[+el.dataset.hrck]=await lpResize(f,360);renderAdmin();toast("Added to the preview. Press Save to publish.")}catch(err){toast(err.message)}return}
+  if(el.dataset.hrck!==undefined){const f=el.files[0];if(!f)return;try{{const h=hrDraft();while(h.cookies.length<=+el.dataset.hrck)h.cookies.push("");h.cookies[+el.dataset.hrck]=await lpResize(f,360,true)}renderAdmin();toast("Added to the preview. Press Save to publish.")}catch(err){toast(err.message)}return}
   if(el.dataset.hradd){const f=el.files[0];if(!f)return;const h=hrDraft(),ty=el.dataset.hradd;el.value="";
     if(h.media.length>=8){toast("Up to 8 pictures and videos.");return}
     try{let src;if(ty==="video"){if(f.size>3*1024*1024){toast("That video is over 3 MB. Paste a link to an .mp4 instead.");return}src=await readData(f)}else src=await lpResize(f,1600);
@@ -2640,6 +2649,8 @@ am.addEventListener("change",async e=>{const el=e.target;
 am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;const d=b.dataset;
   if(d.gotab){A.tab=d.gotab;renderAdmin();scrollTo(0,0)}
   else if(d.hrckrm!==undefined){hrDraft().cookies[+d.hrckrm]="";renderAdmin()}
+  else if(d.hrckadd!==undefined){const h=hrDraft();h.ckn=Math.min(12,heroCkN(h)+1);hrDraw();renderAdmin()}
+  else if(d.hrckdel!==undefined){const h=hrDraft(),n=+d.hrckdel;h.cookies.splice(n,1);if(h.ckx)h.ckx.splice(n,1);h.ckn=Math.max(6,heroCkN(h)-1);hrDraw();renderAdmin()}
   else if(d.hrmediarm!==undefined){hrDraft().src="";renderAdmin()}
   else if(d.hrshape){hrDraft().shape=d.hrshape;renderAdmin()}
   else if(d.hrmrm!==undefined){hrDraft().media.splice(+d.hrmrm,1);renderAdmin()}
@@ -3054,14 +3065,18 @@ function videoHTML(src,{bg=false}={}){
   return `<p><a href="${esc(src)}" target="_blank" rel="noopener">Watch the video</a></p>`;
 }
 
-const HERO_SPOTS=[[3,6],[85,4],[-4,46],[90,40],[2,84],[86,82]];
+const HERO_SPOTS=[[3,6],[85,4],[-4,46],[90,40],[2,84],[86,82],[22,2],[68,2],[14,60],[76,62],[40,88],[58,90]];
+const HERO_FX=[["bob","Float"],["spin","Spin"],["pulse","Pulse"],["wiggle","Wiggle"],["none","Still"]];
+const heroCkN=h=>Math.max(6,Math.min(12,+(h&&h.ckn)||6));
+const heroCkx=(h,i)=>{const x=(h&&h.ckx&&h.ckx[i])||{};return{bg:/^#[0-9a-f]{6}$/i.test(x.bg||"")?x.bg:"",op:Math.max(10,Math.min(100,+x.op||95)),fx:HERO_FX.some(f=>f[0]===x.fx)?x.fx:"bob"}};
 function heroFloats(dome,h){
   if(!dome)return;dome.querySelectorAll(".float").forEach(n=>n.remove());
   const prods=DB.products.filter(p=>p.status!=="hidden"&&hasImage(p)).slice(0,6),cs=(h&&h.cookies)||[];let html="";
-  for(let i=0;i<6;i++){const c=safeMedia(cs[i]);let inner="";
+  for(let i=0;i<heroCkN(h);i++){const c=safeMedia(cs[i]);let inner="";
     if(c)inner=`<img class="ck ph${/^data:image\/jpeg/i.test(c)?"":" cut"}" src="${esc(c)}" alt="" draggable="false">`;else if(prods[i])inner=plateInner(prods[i]);
     if(!inner)continue;
-    html+=`<div class="float" aria-hidden="true" style="left:${HERO_SPOTS[i][0]}%;top:${HERO_SPOTS[i][1]}%"><div class="plate" style="background:${i%2?"#2328C8":"#1A1FB0"}">${inner}</div></div>`}
+    const x=heroCkx(h,i);
+    html+=`<div class="float fx-${x.fx}" aria-hidden="true" style="left:${HERO_SPOTS[i][0]}%;top:${HERO_SPOTS[i][1]}%;opacity:${x.op/100}"><div class="plate" style="background:${x.bg||(i%2?"#2328C8":"#1A1FB0")}">${inner}</div></div>`}
   dome.insertAdjacentHTML("afterbegin",html);
 }
 function heroFill(dome,h){
@@ -3193,7 +3208,7 @@ function viewLanding(){
   </div>`;
 }
 let lpT;function lpSave(){clearTimeout(lpT);lpT=setTimeout(()=>{if(saveDB())toast("Saved");else toast("Not enough storage space. Remove a photo, video or font.")},400)}
-async function lpResize(file,MAX){
+async function lpResize(file,MAX,webp){
   if(!/^image\//.test(file.type))throw new Error("That file isn't an image. Use JPG, PNG or WebP.");
   if(file.size>25e6)throw new Error("That image is over 25 MB. Try a smaller one.");
   const url=URL.createObjectURL(file);
@@ -3201,6 +3216,7 @@ async function lpResize(file,MAX){
     const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>rej(new Error("Couldn't read that image."));i.src=url});
     const k=Math.min(1,MAX/Math.max(img.naturalWidth,img.naturalHeight)),w=Math.max(1,Math.round(img.naturalWidth*k)),h=Math.max(1,Math.round(img.naturalHeight*k));
     const c=document.createElement("canvas");c.width=w;c.height=h;const x=c.getContext("2d",{willReadFrequently:true});x.imageSmoothingQuality="high";x.drawImage(img,0,0,w,h);
+    if(webp){const o=c.toDataURL("image/webp",.82);if(o.startsWith("data:image/webp"))return o}
     const px=x.getImageData(0,0,w,h).data;let clear=0;for(let i=3;i<px.length;i+=16)if(px[i]<200)clear++;
     if(clear>(w*h/4)*.02){let o=c.toDataURL("image/webp",.85);if(!o.startsWith("data:image/webp"))o=c.toDataURL("image/png");return o}
     return c.toDataURL("image/jpeg",.82);

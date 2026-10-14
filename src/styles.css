@@ -87,6 +87,13 @@ p{margin:0}
 .float:nth-child(2n){animation-delay:-3s}
 @media (max-width:640px){.float{width:58px}.float:nth-of-type(n+5){display:none}}
 @keyframes bob{50%{transform:translateY(-10px) rotate(6deg)}}
+.float.fx-spin{animation:fspin 9s linear infinite}
+.float.fx-pulse{animation:fpulse 3.2s ease-in-out infinite}
+.float.fx-wiggle{animation:fwig 2.6s ease-in-out infinite}
+.float.fx-none{animation:none}
+@keyframes fspin{to{transform:rotate(360deg)}}
+@keyframes fpulse{50%{transform:scale(1.14)}}
+@keyframes fwig{0%,100%{transform:rotate(-9deg)}50%{transform:rotate(9deg)}}
 .hero-strip{display:flex;justify-content:center;flex-wrap:wrap;gap:8px 22px;margin-top:18px;color:var(--muted);font-size:14px}
 .hero-strip span::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--blue);margin-right:8px;vertical-align:middle}
 
