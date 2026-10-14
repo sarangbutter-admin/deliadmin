@@ -135,8 +135,11 @@ function defaultProofPop(){return {on:true,emoji:"🙏",img:"",cookies:[],fx:tru
 function defaultAlerts(){return {on:true,sound:true,vol:70,repeat:false,stay:true,custom:"",customName:"",
   ev:{order:{on:true,snd:"register"},proof:{on:true,snd:"chime"},complaint:{on:true,snd:"alarm"}}}}
 function defaultLabel(){return {logo:"",qr:"",qrCaption:"",notes:"",warnOn:true,warn1:"UNBOXING WITH UNCUT VIDEO!",warn2:"CONTACT US IF SEAL BROKEN"}}
+const SLOT_PRESETS=Array.from({length:23},(_,h)=>String(h).padStart(2,"0")+" to "+String(h+1).padStart(2,"0"));
 function migrate(db){
-  if(db.settings){const D={samedayOn:false,samedayLeadH:3,samedayCutoff:15,samedayFee:8,samedayPayMin:60,minPayMin:30,rejPayMin:120,payCdColor:"#C8102E",payCdSize:"L",payCdFx:true,pickupOn:true,pickupLeadH:24,schedOn:true,schedLeadH:24};for(const k in D)if(db.settings[k]===undefined)db.settings[k]=D[k]}
+  if(db.settings){const D={samedayOn:false,samedayLeadH:3,samedayCutoff:15,samedayFee:8,samedayPayMin:60,minPayMin:30,rejPayMin:120,payCdColor:"#C8102E",payCdSize:"L",payCdFx:true,pickupOn:true,pickupLeadH:24,schedOn:true,schedLeadH:24,samedayMsg:"Sorry Sameday closed Today.\nyour order will be send tomorrow.",samedayOk:"OK"};for(const k in D)if(db.settings[k]===undefined)db.settings[k]=D[k];
+    if(!Array.isArray(db.settings.slots)){const hs=(db.settings.times||[]).map(slotStartMin).filter(m=>m!==null).map(m=>Math.floor(m/60));if(!hs.length)hs.push(10);db.settings.slots=SLOT_PRESETS.map((t,h)=>({t,on:true,limit:0})).filter((x,h)=>hs.includes(h))}
+    db.settings.times=db.settings.slots.filter(x=>x.on).map(x=>x.t)}
   db.label=Object.assign(defaultLabel(),db.label||{});
   db.thanks=Object.assign(defaultThanks(),db.thanks||{});
   if(!Array.isArray(db.broadcasts))db.broadcasts=[];
@@ -310,6 +313,7 @@ const modeName=o=>o.mode==="pickup"?"Pickup":o.speed==="sameday"?"Sameday shipme
 const optLead=(k,s=DB.settings)=>Math.max(0,+(k==="sameday"?s.samedayLeadH:k==="pickup"?s.pickupLeadH:s.schedLeadH)||0);
 const fmtLead=h=>h>=24&&h%24===0?`${h/24} day${h/24>1?"s":""}`:`${h} hour${h===1?"":"s"}`;
 function samedayOpen(){const n=shopNow(),s=DB.settings;return !!s.samedayOn&&n.h<s.samedayCutoff&&!s.closedWeekdays.includes(n.d.getDay())}
+function samedayLate(){const n=shopNow(),s=DB.settings;return !!s.samedayOn&&n.h>=s.samedayCutoff&&!s.closedWeekdays.includes(n.d.getDay())}
 const optOn=k=>k==="sameday"?!!DB.settings.samedayOn:k==="pickup"?DB.settings.pickupOn!==false:DB.settings.schedOn!==false;
 const optAvail=k=>k==="sameday"?samedayOpen():optOn(k);
 function dayOptions(){
@@ -325,6 +329,7 @@ function fixWhen(){
   if(!dayOptions().some(d=>ymd(d)===S.day)){S.day=null;S.time=null}
   if(S.time&&!DB.settings.times.includes(S.time))S.time=null;
   if(S.time&&S.day&&slotTooSoon(S.day,S.time,optOf(S)))S.time=null;
+  if(S.time&&S.day&&slotFull(S.day,S.time))S.time=null;
 }
 // ---- when must an order be paid? ----
 // slotStartMin mirrors the server: "10 to 11am" -> 600 (minutes after midnight), null when it can't be read
@@ -343,6 +348,9 @@ function shopNowT(){ // the shop's wall clock as a plain number, so day and time
   try{const p=new Intl.DateTimeFormat("en-CA",{timeZone:DB.settings.tz||"Asia/Jakarta",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hourCycle:"h23"}).formatToParts(new Date()).reduce((a,x)=>(a[x.type]=x.value,a),{});
     return Date.UTC(+p.year,+p.month-1,+p.day,+p.hour,+p.minute,+p.second)}catch(e){const n=new Date();return Date.UTC(n.getFullYear(),n.getMonth(),n.getDate(),n.getHours(),n.getMinutes(),n.getSeconds())}
 }
+// a time slot with a daily limit is used up only by orders whose payment is confirmed
+function slotUsed(day,t){if(DB.slotUse)return (DB.slotUse[day]||{})[t]||0;return DB.orders.filter(o=>o.day===day&&o.time===t&&o.paidAt&&o.status!=="cancelled").length}
+function slotFull(day,t){const c=(DB.settings.slots||[]).find(x=>x.t===t),l=c&&+c.limit||0;return !!day&&l>0&&slotUsed(day,t)>=l}
 const minPayMs=()=>Math.max(1,+DB.settings.minPayMin||30)*60e3;
 const slotWall=(day,min)=>{const [y,m,d]=String(day).split("-").map(Number);return Date.UTC(y,m-1,d)+min*60e3};
 const slotTooSoon=(day,time,k)=>{const m=slotStartMin(time);return m!==null&&!!day&&slotWall(day,m)<shopNowT()+optLead(k)*3600e3+minPayMs()};
@@ -404,7 +412,7 @@ function renderMenu(){
 }
 function renderOpts(){
   const set=DB.settings;fixWhen();
-  $("#modes").innerHTML=["sameday","pickup","scheduled"].filter(optOn).map(k=>{const ok=optAvail(k);return `<button class="chip" type="button" data-opt="${k}" ${ok?"":"disabled"}>${OPT_NAME[k]}${ok?"":" (closed today)"}</button>`}).join("");
+  $("#modes").innerHTML=["sameday","pickup","scheduled"].filter(optOn).map(k=>{const late=k==="sameday"&&!optAvail(k)&&samedayLate(),ok=optAvail(k)||late;return `<button class="chip" type="button" data-opt="${k}" ${late?"data-late=\"1\"":""} ${ok?"":"disabled"}>${OPT_NAME[k]}${ok?"":" (closed today)"}</button>`}).join("");
   const sd=optOf(S)==="sameday";$("#dayBlock").hidden=sd;$("#timeBlock").hidden=sd;
   $("#days").innerHTML = dayOptions().map(d=>{const closed=set.closedWeekdays.includes(d.getDay());
     return `<button class="day" type="button" data-day="${ymd(d)}" ${closed?`disabled aria-label="${fmtDay(ymd(d))}, closed"`:""}><small>${DOW[d.getDay()]}</small><strong>${d.getDate()}</strong></button>`}).join("");
@@ -413,7 +421,7 @@ function renderOpts(){
   renderTimes();
 }
 function renderTimes(){
-  const k=optOf(S);$("#times").innerHTML=DB.settings.times.map(t=>{const off=!!S.day&&k!=="sameday"&&slotTooSoon(S.day,t,k);return `<button class="chip" type="button" data-time="${esc(t)}" ${off?`disabled aria-label="${esc(t)}, too soon"`:""}>${esc(t)}</button>`}).join("");
+  const k=optOf(S);$("#times").innerHTML=DB.settings.times.map(t=>{const full=slotFull(S.day,t),off=!!S.day&&k!=="sameday"&&slotTooSoon(S.day,t,k);return `<button class="chip" type="button" data-time="${esc(t)}" ${full?`disabled aria-label="${esc(t)}, full"`:off?`disabled aria-label="${esc(t)}, too soon"`:""}>${esc(t)}${full?" · Full":""}</button>`}).join("");
   document.querySelectorAll("[data-time]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.time===S.time));
 }
 function renderStoreStatic(){
@@ -758,8 +766,18 @@ $("#clearBtn").addEventListener("click",clearBox);
 $("#tab1").addEventListener("click",()=>goStep(1));
 $("#tab2").addEventListener("click",()=>goStep(2));
 $("#backBtn").addEventListener("click",()=>goStep(1));
-$("#modes").addEventListener("click",e=>{const b=e.target.closest("[data-opt]");if(b&&!b.disabled){const k=b.dataset.opt;S.mode=k==="pickup"?"pickup":"delivery";S.speed=k==="sameday"?"sameday":"scheduled";renderOpts();renderStore()}});
+$("#modes").addEventListener("click",e=>{const b=e.target.closest("[data-opt]");if(b&&!b.disabled){const k=b.dataset.opt;if(b.dataset.late){openSdPop();return}S.mode=k==="pickup"?"pickup":"delivery";S.speed=k==="sameday"?"sameday":"scheduled";renderOpts();renderStore()}});
 $("#days").addEventListener("click",e=>{const b=e.target.closest("[data-day]");if(b&&!b.disabled){S.day=b.dataset.day;if(S.time&&slotTooSoon(S.day,S.time,optOf(S)))S.time=null;renderTimes();renderStore()}});
+function openSdPop(){const s=DB.settings;$("#sdCard").innerHTML=`<p class="sdmsg">${esc(s.samedayMsg||"").replace(/\n/g,"<br>")}</p><button class="btn btn-blue" type="button" data-sdok>${esc(s.samedayOk||"OK")}</button>`;$("#sdSheet").hidden=false;document.body.style.overflow="hidden";const b=$("#sdCard [data-sdok]");b&&b.focus()}
+function closeSdPop(){const m=$("#sdSheet");if(!m||m.hidden)return;m.hidden=true;document.body.style.overflow=""}
+$("#sdSheet").addEventListener("click",e=>{
+  if(e.target.id==="sdSheet"){closeSdPop();return}
+  if(!e.target.closest("[data-sdok]"))return;
+  closeSdPop();
+  const k=["scheduled","pickup"].find(optAvail);if(k){S.mode=k==="pickup"?"pickup":"delivery";S.speed="scheduled";fixWhen();const d=dayOptions().find(x=>!DB.settings.closedWeekdays.includes(x.getDay()));S.day=d?ymd(d):null;S.time=null}
+  renderOpts();renderStore();const tb=$("#timeBlock");tb&&tb.scrollIntoView&&tb.scrollIntoView({behavior:"smooth",block:"center"});
+});
+document.addEventListener("keydown",e=>{if(e.key==="Escape")closeSdPop()});
 $("#times").addEventListener("click",e=>{const b=e.target.closest("[data-time]");if(b){S.time=b.dataset.time;renderStore()}});
 $("#extras").addEventListener("click",e=>{const b=e.target.closest("[data-addon]");if(!b)return;const id=b.dataset.addon;
   S.addons=S.addons.includes(id)?S.addons.filter(x=>x!==id):[...S.addons,id];renderStore();if(!RM&&S.addons.includes(id))bump(b.querySelector(".tick"))});

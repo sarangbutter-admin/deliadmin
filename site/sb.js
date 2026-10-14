@@ -32,7 +32,7 @@
       categories: res.categories || [], broadcasts: res.broadcasts || [],
       coupons: (res.coupons || []).map(function (c) { return Object.assign({}, c, { startsAt: "", endsAt: "", maxUses: 0 }); }),
       payMethods: Array.isArray(d.payMethods) ? d.payMethods : [],
-      proofpop: d.proofpop, page: d.page, marquee: d.marquee, announcer: d.announcer, thanks: d.thanks, badges: d.badges, sold: res.sold || {}, orders: []
+      proofpop: d.proofpop, page: d.page, marquee: d.marquee, announcer: d.announcer, thanks: d.thanks, badges: d.badges, sold: res.sold || {}, slotUse: res.slotUse || {}, orders: []
     };
     // coupons the visitor typed in earlier stay usable until the page is reloaded
     (DB.coupons || []).forEach(function (c) { if (c._srv && !raw.coupons.some(function (x) { return x.code === c.code; })) raw.coupons.push(c); });
@@ -40,7 +40,7 @@
     DB.orders = keep;
     H.skew = (res.now || Date.now()) - Date.now();
   }
-  function shopChanged(res) { var s = J([res.docs, res.sizes, res.products, res.addons, res.sales, res.categories, res.broadcasts, res.coupons]); var ch = s !== shopSig; shopSig = s; return ch; }
+  function shopChanged(res) { var s = J([res.docs, res.sizes, res.products, res.addons, res.sales, res.categories, res.broadcasts, res.coupons, res.slotUse]); var ch = s !== shopSig; shopSig = s; return ch; }
 
   function banner(msg, retry) {
     var el = $q("#sbLoading");

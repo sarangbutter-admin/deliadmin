@@ -714,3 +714,7 @@ body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
 .prow.simple .pfoot .left{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .prow.simple.editing{border-color:var(--blue);box-shadow:0 0 0 2px rgba(0,0,150,.12)}
 .pe-photo .plate{width:110px;height:110px}
+
+/* time slots */
+.slotrow .note{margin-left:auto}.slotrow .ghost{flex:0 0 auto}
+.sd-card{text-align:center;max-width:380px}.sd-card .sdmsg{font-size:17px;line-height:1.5;margin:6px 0 20px;color:var(--ink,#000096)}.sd-card .btn{min-width:140px}
