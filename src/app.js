@@ -2492,6 +2492,22 @@ $("#modal").addEventListener("click",e=>{
 });
 
 /* --- Flash sales --- */
+/* copy a sale or promo (usually one that ended) into the form, to edit and start again without typing it all in */
+function reuseSale(id){
+  const s=DB.sales.find(x=>x.id===id);if(!s)return;
+  const mins=Math.max(5,Math.round((s.end-s.start)/60e3)),kind=isFD(s)?"freedelivery":isGift(s)?"gifts":"discount";
+  const d={kind,name:s.name,type:s.type==="amount"?"amount":"percent",value:+s.value||20,appliesTo:String(s.appliesTo||"all"),startMode:"now",startAt:"",
+    durH:Math.min(168,Math.floor(mins/60)),durM:Math.min(168,Math.floor(mins/60))>=168?0:mins%60,gifts:[],rules:[],tag:"Gifts",bg:"#FFE066",ink:"#000096",fx:"shine"};
+  if(kind==="gifts"){
+    const gm={};
+    d.gifts=(s.gifts||[]).map(g=>{const n=uid();gm[g.id]=n;return {id:n,name:g.name,img:g.img||"",stock:g.stock==null?"":g.stock}});
+    d.rules=(s.rules||[]).map(r=>({id:uid(),from:r.from,to:r.to,limit:r.limit,mode:r.mode==="random"?"random":"specific",ids:(r.ids||[]).map(i=>gm[i]).filter(Boolean),custom:!(+r.from===+r.to&&DB.sizes.some(z=>z.n===+r.from))}));
+    Object.assign(d,{tag:s.tag||"Gifts",bg:s.bg||"#FFE066",ink:s.ink||"#000096",fx:s.fx||"shine"});
+  }
+  A.draft=d;renderAdmin();
+  const f=$("#saleForm");if(f)f.scrollIntoView({behavior:"smooth",block:"start"});
+  toast(kind==="gifts"&&!d.rules.length?"Copied the gifts. Add the rules, then press Create.":"Copied into the form. Change what you like, then press Create.");
+}
 function giftUsageLoad(){
   if(!SBH.on||Date.now()-(A.guAt||0)<20000)return;A.guAt=Date.now();
   SBH.giftUsed().then(m=>{A.gu=m||{};if(A.tab==="sales"&&!(document.activeElement&&/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)))renderAdmin()}).catch(()=>{})
@@ -2530,7 +2546,7 @@ function viewSales(){giftUsageLoad();
       ${list.length?`<div class="sales">${list.map(s=>{const st=saleStatus(s,now);return `<div class="sale ${st}">
         <div><span class="spill ${st}">${st==="live"?"Live":st==="scheduled"?"Scheduled":"Ended"}</span>${isFD(s)?` <span class="spill ${st}" style="background:#0A6B34;color:#fff">🚚 Free delivery</span>`:""}${isGift(s)?` <span class="spill ${st}" style="background:#C8102E;color:#fff">🎁 ${esc(s.tag||"Gifts")}</span>`:""}<h3>${esc(s.name)}</h3><p>${isGift(s)?giftSummary(s):`${saleOffText(s)} ${saleAppliesText(s)}`} · ${fmtDT(s.start)} to ${fmtDT(s.end)}</p></div>
         <div class="cd"><small>${st==="live"?"Ends in":st==="scheduled"?"Starts in":"Ended"}</small><span data-cd="${s.id}"></span></div>
-        <div class="acts">${st==="live"?`<button class="ghost" type="button" data-sale-end="${s.id}">End now</button><button class="ghost" type="button" data-sale-extend="${s.id}">+30 min</button>`:""}${st==="scheduled"?`<button class="ghost" type="button" data-sale-start="${s.id}">Start now</button>`:""}<button class="danger" type="button" data-sale-del="${s.id}">Delete</button></div>
+        <div class="acts">${st==="live"?`<button class="ghost" type="button" data-sale-end="${s.id}">End now</button><button class="ghost" type="button" data-sale-extend="${s.id}">+30 min</button>`:""}${st==="scheduled"?`<button class="ghost" type="button" data-sale-start="${s.id}">Start now</button>`:""}<button class="ghost" type="button" data-sale-reuse="${s.id}">${st==="ended"?"♻ Reuse / edit":"♻ Copy / edit"}</button><button class="danger" type="button" data-sale-del="${s.id}">Delete</button></div>
       </div>`}).join("")}</div>`:`<div class="empty">No flash sales yet.</div>`}
     </section>
   </div>`;
@@ -3322,6 +3338,7 @@ am.addEventListener("click",e=>{
   else if(d.stype){A.draft.type=d.stype;if(d.stype==="amount"&&A.draft.value>20)A.draft.value=5;renderAdmin()}
   else if(d.smode){A.draft.startMode=d.smode;if(d.smode==="later"&&!A.draft.startAt){const t=new Date(Date.now()+3600e3);t.setMinutes(0,0,0);A.draft.startAt=new Date(t.getTime()-t.getTimezoneOffset()*60e3).toISOString().slice(0,16)}renderAdmin()}
   else if(d.dur){A.draft.durH=Math.floor(+d.dur/60);A.draft.durM=+d.dur%60;document.querySelector('[data-draft="durH"]').value=A.draft.durH;document.querySelector('[data-draft="durM"]').value=A.draft.durM;updatePreview()}
+  else if(d.saleReuse){reuseSale(d.saleReuse)}
   else if(d.saleEnd){const s=DB.sales.find(x=>x.id===d.saleEnd);s.end=Date.now();saveDB();toast("Sale ended");renderAdmin()}
   else if(d.saleExtend){const s=DB.sales.find(x=>x.id===d.saleExtend);s.end+=30*60e3;saveDB();toast("Added 30 minutes");renderAdmin()}
   else if(d.saleStart){const s=DB.sales.find(x=>x.id===d.saleStart),len=s.end-s.start;s.start=Date.now();s.end=s.start+len;saveDB();toast("Flash sale is live");renderAdmin()}
