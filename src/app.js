@@ -3088,16 +3088,18 @@ function btnPanels(){
       ${pic("fabImg","Own picture instead of the icon")}
       ${sw("fabTextOn","Show the tiny text")}
       <div class="af">Background behind the icon or picture (like the flavor plates)
-        <div class="grid2" style="margin-top:6px"><label class="af">Style${sel("fabBgType",[["color","Solid colour"],["gradient","Gradient"],["none","None (see through)"]])}</label>
-          ${num("fabImgSize","Picture size inside the circle",40,100,84,"%")}</div>
+        <div style="margin-top:6px"><label class="af">Style${sel("fabBgType",[["color","Solid colour"],["gradient","Gradient"],["none","None (see through)"]])}</label></div>
         <div class="grid2" style="margin-top:6px">${col("fabBg","Colour")}${col("fabBg2","Second colour (gradient)","#FF9F43")}</div>
         <div class="grid2" style="margin-top:6px"><label class="af">Ring colour (optional)<input type="color" data-k="settings::fabRing" value="${hexOk(t.fabRing,"#000096")}" style="width:100%;height:42px"></label>
           <div class="af">&nbsp;<button class="ghost" type="button" data-fabringoff>${/^#[0-9a-f]{6}$/i.test(t.fabRing||"")?"Remove the ring":"No ring"}</button></div></div></div>
       <div class="grid2">${col("fabInk","Tiny text and icon colour","#000096")}<label class="af">Movement${sel("fabFx",BTN_FX_FAB)}</label></div>
-      <div class="grid2">${num("fabSizePx","Starting size",40,96,58,"px")}${num("fabOpacity","Starting opacity",30,100,100,"%")}</div>
       ${sw("fabGest","Let customers make it smaller and fainter (pinch it, or press and hold it)")}
       ${sw("fabHide","Hide the circle while the box is already on screen")}
-      <div class="af">Preview<div class="fabprev" id="btnPrev">${btnPreviewHTML()}</div></div>
+      <div class="af">Size, fade and picture size: use a gesture on the circle below
+        <div class="seg" id="fabModes" style="margin-top:6px">${[["s","Circle size"],["o","Fade"],["i","Picture size"]].map(([m,l])=>`<button type="button" data-fabmode="${m}" aria-pressed="${FP.mode===m}">${l}</button>`).join("")}</div>
+        <p class="note" style="margin:6px 0 0">Choose what to change, then <b>pinch</b> the circle with two fingers, or <b>drag up and down</b> on it, or use the <b>mouse wheel</b>. This is the starting look; customers can only make it smaller or fainter.</p>
+        <div class="fabprev" id="btnPrev">${btnPreviewHTML()}</div>
+        <div class="colin" style="gap:10px;align-items:center;flex-wrap:wrap"><span class="note" id="fabRead" style="margin:0">${fpReadout()}</span><button class="ghost" type="button" data-fabreset>Reset size, fade and picture size</button></div></div>
     </div>
   </section>`;
 }
@@ -4433,6 +4435,30 @@ am.addEventListener("click",async e=>{const b=e.target.closest("button");if(!b)r
       toast(BSA.test.t);renderAdmin()}
     else if(d.bsa==="copy"){const i=b.parentNode.querySelector("input");try{await navigator.clipboard.writeText(i.value);toast("Copied")}catch(err){i.select()}}
   }catch(err){b.disabled=false;if(d.bsa==="test")b.textContent="Test connection";bsAdmMsg(err.message,true);toast(err.message)}});
+/* owner: set the circle's starting size, fade and picture size by gesture on the preview (pinch, drag up and down, mouse wheel) */
+const FP={mode:"s",ptrs:new Map(),pinch:null,drag:null},FP_KEYS={s:["fabSizePx",40,96,58],o:["fabOpacity",30,100,100],i:["fabImgSize",40,100,84]};
+const fpGet=m=>{const [k,lo,hi,d]=FP_KEYS[m];return Math.round(fabNum(DB.settings[k],lo,hi,d))};
+const fpReadout=()=>`Circle size ${fpGet("s")}px · Fade ${fpGet("o")}% · Picture ${fpGet("i")}%${imgOk(DB.settings.fabImg)?"":" (upload a picture to see it)"}`;
+function fpApply(v){
+  const [k,lo,hi]=FP_KEYS[FP.mode];v=Math.round(Math.min(hi,Math.max(lo,v)));DB.settings[k]=v;
+  const f=document.querySelector("#btnPrev .fab");
+  if(f){f.style.setProperty("--fab-s",fpGet("s")+"px");f.style.setProperty("--fab-o",fpGet("o")/100);const pl=f.querySelector(".fab-pl");if(pl)pl.style.setProperty("--ck",fpGet("i")+"%")}
+  const r=$("#fabRead");if(r)r.textContent=fpReadout();
+}
+function fpEnd(){FP.pinch=null;FP.drag=null;saveSoon()}
+am.addEventListener("pointerdown",e=>{const f=e.target.closest&&e.target.closest("#btnPrev .fab");if(!f)return;
+  FP.ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});try{f.setPointerCapture(e.pointerId)}catch(x){}
+  if(FP.ptrs.size===2){const [a,b]=[...FP.ptrs.values()];FP.pinch={d0:Math.max(10,Math.hypot(a.x-b.x,a.y-b.y)),v0:fpGet(FP.mode)};FP.drag=null}
+  else if(FP.ptrs.size===1)FP.drag={y0:e.clientY,v0:fpGet(FP.mode)}});
+am.addEventListener("pointermove",e=>{if(!FP.ptrs.has(e.pointerId))return;FP.ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(FP.pinch&&FP.ptrs.size>=2){const [a,b]=[...FP.ptrs.values()],d=Math.hypot(a.x-b.x,a.y-b.y);fpApply(FP.mode==="o"?FP.pinch.v0+(d-FP.pinch.d0)*.5:FP.pinch.v0*d/FP.pinch.d0);return}
+  if(FP.drag&&FP.ptrs.size===1)fpApply(FP.drag.v0+(FP.drag.y0-e.clientY)*.5)});
+const fpUp=e=>{if(!FP.ptrs.has(e.pointerId))return;FP.ptrs.delete(e.pointerId);if(!FP.ptrs.size)fpEnd();else if(FP.ptrs.size===1){FP.pinch=null;const q=[...FP.ptrs.values()][0];FP.drag={y0:q.y,v0:fpGet(FP.mode)}}};
+am.addEventListener("pointerup",fpUp);am.addEventListener("pointercancel",fpUp);
+am.addEventListener("wheel",e=>{const f=e.target.closest&&e.target.closest("#btnPrev .fab");if(!f)return;e.preventDefault();fpApply(fpGet(FP.mode)+(e.deltaY<0?2:-2));clearTimeout(FP.wt);FP.wt=setTimeout(saveSoon,300)},{passive:false});
+am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
+  if(b.dataset.fabmode){FP.mode=b.dataset.fabmode;document.querySelectorAll("[data-fabmode]").forEach(x=>x.setAttribute("aria-pressed",x.dataset.fabmode===FP.mode))}
+  else if(b.dataset.fabreset!==undefined){Object.assign(DB.settings,{fabSizePx:58,fabOpacity:100,fabImgSize:84});saveDB();toast("Reset");renderAdmin()}});
 /* Boxes & extras: pictures for the two buttons */
 am.addEventListener("change",async e=>{const el=e.target,k=el.dataset&&el.dataset.btnimg;if(!k||!/^(rb|fab)Img2?$/.test(k))return;const f=el.files[0];if(!f)return;
   try{const data=await lpResize(f,k==="fabImg"?220:140,true),prev=DB.settings[k];DB.settings[k]=data;if(!saveDB()){DB.settings[k]=prev;toast("Not enough storage space. Remove another photo first.");return}renderAdmin();toast("Picture saved")}catch(err){toast(err.message)}});
