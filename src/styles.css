@@ -1278,16 +1278,18 @@ body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
 /* draft bar: changes waiting on other pages */
 .draftbar .db-oth{display:block;margin-top:4px;font-size:12px}
 
-/* social buttons in the footer */
-.ft-social{display:flex;flex-wrap:wrap;justify-content:center;gap:18px;width:100%;margin-top:6px}
-.soc{display:grid;justify-items:center;gap:6px;color:inherit;text-decoration:none;font-size:12px;font-weight:600;min-width:56px}
-.soc-i{width:48px;height:48px;border-radius:50%;border:2px solid currentColor;display:grid;place-items:center;overflow:hidden;background:rgba(255,255,255,.12);color:inherit}
-.soc-i.img{border-color:transparent;background:transparent}
+/* social buttons in the footer: small plain icons in a row */
+.ft-social{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:26px;width:100%;margin-top:10px}
+.soc{display:grid;place-items:center;color:inherit;text-decoration:none;padding:8px;margin:-8px;border-radius:10px}
+.soc-n{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.soc-i{width:28px;height:28px;display:grid;place-items:center;overflow:hidden;color:inherit}
+.soc-i svg{width:28px;height:28px}
 .soc-i img{width:100%;height:100%;object-fit:contain;display:block}
 .soc-i img.crop{object-fit:cover;border-radius:50%}
-.soc:hover .soc-i,.soc:focus-visible .soc-i{background:rgba(255,255,255,.28)}
+.soc:hover,.soc:focus-visible{opacity:.75}
 .soced{display:grid;gap:8px}
 .socrow{display:flex;gap:12px;align-items:flex-start}
-.soc-i.prev{flex:none;color:var(--blue);margin-top:22px;background:var(--ice,#EEF0FF)}
+.soc-i.prev{flex:none;width:44px;height:44px;border-radius:50%;color:var(--blue);margin-top:22px;background:var(--ice,#EEF0FF)}
+.soc-i.prev svg{width:24px;height:24px}
 /* on phones the price bar and the floating box sit over the bottom of the page: leave room under the footer so nothing is covered */
 @media (max-width:900px){#siteFoot{padding-bottom:calc(180px + env(safe-area-inset-bottom,0px))}}
