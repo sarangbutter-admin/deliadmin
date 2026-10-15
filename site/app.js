@@ -1364,9 +1364,9 @@ function renderMO(){
     ${o.couponDisc>0?`<div class="sl"><span>Coupon ${esc(o.coupon)}</span><span class="num">−${money(o.couponDisc)}</span></div>`:""}
     <div><span>${modeName(o)}</span><span class="num">${o.fee?money(o.fee):"Free"}</span></div>
     <div class="t"><span>Total</span><span class="num">${money(o.total)}</span></div></div>${o.mode==="delivery"?`<p class="hint">Your box may be split into smaller or bigger boxes for delivery safety.</p>`:""}</div>
+  ${giftsHTML(o,true)}
   ${bsHTML(o,false)}
   ${placeHTML(o,true)}
-  ${giftsHTML(o,true)}
   ${o.status==="completed"?ratingHTML(o):""}
   ${complaintHTML(o)}
   ${awaiting?`<div class="mo-row" style="margin-top:14px;gap:8px"><button class="btn btn-ghost-blue btn-sm" type="button" data-moedit="${o.id}">Edit order</button><button class="danger" type="button" data-mocancel="${o.id}">Cancel order</button></div><p class="hint">You can change your box until you've sent payment.</p>`:""}`;
