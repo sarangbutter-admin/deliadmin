@@ -1,7 +1,7 @@
 // Delidome: optional Biteship courier integration.
 // Deploy:  supabase functions deploy biteship
 // The API key is saved by the owner in Shop settings -> Courier delivery (stored in a private table, never sent to the website).
-import { admin, allow, applyUpdate, bookOrder, boxOf, bs, bsErr, cacheGet, cacheSet, cors, driverOf, findProofs, hmacHex, INSTANT, ipOf, json, kv, limited, settings, sha, teamRole } from "../_shared/common.ts";
+import { admin, applyUpdate, bookOrder, boxOf, bs, bsErr, cacheGet, cacheSet, cors, driverOf, findProofs, hmacHex, INSTANT, ipOf, json, kv, limited, settings, sha, teamRole } from "../_shared/common.ts";
 
 const num = (v: unknown, d = 0) => (Number.isFinite(+(v as number)) ? +(v as number) : d);
 const clean = (s: unknown, n: number) => String(s ?? "").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, n);
@@ -29,20 +29,40 @@ Deno.serve(async (req) => {
       const ip = ipOf(req);
       if (limited(ip, Math.max(40, L("bsAreasIpM", 40) || 1000), 60_000)) return json({ error: "Too many tries. Please wait a minute." }, 429);
       // limits per visitor, kept in the database so they hold on every server; and a daily cap on the calls that cost money
-      const perIp: [string, number, number][] = action === "areas" ? [["bs-areas", L("bsAreasIpM", 40), 60_000]]
-        : action === "geocode" ? [["bs-geo-m", L("bsGeoIpM", 12), 60_000], ["bs-geo-h", L("bsGeoIpH", 60), 3_600_000]]
-        : [["bs-rates-m", L("bsRatesIpM", 10), 60_000], ["bs-rates-h", L("bsRatesIpH", 60), 3_600_000]];
-      for (const [k, m, ms] of perIp) if (m > 0 && !(await allow(db, k + ":" + ip, m, ms))) return json({ error: "Too many tries. Please wait a minute." }, 429);
+      const DAY = 86_400_000;
+      const perIp: [string, number, number][] = action === "areas" ? [["bs-areas", L("bsAreasIpM", 40), 60_000], ["bs-areas-d", L("bsAreasIpD", 200), DAY]]
+        : action === "geocode" ? [["bs-geo-m", L("bsGeoIpM", 12), 60_000], ["bs-geo-h", L("bsGeoIpH", 60), 3_600_000], ["bs-geo-d", L("bsGeoIpD", 30), DAY]]
+        : [["bs-rates-m", L("bsRatesIpM", 10), 60_000], ["bs-rates-h", L("bsRatesIpH", 60), 3_600_000], ["bs-rates-d", L("bsRatesIpD", 40), DAY]];
+      // used so far (with this one), or -1 when the limit is reached; if the check itself fails, shoppers are not blocked
+      const used = async (k: string, m: number, ms: number) => { const { data, error } = await db.rpc("throttle_n", { p_key: k, p_max: m, p_window_ms: ms }); return error ? 0 : +data; };
+      const wp = L("warnPct", 70);
+      let warn = false;
+      for (const [k, m, ms] of perIp) {
+        if (m <= 0) continue;
+        const n = await used(k + ":" + ip, m, ms);
+        if (n < 0) return json({ error: ms === DAY ? "Too many tries today. Please try again later." : "Too many tries. Please wait a minute." }, 429);
+        if (wp > 0 && wp < 100 && n >= Math.ceil(m * wp / 100)) warn = true;
+      }
+      // past the warning point the answer is marked, so the shop shows its friendly "slow down" warning
+      const J = (b: any, status = 200) => json(warn && status === 200 ? { ...b, _warn: 1 } : b, status);
       const cap = action === "rates" ? L("capRates", num(cfg.dailyCap, 800)) : action === "geocode" ? L("capGeo", num(cfg.dailyCap, 400)) : L("capAreas", num(cfg.dailyCap, 1500));
-      const dayOk = async (k: string) => cap <= 0 || await allow(db, k, cap, 86_400_000);
+      const capName = action === "rates" ? "capRates" : action === "geocode" ? "capGeo" : "capAreas", ap = L("alertPct", 70);
+      // the whole shop's daily cap; the owner is told when it passes the alert point and when it is reached
+      const dayOk = async (k: string) => {
+        if (cap <= 0) return true;
+        const n = await used(k, cap, DAY);
+        if (n < 0) { await db.rpc("sec_alert", { p_name: capName, p_lvl: 100, p_every_ms: 6 * 3_600_000 }); return false; }
+        if (ap > 0 && ap < 100 && n >= Math.ceil(cap * ap / 100)) await db.rpc("sec_alert", { p_name: capName, p_lvl: ap, p_every_ms: DAY });
+        return true;
+      };
       const cacheMs = L("cacheMin", 10) * 60_000;
       const busy = () => json({ error: "Courier prices are busy right now. Please try again later." }, 429);
 
       if (action === "areas") {
         const q = clean(body.q, 80);
-        if (q.length < 3) return json({ areas: [] });
+        if (q.length < 3) return J({ areas: [] });
         const ak = "qa:" + await sha(q.toLowerCase()), ac = await cacheGet(db, ak);
-        if (ac) return json({ areas: ac });
+        if (ac) return J({ areas: ac });
         if (!(await dayOk("bs-day-areas"))) return busy();
         let r = await bs(key, "GET", "/v1/maps/areas?countries=ID&type=single&input=" + encodeURIComponent(q));
         console.log("areas", q, r.status, r.ok ? (r.body?.areas || []).length : bsErr(r));
@@ -56,7 +76,7 @@ Deno.serve(async (req) => {
           id: clean(a.id, 60), name: clean(a.name, 160), postal: clean(a.postal_code, 12),
         }));
         if (areas.length) await cacheSet(db, ak, 86_400_000, areas);
-        return json({ areas });
+        return J({ areas });
       }
 
       if (action === "geocode") {
@@ -83,15 +103,15 @@ Deno.serve(async (req) => {
         const find = gkey ? google : photon;
         const addr = clean(body.address, 200), area = clean(body.area, 160).replace(/\b\d{5}\b/g, "").trim();
         const gk = "qg:" + await sha((gkey ? "g|" : "p|") + addr.toLowerCase() + "|" + area.toLowerCase()), gc = await cacheGet(db, gk);
-        if (gc) return json(gc);
+        if (gc) return J(gc);
         if (!(await dayOk("bs-day-geocode"))) return busy();
         let hit = await find([addr, area].filter(Boolean).join(", ")), approx = false;
         if (!hit && area) { hit = await find(area); approx = true; }
         if (!hit && gkey) { hit = await photon([addr, area].filter(Boolean).join(", ")); }
-        if (!hit) { await cacheSet(db, gk, 3_600_000, { found: false }); return json({ found: false }); }
+        if (!hit) { await cacheSet(db, gk, 3_600_000, { found: false }); return J({ found: false }); }
         const out = { found: true, approx: approx || hit.rough, lat: (+hit.lat).toFixed(5), lng: (+hit.lng).toFixed(5), label: hit.label };
         await cacheSet(db, gk, 86_400_000, out);
-        return json(out);
+        return J(out);
       }
 
       // rates
@@ -131,10 +151,10 @@ Deno.serve(async (req) => {
       }
       if (!rc && pricing.length && cacheMs > 0) await cacheSet(db, rk, cacheMs, pricing);
       if (!pricing.length && !lastErr && inst.length && !(Number.isFinite(lat) && Number.isFinite(lng)))
-        return json({ options: [], error: "Press \"Find my address on the map\" so we can show Gojek and Grab prices." });
+        return J({ options: [], error: "Press \"Find my address on the map\" so we can show Gojek and Grab prices." });
       if (!pricing.length && !lastErr && inst.length && !Number.isFinite(num(o.lat, NaN)))
-        return json({ options: [], error: "The shop's pickup location isn't set yet." });
-      if (!pricing.length) return json({ options: [], error: lastErr || "No courier is available for this address." });
+        return J({ options: [], error: "The shop's pickup location isn't set yet." });
+      if (!pricing.length) return J({ options: [], error: lastErr || "No courier is available for this address." });
 
       const markup = Math.max(0, num(cfg.markup, 0)), step = Math.max(1, num(cfg.roundTo, 500));
       const secret = (await kv(db, "quote_secret"))?.v as string;
@@ -153,7 +173,7 @@ Deno.serve(async (req) => {
         });
       }
       options.sort((a, b) => a.price - b.price);
-      return json({ options });
+      return J({ options });
     }
 
     /* ---------- team only ---------- */

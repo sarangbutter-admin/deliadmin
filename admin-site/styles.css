@@ -1254,3 +1254,19 @@ body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
 .sl-btn.bfx-wiggle{animation:cwWiggle 1.6s ease-in-out infinite}
 @keyframes slShine{0%,55%{left:-60%}100%{left:130%}}
 @media (prefers-reduced-motion:reduce){.sl-pic>*,.sl-btn,.sl-btn::after{animation:none!important}}
+
+/* every pop-up sits in the middle of the screen and always fits it; the owner sets the size of all of them (Security tab, --pop-z) */
+.sheet,.sheet.center{place-items:center;padding:16px}
+.sheet>.sheet-card{border-radius:28px;zoom:var(--pop-z,1);max-height:calc((100dvh - 32px) / var(--pop-z,1));max-width:min(560px,calc((100vw - 32px) / var(--pop-z,1)))}
+.sheet>.sheet-card.cw-card{max-width:min(400px,calc((100vw - 32px) / var(--pop-z,1)))}
+.sheet>.sheet-card:has(.bsmap){zoom:1;max-height:calc(100dvh - 32px);max-width:min(560px,calc(100vw - 32px))}
+.gsheet{align-items:center;padding:16px}
+.gs-card{border-radius:24px;zoom:var(--pop-z,1);max-height:calc((100dvh - 32px) / var(--pop-z,1));max-width:min(520px,calc((100vw - 32px) / var(--pop-z,1)))}
+.pp-card{zoom:var(--pop-z,1);max-height:calc((100dvh - 40px) / var(--pop-z,1));overflow:auto;max-width:min(380px,calc((100vw - 40px) / var(--pop-z,1)))}
+/* Security: alerts and per-limit messages */
+.secalerts{display:grid;gap:6px;margin-top:8px}
+.secal{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:9px 12px;border-radius:12px;background:var(--ice,#EEF0FF);font-size:14px}
+.secal small{color:var(--muted)}
+.secal.new{background:#FFF4D6;font-weight:700}.secal.new.full{background:#FFE3E0}
+.secmsg summary{cursor:pointer;font-weight:700;color:var(--blue)}
+.secv .linkbtn{justify-self:end}

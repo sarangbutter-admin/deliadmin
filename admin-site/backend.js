@@ -21,9 +21,13 @@
     return msg;
   }
   // a visitor hit one of the shop's limits: let the page show its friendly "slow down" pop-up
-  function limitHit(msg) {
-    try { if (/^(too many|we.re very busy|courier prices are busy)/i.test(msg) && window.ddSlow) window.ddSlow(); } catch (e) {}
+  function limitHit(msg, src) {
+    try { if (/^(too many|we.re very busy|courier prices are busy)/i.test(msg) && window.ddSlow) window.ddSlow({ kind: "stop", src: src }); } catch (e) {}
     return msg;
+  }
+  // ...and when they are getting close to a limit, the friendly early warning
+  function limitNear(j, src) {
+    try { if (j && j._warn && window.ddSlow) window.ddSlow({ kind: "warn", src: src }); } catch (e) {}
   }
   function headers(token, extra) {
     var h = { "apikey": KEY, "Content-Type": "application/json" };
@@ -66,11 +70,12 @@
       var txt = await r.text(), j = null;
       try { j = txt ? JSON.parse(txt) : null; } catch (e) { j = null; }
       if (!r.ok) {
-        var err = new Error(limitHit(nice((j && (j.message || j.error_description || j.hint)) || ("Request failed (" + r.status + ")"))));
+        var err = new Error(limitHit(nice((j && (j.message || j.error_description || j.hint)) || ("Request failed (" + r.status + ")")), name));
         err.status = r.status; err.code = j && j.code;
         throw err;
       }
-      if (j && j.ok === false && typeof j.err === "string") limitHit(j.err);
+      if (j && j.ok === false && typeof j.err === "string") limitHit(j.err, name);
+      limitNear(j, name);
       return j;
     };
     try { return await attempt(tok); }
@@ -92,7 +97,9 @@
     t.done();
     var txt = await r.text(), j = null;
     try { j = txt ? JSON.parse(txt) : null; } catch (e) { j = null; }
-    if (!r.ok) { var err = new Error(limitHit(nice((j && (j.error || j.message)) || ("Request failed (" + r.status + ")")))); err.status = r.status; throw err; }
+    var src = name === "biteship" ? "courier" : name;
+    if (!r.ok) { var err = new Error(limitHit(nice((j && (j.error || j.message)) || ("Request failed (" + r.status + ")")), src)); err.status = r.status; throw err; }
+    limitNear(j, src);
     return j;
   }
 

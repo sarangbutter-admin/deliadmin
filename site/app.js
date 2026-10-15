@@ -505,6 +505,7 @@ function renderTimes(){
 }
 function renderStoreStatic(){
   const set=DB.settings;
+  applyPopScale();
   renderMenu();renderMarquee($("#marq"),DB.marquee);
   renderOpts();
   const closedTxt=set.closedWeekdays.length?`We're closed ${listJoin(set.closedWeekdays.slice().sort().map(d=>DOW_LONG[d])).replace(" or "," and ")}. `:"";
@@ -904,24 +905,41 @@ $("#gdSheet").addEventListener("click",e=>{
   if(e.target.closest("[data-gdok]")){const f=gdFn;closeGuard();if(f)f();return}
   if(e.target.closest("[data-gdno]")||e.target.id==="gdSheet")closeGuard()});
 addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("#gdSheet").hidden)closeGuard()});
-/* a lively "slow down" pop-up when a visitor hits a limit (look and wording set in the Security tab) */
-const SLOW_DEF={Title:"Slow down a little, friends!",Text:"Cookies are best eaten slowly… and so is this website. Please wait a moment and try again.",Btn:"OK, I'll slow down"};
+/* friendly pop-ups when a visitor gets close to a limit ("warn") or reaches it ("slow" = stop); look and wording set in the Security tab */
+const POP_DEF={
+  slow:{Title:"Slow down a little, friends!",Text:"Cookies are best eaten slowly… and so is this website. Please wait a moment and try again.",Btn:"OK, I'll slow down",Icon:"🍪",Bg:"#FFF4D6",Ink:"#0B0B45",BtnBg:"#000096",BtnInk:"#FFFFFF",Fx:"bounce",BtnFx:"shine"},
+  warn:{Title:"Easy there, cookie lover!",Text:"You're going a little fast. Take a breath, cookies taste better slowly.",Btn:"Got it",Icon:"🐢",Bg:"#EAF6FF",Ink:"#0B0B45",BtnBg:"#0A7F5A",BtnInk:"#FFFFFF",Fx:"float",BtnFx:"pulse"}};
+// which part of the shop the limit belongs to (each can have its own message)
+const POP_GRP={place_order:"Orders",track_order:"Track",check_coupon:"Coupon",courier:"Courier",submit_proof:"Upload",submit_complaint:"Upload",submit_place:"Upload"};
 const SLOW_FX=[["bounce","Bounce"],["wiggle","Wiggle"],["float","Float up and down"],["pulse","Pulse"],["spin","Slow spin"],["none","Still"]],SLOW_BFX=[["shine","Shine sweep"],["pulse","Gentle pulse"],["wiggle","Wiggle"],["none","Still"]];
-const slowVars=t=>`--sl-bg:${hexOk(t.slowBg,"#FFF4D6")};--sl-ink:${hexOk(t.slowInk,"#0B0B45")};--sl-bb:${hexOk(t.slowBtnBg,"#000096")};--sl-bi:${hexOk(t.slowBtnInk,"#FFFFFF")};--sl-font:${(MQ_FONTS[t.slowFont]||MQ_FONTS.display)[1].replace(/"/g,"'")}`;
-function slowCardHTML(t){
-  const g=k=>String(t["slow"+k]||"").trim()||SLOW_DEF[k],fx=fxOk(t.slowFx,SLOW_FX.map(x=>x[0]),"bounce"),bfx=fxOk(t.slowBtnFx,SLOW_BFX.map(x=>x[0]),"shine"),u=imgOk(t.slowImg);
-  const pic=u?`<div class="sl-pic fx-${fx}"><img class="${imgIsCut(u,t.slowImgCut)?"":"crop"}" src="${esc(u)}" alt="" draggable="false"></div>`:`<div class="sl-pic fx-${fx}"><span class="sl-emo" aria-hidden="true">${esc(String(t.slowIcon||"").trim()||"🍪")}</span></div>`;
-  return `${pic}<h3 id="slowTitle">${esc(g("Title"))}</h3><p>${esc(g("Text")).replace(/\n/g,"<br>")}</p><button class="sl-btn bfx-${bfx}" type="button" data-slowok><span>${esc(g("Btn"))}</span></button>`;
+const slowVars=(t,p="slow")=>{const D=POP_DEF[p],c=k=>hexOk(t[p+k],D[k]);return `--sl-bg:${c("Bg")};--sl-ink:${c("Ink")};--sl-bb:${c("BtnBg")};--sl-bi:${c("BtnInk")};--sl-font:${(MQ_FONTS[t[p+"Font"]]||MQ_FONTS.display)[1].replace(/"/g,"'")}`};
+function slowCardHTML(t,p="slow",grp=""){
+  const D=POP_DEF[p],g=k=>String(t[p+k]||"").trim()||D[k],fx=fxOk(t[p+"Fx"],SLOW_FX.map(x=>x[0]),D.Fx),bfx=fxOk(t[p+"BtnFx"],SLOW_BFX.map(x=>x[0]),D.BtnFx),u=imgOk(t[p+"Img"]);
+  const txt=(grp&&String(t[p+"Msg"+grp]||"").trim())||g("Text");
+  const pic=u?`<div class="sl-pic fx-${fx}"><img class="${imgIsCut(u,t[p+"ImgCut"])?"":"crop"}" src="${esc(u)}" alt="" draggable="false"></div>`:`<div class="sl-pic fx-${fx}"><span class="sl-emo" aria-hidden="true">${esc(g("Icon"))}</span></div>`;
+  return `${pic}<h3>${esc(g("Title"))}</h3><p>${esc(txt).replace(/\n/g,"<br>")}</p><button class="sl-btn bfx-${bfx}" type="button" data-slowok><span>${esc(g("Btn"))}</span></button>`;
 }
-let slowAt=0;
-window.ddSlow=function(force){
-  const t=DB.settings,sh=$("#slowSheet");if(!sh||(!force&&(t.slowOn===false||(typeof SBH!=="undefined"&&SBH.admin))))return;
-  const now=Date.now();if(!force&&(!sh.hidden||now-slowAt<20000))return;slowAt=now;
-  const c=$("#slowCard");c.style.cssText=slowVars(t);c.innerHTML=slowCardHTML(t);sh.hidden=false;
-  setTimeout(()=>{const b=c.querySelector("[data-slowok]");b&&b.focus()},60);
+const popAt={};
+// o: {kind:"warn"|"stop", src: what was called}; true = the owner's test button
+window.ddSlow=function(o){
+  o=o===true?{force:true}:(o||{});
+  const p=o.kind==="warn"?"warn":"slow",t=DB.settings,sh=$("#slowSheet");if(!sh)return;
+  const grp=POP_GRP[o.src]||o.grp||"",now=Date.now();
+  if(!o.force){
+    if(t[p+"On"]===false||(typeof SBH!=="undefined"&&SBH.admin))return;
+    if(!sh.hidden&&!(p==="slow"&&sh.dataset.kind==="warn"))return;   // the stop message may replace a warning
+    if(p==="slow"){if(now-(popAt.slow||0)<20000)return;popAt.slow=now}
+    else{if(now-(popAt.slow||0)<60000||now-(popAt["w"+grp]||0)<300000)return;popAt["w"+grp]=now}
+  }
+  const c=$("#slowCard");c.className="sheet-card cw-card sl-card sl-"+p;c.style.cssText=slowVars(t,p);c.innerHTML=slowCardHTML(t,p,grp);
+  const h=c.querySelector("h3");if(h)h.id="slowTitle";sh.dataset.kind=p;sh.hidden=false;
+  setTimeout(()=>{const b=c.querySelector("[data-slowok]");b&&b.focus({preventScroll:true})},60);
 };
 $("#slowSheet").addEventListener("click",e=>{if(e.target.closest("[data-slowok]")||e.target.id==="slowSheet")$("#slowSheet").hidden=true});
 addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("#slowSheet").hidden)$("#slowSheet").hidden=true});
+// size of every pop-up in the shop (Security tab, 70% to 130%)
+const popZ=t=>Math.min(130,Math.max(70,Math.round(+(t||DB.settings).popScale||100)));
+function applyPopScale(){document.documentElement.style.setProperty("--pop-z",String(popZ()/100))}
 function clearBox(){if(!S.box.length)return;S.shuf=0;S.box.forEach((_,i)=>ghostOut(i));S.box=[];S.step=1;renderStore()}
 function scrollToEl(el){
   const go=()=>{const fl=$("#flash"),head=$(".top").getBoundingClientRect().height+(fl.hidden||fl.parentNode===$(".top")?0:fl.getBoundingClientRect().height);

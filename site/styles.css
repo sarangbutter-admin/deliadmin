@@ -563,6 +563,7 @@ table.t{width:100%;border-collapse:collapse;font-size:14px;min-width:700px}
 .t .meta{display:block;font-size:12px;color:var(--muted)}
 .ex{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:0 5px;margin-left:6px;vertical-align:middle}
 .mode{display:inline-block;font-size:11px;font-weight:700;border-radius:6px;padding:1px 6px;background:var(--ice);color:var(--blue);margin-left:6px}
+.oc-lbl.warn{color:#8A4F00}.oc-lbl.ok{color:#0B6B3A}.oc-lbl.off{color:var(--muted);font-weight:500}
 .oc-alert{font-weight:800;font-size:14px;line-height:1.3}
 .oc-alert.pay{color:#C25E00}
 .oc-alert.cmp{color:#D0001F;letter-spacing:.01em}
@@ -724,6 +725,7 @@ body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
 @media (prefers-reduced-motion:reduce){.pill,.pill b{transition:none}.pill:active{transform:none}}
 
 /* dashboard sections + ranked lists */
+.db-k.warn{background:#FCECEE;border-color:#F2B8C0}.db-k.warn strong{color:#C8102E}
 
 /* payment rejected */
 .st-rejected,.mo-chip.st-rejected{background:#FCE3E8;color:#C8102E}
@@ -998,3 +1000,14 @@ body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
 .sl-btn.bfx-wiggle{animation:cwWiggle 1.6s ease-in-out infinite}
 @keyframes slShine{0%,55%{left:-60%}100%{left:130%}}
 @media (prefers-reduced-motion:reduce){.sl-pic>*,.sl-btn,.sl-btn::after{animation:none!important}}
+
+.sheet,.sheet.center{place-items:center;padding:16px}
+.sheet>.sheet-card{border-radius:28px;zoom:var(--pop-z,1);max-height:calc((100dvh - 32px) / var(--pop-z,1));max-width:min(560px,calc((100vw - 32px) / var(--pop-z,1)))}
+.sheet>.sheet-card.cw-card{max-width:min(400px,calc((100vw - 32px) / var(--pop-z,1)))}
+.sheet>.sheet-card:has(.bsmap){zoom:1;max-height:calc(100dvh - 32px);max-width:min(560px,calc(100vw - 32px))}
+.gsheet{align-items:center;padding:16px}
+.gs-card{border-radius:24px;zoom:var(--pop-z,1);max-height:calc((100dvh - 32px) / var(--pop-z,1));max-width:min(520px,calc((100vw - 32px) / var(--pop-z,1)))}
+.pp-card{zoom:var(--pop-z,1);max-height:calc((100dvh - 40px) / var(--pop-z,1));overflow:auto;max-width:min(380px,calc((100vw - 40px) / var(--pop-z,1)))}
+/* Security: alerts and per-limit messages */
+.secal.new{background:#FFF4D6;font-weight:700}.secal.new.full{background:#FFE3E0}
+.secv .linkbtn{justify-self:end}

@@ -514,6 +514,7 @@ function renderTimes(){
 }
 function renderStoreStatic(){
   const set=DB.settings;
+  applyPopScale();
   renderMenu();renderMarquee($("#marq"),DB.marquee);
   renderOpts();
   const closedTxt=set.closedWeekdays.length?`We're closed ${listJoin(set.closedWeekdays.slice().sort().map(d=>DOW_LONG[d])).replace(" or "," and ")}. `:"";
@@ -917,24 +918,41 @@ $("#gdSheet").addEventListener("click",e=>{
   if(e.target.closest("[data-gdok]")){const f=gdFn;closeGuard();if(f)f();return}
   if(e.target.closest("[data-gdno]")||e.target.id==="gdSheet")closeGuard()});
 addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("#gdSheet").hidden)closeGuard()});
-/* a lively "slow down" pop-up when a visitor hits a limit (look and wording set in the Security tab) */
-const SLOW_DEF={Title:"Slow down a little, friends!",Text:"Cookies are best eaten slowly… and so is this website. Please wait a moment and try again.",Btn:"OK, I'll slow down"};
+/* friendly pop-ups when a visitor gets close to a limit ("warn") or reaches it ("slow" = stop); look and wording set in the Security tab */
+const POP_DEF={
+  slow:{Title:"Slow down a little, friends!",Text:"Cookies are best eaten slowly… and so is this website. Please wait a moment and try again.",Btn:"OK, I'll slow down",Icon:"🍪",Bg:"#FFF4D6",Ink:"#0B0B45",BtnBg:"#000096",BtnInk:"#FFFFFF",Fx:"bounce",BtnFx:"shine"},
+  warn:{Title:"Easy there, cookie lover!",Text:"You're going a little fast. Take a breath, cookies taste better slowly.",Btn:"Got it",Icon:"🐢",Bg:"#EAF6FF",Ink:"#0B0B45",BtnBg:"#0A7F5A",BtnInk:"#FFFFFF",Fx:"float",BtnFx:"pulse"}};
+// which part of the shop the limit belongs to (each can have its own message)
+const POP_GRP={place_order:"Orders",track_order:"Track",check_coupon:"Coupon",courier:"Courier",submit_proof:"Upload",submit_complaint:"Upload",submit_place:"Upload"};
 const SLOW_FX=[["bounce","Bounce"],["wiggle","Wiggle"],["float","Float up and down"],["pulse","Pulse"],["spin","Slow spin"],["none","Still"]],SLOW_BFX=[["shine","Shine sweep"],["pulse","Gentle pulse"],["wiggle","Wiggle"],["none","Still"]];
-const slowVars=t=>`--sl-bg:${hexOk(t.slowBg,"#FFF4D6")};--sl-ink:${hexOk(t.slowInk,"#0B0B45")};--sl-bb:${hexOk(t.slowBtnBg,"#000096")};--sl-bi:${hexOk(t.slowBtnInk,"#FFFFFF")};--sl-font:${(MQ_FONTS[t.slowFont]||MQ_FONTS.display)[1].replace(/"/g,"'")}`;
-function slowCardHTML(t){
-  const g=k=>String(t["slow"+k]||"").trim()||SLOW_DEF[k],fx=fxOk(t.slowFx,SLOW_FX.map(x=>x[0]),"bounce"),bfx=fxOk(t.slowBtnFx,SLOW_BFX.map(x=>x[0]),"shine"),u=imgOk(t.slowImg);
-  const pic=u?`<div class="sl-pic fx-${fx}"><img class="${imgIsCut(u,t.slowImgCut)?"":"crop"}" src="${esc(u)}" alt="" draggable="false"></div>`:`<div class="sl-pic fx-${fx}"><span class="sl-emo" aria-hidden="true">${esc(String(t.slowIcon||"").trim()||"🍪")}</span></div>`;
-  return `${pic}<h3 id="slowTitle">${esc(g("Title"))}</h3><p>${esc(g("Text")).replace(/\n/g,"<br>")}</p><button class="sl-btn bfx-${bfx}" type="button" data-slowok><span>${esc(g("Btn"))}</span></button>`;
+const slowVars=(t,p="slow")=>{const D=POP_DEF[p],c=k=>hexOk(t[p+k],D[k]);return `--sl-bg:${c("Bg")};--sl-ink:${c("Ink")};--sl-bb:${c("BtnBg")};--sl-bi:${c("BtnInk")};--sl-font:${(MQ_FONTS[t[p+"Font"]]||MQ_FONTS.display)[1].replace(/"/g,"'")}`};
+function slowCardHTML(t,p="slow",grp=""){
+  const D=POP_DEF[p],g=k=>String(t[p+k]||"").trim()||D[k],fx=fxOk(t[p+"Fx"],SLOW_FX.map(x=>x[0]),D.Fx),bfx=fxOk(t[p+"BtnFx"],SLOW_BFX.map(x=>x[0]),D.BtnFx),u=imgOk(t[p+"Img"]);
+  const txt=(grp&&String(t[p+"Msg"+grp]||"").trim())||g("Text");
+  const pic=u?`<div class="sl-pic fx-${fx}"><img class="${imgIsCut(u,t[p+"ImgCut"])?"":"crop"}" src="${esc(u)}" alt="" draggable="false"></div>`:`<div class="sl-pic fx-${fx}"><span class="sl-emo" aria-hidden="true">${esc(g("Icon"))}</span></div>`;
+  return `${pic}<h3>${esc(g("Title"))}</h3><p>${esc(txt).replace(/\n/g,"<br>")}</p><button class="sl-btn bfx-${bfx}" type="button" data-slowok><span>${esc(g("Btn"))}</span></button>`;
 }
-let slowAt=0;
-window.ddSlow=function(force){
-  const t=DB.settings,sh=$("#slowSheet");if(!sh||(!force&&(t.slowOn===false||(typeof SBH!=="undefined"&&SBH.admin))))return;
-  const now=Date.now();if(!force&&(!sh.hidden||now-slowAt<20000))return;slowAt=now;
-  const c=$("#slowCard");c.style.cssText=slowVars(t);c.innerHTML=slowCardHTML(t);sh.hidden=false;
-  setTimeout(()=>{const b=c.querySelector("[data-slowok]");b&&b.focus()},60);
+const popAt={};
+// o: {kind:"warn"|"stop", src: what was called}; true = the owner's test button
+window.ddSlow=function(o){
+  o=o===true?{force:true}:(o||{});
+  const p=o.kind==="warn"?"warn":"slow",t=DB.settings,sh=$("#slowSheet");if(!sh)return;
+  const grp=POP_GRP[o.src]||o.grp||"",now=Date.now();
+  if(!o.force){
+    if(t[p+"On"]===false||(typeof SBH!=="undefined"&&SBH.admin))return;
+    if(!sh.hidden&&!(p==="slow"&&sh.dataset.kind==="warn"))return;   // the stop message may replace a warning
+    if(p==="slow"){if(now-(popAt.slow||0)<20000)return;popAt.slow=now}
+    else{if(now-(popAt.slow||0)<60000||now-(popAt["w"+grp]||0)<300000)return;popAt["w"+grp]=now}
+  }
+  const c=$("#slowCard");c.className="sheet-card cw-card sl-card sl-"+p;c.style.cssText=slowVars(t,p);c.innerHTML=slowCardHTML(t,p,grp);
+  const h=c.querySelector("h3");if(h)h.id="slowTitle";sh.dataset.kind=p;sh.hidden=false;
+  setTimeout(()=>{const b=c.querySelector("[data-slowok]");b&&b.focus({preventScroll:true})},60);
 };
 $("#slowSheet").addEventListener("click",e=>{if(e.target.closest("[data-slowok]")||e.target.id==="slowSheet")$("#slowSheet").hidden=true});
 addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("#slowSheet").hidden)$("#slowSheet").hidden=true});
+// size of every pop-up in the shop (Security tab, 70% to 130%)
+const popZ=t=>Math.min(130,Math.max(70,Math.round(+(t||DB.settings).popScale||100)));
+function applyPopScale(){document.documentElement.style.setProperty("--pop-z",String(popZ()/100))}
 function clearBox(){if(!S.box.length)return;S.shuf=0;S.box.forEach((_,i)=>ghostOut(i));S.box=[];S.step=1;renderStore()}
 function scrollToEl(el){
   const go=()=>{const fl=$("#flash"),head=$(".top").getBoundingClientRect().height+(fl.hidden||fl.parentNode===$(".top")?0:fl.getBoundingClientRect().height);
@@ -1696,6 +1714,8 @@ function renderAdmin(){
   if(A.tab==="customers"&&(CU.list===null||CU.stale))loadCustomers();
   if(A.tab==="team"&&TM.list===null)loadTeam();
   if(A.tab==="security"&&SEC.cfg===null)loadSec();
+  if(A.tab==="security"&&SEC.lastTab!=="security"&&SEC.cfg!==null)loadSec();SEC.lastTab=A.tab;
+  if(ROLE()==="owner")secPollStart();secBadge();
   tickAdmin();
   if(A.tab==="sales")updatePreview();if(A.tab==="boxes"&&typeof fpInit==="function")fpInit();
   if(A.tab==="marquee")afterViewMarquee();
@@ -4531,7 +4551,7 @@ am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
 /* Boxes & extras: keep the little preview of the two buttons in step with the settings */
 ["input","change"].forEach(ev=>am.addEventListener(ev,e=>{const k=e.target.dataset&&e.target.dataset.k;if(k&&/^settings::(rb|fab)/.test(k)){const pv=$("#btnPrev");if(pv)pv.innerHTML=btnPreviewHTML()}
   if(k&&/^settings::guard/.test(k)){const g=$("#gdPrev");if(g)g.innerHTML=guardPrevHTML()}
-  if(k&&/^settings::slow/.test(k)){const g=$("#slowPrev");if(g){g.style.cssText="position:static;max-width:380px;margin:0 auto;animation:none;"+slowVars(DB.settings);g.innerHTML=slowCardHTML(DB.settings)}}}));
+  if(k&&/^settings::(slow|warn)/.test(k))popPrevDraw()}));
 /* --- gift editor (Flash sales tab, Gifts promo) --- */
 am.addEventListener("input",e=>{const el=e.target,D=A.draft;
   if(el.dataset.gname!==undefined){D.gifts[+el.dataset.gname].name=el.value;document.querySelectorAll("[data-rchips]").forEach(c=>{c.innerHTML=giftChipsHTML(D,D.rules[+c.dataset.rchips],+c.dataset.rchips)});updatePreview()}
@@ -4753,18 +4773,21 @@ am.addEventListener("click",async e=>{const b=e.target.closest("button");if(!b||
     .then(()=>{LG.list=null;renderAdmin();loadLog();toast("Activity log deleted")}).catch(()=>{})}
 });
 
-/* --- Security (owners only): abuse limits, daily courier caps and the emergency stop. Changes need Owner mode --- */
+/* --- Security (owners only): abuse limits, daily courier caps, early warnings, owner alerts and the emergency stop. Changes need Owner mode --- */
 // [name, label, hint, default]; 0 = no limit, blank = default
 const SEC_GROUPS=[
-  ["💸 Cost guard: courier & maps","The calls that cost you money. When a daily cap is reached, the shop says \"Courier prices are busy, try again later\" until the next 24 hours.",[
+  ["⚠️ Early warning & alerts","Visitors get a friendly warning pop-up before they reach one of their limits. You get an alert (badge on Security, and a message) when the shop's daily courier caps fill up, or a whole-shop limit is reached.",[
+    ["warnPct","Warn visitors when they have used (%)","Of any of their own limits. 0 = no warning",70],
+    ["alertPct","Alert me when a daily courier cap is used (%)","You are also alerted when a cap is reached. 0 = only then",70]]],
+  ["💸 Cost guard: courier & maps (whole shop)","The calls that cost you money, for everyone together. When a daily cap is reached, the shop says \"Courier prices are busy, try again later\" until the next 24 hours.",[
     ["capRates","Courier price checks per day","Biteship rate checks, whole shop",800],
     ["capGeo","Address-on-map lookups per day","Google Maps (when you saved a Google key), whole shop",400],
     ["capAreas","Area searches per day","Biteship area search, whole shop",1500],
     ["cacheMin","Reuse a courier price for (minutes)","Same box to the same place reuses the last price, no new paid call",10]]],
   ["🛵 Courier lookups per visitor","Counted per internet connection, so one person or bot can't use up the daily caps.",[
-    ["bsRatesIpM","Price checks per minute","",10],["bsRatesIpH","Price checks per hour","",60],
-    ["bsGeoIpM","Map lookups per minute","",12],["bsGeoIpH","Map lookups per hour","",60],
-    ["bsAreasIpM","Area searches per minute","",40]]],
+    ["bsRatesIpM","Price checks per minute","",10],["bsRatesIpH","Price checks per hour","",60],["bsRatesIpD","Price checks per day","",40],
+    ["bsGeoIpM","Map lookups per minute","",12],["bsGeoIpH","Map lookups per hour","",60],["bsGeoIpD","Map lookups per day","",30],
+    ["bsAreasIpM","Area searches per minute","",40],["bsAreasIpD","Area searches per day","",200]]],
   ["🧾 Orders","Stops fake orders that hold your cookie stock.",[
     ["orderIpH","Orders per visitor per hour","",10],["orderIpD","Orders per visitor per day","",30],
     ["phoneOpen","Unpaid orders per phone number","A new order waits until one is paid or cancelled",3],
@@ -4776,23 +4799,40 @@ const SEC_GROUPS=[
     ["proofH","Payment proof uploads per hour","",8],["complaintH","Complaints per hour","",4],["placeH","Place photo changes per hour","",12]]],
   ["👀 Visitor counter","Only affects the visitor numbers on the Dashboard.",[
     ["visitIpM","Counted visits per visitor per minute","",120],["visitAll","Counted visits per minute, whole shop","",600]]]];
-const SEC={cfg:null,used:{},draft:{},err:"",loading:false,saving:false};
+const SEC_NORESET=["warnPct","alertPct","phoneOpen","cacheMin"],SEC_PCT=["warnPct","alertPct"];
+const SEC={cfg:null,used:{},draft:{},err:"",loading:false,saving:false,alerts:[],seen:0,unseen:0};
 const SEC_ID="__security__";
 const secOn=()=>(OWNM[SEC_ID]||0)>Date.now();
+const secLabel=k=>{for(const g of SEC_GROUPS)for(const r of g[2])if(r[0]===k)return r[1];return k};
+const secAlertText=a=>a.lvl>=100?`${secLabel(a.k)}: limit reached`+(/All$/.test(a.k)?" (a very busy moment, or bots)":""):`${secLabel(a.k)}: ${a.lvl}% used`;
 async function loadSec(){
   if(!SBH.on||SEC.loading)return;SEC.loading=true;
-  try{const r=await SBH.rpc("admin_security_get",{});SEC.cfg=r.cfg||{};SEC.used=r.used||{};SEC.err="";if(r.until>Date.now())OWNM[SEC_ID]=r.until}
-  catch(e){SEC.err=/does not exist|Could not find/i.test(e.message)?"Run the latest database file (20260129000000_security_tab.sql) first.":e.message;SEC.cfg=SEC.cfg||{}}
+  try{const r=await SBH.rpc("admin_security_get",{});SEC.cfg=r.cfg||{};SEC.used=r.used||{};SEC.alerts=r.alerts||[];SEC.seen=+r.seen||0;SEC.err="";if(r.until>Date.now())OWNM[SEC_ID]=r.until}
+  catch(e){SEC.err=/does not exist|Could not find/i.test(e.message)?"Run the latest database file (20260130000000_limit_warnings.sql) first.":e.message;SEC.cfg=SEC.cfg||{}}
   SEC.loading=false;if(A.tab==="security"&&!A.modal){const y=scrollY;renderAdmin();scrollTo(0,y)}
+  // the owner has now seen the alerts (they stay highlighted until the next visit)
+  if(A.tab==="security"&&SEC.alerts.some(a=>a.at>SEC.seen))SBH.rpc("admin_security_seen",{}).then(()=>{SEC.unseen=0;secBadge()}).catch(()=>{});
 }
+// new alerts: a badge on the Security tab and a message, checked every minute while the team site is open
+let SEC_POLL=null;
+function secBadge(){const c=$("#cSec");if(!c)return;c.textContent=SEC.unseen||"";c.hidden=!SEC.unseen;c.classList.toggle("live",!!SEC.unseen)}
+async function secPoll(){if(!SBH.on||ROLE()!=="owner"||document.hidden)return;
+  try{const r=await SBH.rpc("admin_security_alerts",{}),n=+r.n||0;if(n>SEC.unseen&&r.last&&A.tab!=="security")toast("🛡️ "+secAlertText(r.last));SEC.unseen=A.tab==="security"?0:n;secBadge()}catch(e){}}
+function secPollStart(){if(SEC_POLL||!SBH.on||ROLE()!=="owner")return;SEC_POLL=setInterval(secPoll,60000);setTimeout(secPoll,1500)}
 const secVal=k=>k in SEC.draft?SEC.draft[k]:(SEC.cfg&&SEC.cfg[k]!==undefined?String(SEC.cfg[k]):"");
+function secNote(k,v,dflt){return v===""?"default"+(SEC_PCT.includes(k)?` (${dflt}%)`:""):v==="0"?`<b class="secoff">${SEC_PCT.includes(k)?"off":"no limit"}</b>`:"default "+dflt}
 function secRow([k,label,hint,dflt],on){
   const v=secVal(k),cap={capRates:"rates",capGeo:"geocode",capAreas:"areas"}[k];
   const lim=v===""?dflt:+v,used=cap?(+SEC.used[cap]||0):null,pct=cap&&lim>0?Math.min(100,Math.round(used/lim*100)):0;
   return `<div class="secrow"><div class="secl"><b>${esc(label)}</b>${hint?`<span class="note">${esc(hint)}</span>`:""}
       ${cap?`<div class="secbar${pct>=90?" hot":pct>=60?" warm":""}" title="${used} used in the last 24 hours"><i style="width:${lim>0?pct:0}%"></i></div><span class="note">${used} used in the last 24 hours${lim>0?` of ${lim}`:" (no cap)"}</span>`:""}</div>
-    <div class="secv"><input class="in" type="number" inputmode="numeric" min="0" max="1000000" step="1" data-seck="${k}" value="${esc(v)}" placeholder="${dflt}" ${on?"":"disabled"} aria-label="${esc(label)}">
-      <span class="note">${v===""?"default":v==="0"?"<b class=\"secoff\">no limit</b>":"default "+dflt}</span></div></div>`;
+    <div class="secv"><input class="in" type="number" inputmode="numeric" min="0" max="${SEC_PCT.includes(k)?99:1000000}" step="1" data-seck="${k}" value="${esc(v)}" placeholder="${dflt}" ${on?"":"disabled"} aria-label="${esc(label)}">
+      <span class="note">${secNote(k,v,dflt)}</span>${SEC_NORESET.includes(k)?"":`<button class="linkbtn sm" type="button" data-secreset="${k}" ${on?"":"disabled"} title="Start counting this limit again from zero, for everyone">Reset count</button>`}</div></div>`;
+}
+function secAlertsPanel(){
+  if(!SEC.alerts.length)return "";
+  return `<section class="panel"><h3 class="sech">🔔 Alerts</h3><div class="secalerts">${SEC.alerts.slice(0,10).map(a=>`<div class="secal${a.at>SEC.seen?" new":""}${a.lvl>=100?" full":""}"><span>${a.lvl>=100?"🛑":"⚠️"} ${esc(secAlertText(a))}</span><small>${new Date(a.at).toLocaleString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</small></div>`).join("")}</div>
+    <p class="note" style="margin-top:8px">Raise the limit, press <b>Reset count</b> next to it, or use the Emergency stop if it looks like an attack.</p></section>`;
 }
 function viewSecurity(){
   const h=head("Security","Limits that protect your shop from abuse, bots and surprise bills. Only owners can see this.");
@@ -4800,44 +4840,52 @@ function viewSecurity(){
   if(SEC.cfg===null)return h+`<section class="panel"><div class="empty">Loading…</div></section>`;
   const on=secOn(),stop="courierOff" in SEC.draft?SEC.draft.courierOff:!!SEC.cfg.courierOff;
   return h+`<div class="stack">
-    <section class="panel secown${on?" on":""}"><div><b>${on?"🔓 Owner mode is on":"🔒 Locked"}</b><p class="note">${on?"You can change the limits. It switches off by itself.":"Turn on Owner mode with the owner password to change anything here."}</p></div>
+    <section class="panel secown${on?" on":""}"><div><b>${on?"🔓 Owner mode is on":"🔒 Locked"}</b><p class="note">${on?"You can change the limits and reset the counts. It switches off by itself.":"Turn on Owner mode with the owner password to change or reset anything here."}</p></div>
       <button class="oc-b ownm${on?" on":""}" type="button" data-secm>${on?`🔓 Owner mode · <span data-ownt="${SEC_ID}">${fmtLeftS(OWNM[SEC_ID]-Date.now())}</span>`:"🔒 Turn on Owner mode"}</button></section>
     ${SEC.err?`<p class="err">${esc(SEC.err)}</p>`:""}
+    ${secAlertsPanel()}
     <section class="panel secstop${stop?" on":""}"><label class="secsw"><input type="checkbox" data-secstop ${stop?"checked":""} ${on?"":"disabled"}><span><b>🚨 Emergency stop: pause live courier prices</b>
       <span class="note">Use it if you see a sudden jump in courier usage. No new Biteship or Google calls are made. Customers can still choose pickup, or your normal delivery fee if \"If courier prices can't load, allow my normal delivery fee\" is on in Delivery & courier.</span></span></label></section>
-    ${slowPanel()}
     ${SEC_GROUPS.map(([t,sub,rows])=>`<section class="panel"><h3 class="sech">${t}</h3><p class="note" style="margin:2px 0 10px">${esc(sub)}</p><div class="seclist">${rows.map(r=>secRow(r,on)).join("")}</div></section>`).join("")}
-    <p class="note">Leave a box empty to use the default. 0 means no limit, so use 0 carefully. Changes work within a few seconds, no Publish needed.</p>
+    <p class="note">Leave a box empty to use the default. 0 means no limit, so use 0 carefully. Changes work within a few seconds, no Publish needed. <b>Reset count</b> lets everyone start again from zero for that limit.</p>
     <div class="secact"><button class="btn btn-blue" type="button" data-secsave ${on&&!SEC.saving?"":"disabled"}>${SEC.saving?"Saving…":"Save security limits"}</button>
-      <button class="ghost" type="button" data-secdef ${on?"":"disabled"}>Back to defaults</button><button class="ghost" type="button" data-secreload>Refresh usage</button></div>
+      <button class="ghost" type="button" data-secdef ${on?"":"disabled"}>Back to defaults</button><button class="ghost" type="button" data-secreload>Refresh usage</button>
+      <button class="danger" type="button" data-secresetall ${on?"":"disabled"}>Reset all counts</button></div>
+    ${popSizePanel()}${slowPanel("warn")}${slowPanel("slow")}
     <section class="panel"><h3 class="sech">🌐 Big attacks (DDoS)</h3><p class="note" style="margin-top:4px">These limits stop people and bots from using up your courier money and stock. A very large flood of traffic is stopped by your hosting, not by the shop. Also set a <b>spend cap</b> and <b>billing alerts</b> in Supabase, and in Netlify, and consider Cloudflare in front of the shop.</p></section>
   </div>`;
 }
 async function secModeToggle(){
   if(secOn()){delete OWNM[SEC_ID];SBH.rpc("admin_security_mode",{p_password:""}).catch(()=>{});toast("Owner mode off");renderAdmin();return}
-  const ok=await pwPrompt({title:"Owner mode for Security",text:"Type the owner password. This unlocks changing the security limits for 5 minutes.",button:"Turn on",
+  const ok=await pwPrompt({title:"Owner mode for Security",text:"Type the owner password. This unlocks changing and resetting the security limits for 5 minutes.",button:"Turn on",
     run:async pw=>{try{const r=await SBH.rpc("admin_security_mode",{p_password:pw});if(r&&r.ok)OWNM[SEC_ID]=r.until;return r}catch(x){return {ok:false,err:x.message}}}}).then(()=>true,()=>false);
   if(ok&&secOn()){toast("Owner mode on for 5 minutes");const y=scrollY;renderAdmin();scrollTo(0,y)}
 }
 async function secSave(){
   const p={};SEC_GROUPS.forEach(g=>g[2].forEach(([k])=>{const v=String(secVal(k)).trim();if(v!=="")p[k]=v}));
   for(const k in p)if(!/^\d{1,7}$/.test(p[k])||+p[k]>1000000){toast("Use whole numbers from 0 to 1,000,000.");return}
+  for(const k of SEC_PCT)if(p[k]!==undefined&&+p[k]>99){toast("Warning and alert points are from 0 to 99 (%).");return}
   p.courierOff="courierOff" in SEC.draft?SEC.draft.courierOff:!!SEC.cfg.courierOff;
   SEC.saving=true;renderAdmin();
   try{SEC.cfg=await SBH.rpc("admin_security_set",{p});SEC.draft={};toast("Security limits saved")}catch(x){toast(x.message)}
   SEC.saving=false;const y=scrollY;renderAdmin();scrollTo(0,y);
 }
+async function secReset(name){
+  try{await SBH.rpc("admin_security_reset",{p_name:name});toast(name==="all"?"All counts reset. Everyone starts from zero.":`"${secLabel(name)}" reset`);loadSec()}catch(x){toast(x.message)}
+}
 am.addEventListener("input",e=>{const k=e.target.dataset&&e.target.dataset.seck;if(!k)return;SEC.draft[k]=e.target.value.trim();
-  const n=e.target.parentNode.querySelector(".note");if(n){const v=SEC.draft[k];n.innerHTML=v===""?"default":v==="0"?"<b class=\"secoff\">no limit</b>":"default "+e.target.placeholder}});
+  const n=e.target.parentNode.querySelector(".note");if(n)n.innerHTML=secNote(k,SEC.draft[k],e.target.placeholder)});
 am.addEventListener("change",e=>{if(e.target.matches("[data-secstop]")){SEC.draft.courierOff=e.target.checked;e.target.closest(".secstop").classList.toggle("on",e.target.checked)}});
 am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b||A.tab!=="security")return;const d=b.dataset;
   if(d.secm!==undefined)secModeToggle();
   else if(d.secsave!==undefined)secSave();
   else if(d.secreload!==undefined)loadSec();
+  else if(d.secreset)armed(b,()=>secReset(d.secreset));
+  else if(d.secresetall!==undefined)armed(b,()=>secReset("all"));
   else if(d.secdef!==undefined){SEC_GROUPS.forEach(g=>g[2].forEach(([k])=>SEC.draft[k]=""));SEC.draft.courierOff=false;const y=scrollY;renderAdmin();scrollTo(0,y);toast("Defaults filled in. Press Save to use them.")}
 });
 
-/* Security: the pop-up visitors see when they hit a limit */
+/* Security: the pop-ups visitors see (warning when close to a limit, stop when it is reached) and the size of every pop-up */
 async function imgAnimated(f){
   if(f.type==="image/gif")return true;
   try{const b=new Uint8Array(await f.slice(0,65536).arrayBuffer()),ch=(i,n)=>String.fromCharCode.apply(null,b.subarray(i,i+n));
@@ -4845,41 +4893,56 @@ async function imgAnimated(f){
     if(f.type==="image/png"){for(let i=8;i<b.length-4;i++)if(b[i]===0x61&&b[i+1]===0x63&&b[i+2]===0x54&&b[i+3]===0x4c)return true}}catch(e){}
   return false;
 }
-function slowPanel(){
-  const t=DB.settings,sw=(k,label)=>`<label class="chk"><span class="sw"><input type="checkbox" data-k="settings::${k}" ${t[k]!==false?"checked":""}><span></span></span><span>${label}</span></label>`,
+const POP_GROUPS=[["Orders","Too many orders"],["Track","Order lookups"],["Coupon","Coupon tries"],["Courier","Courier prices & map"],["Upload","Uploads (payment proof, complaint, place photo)"]];
+const popPrevStyle=(t,p)=>`position:static;max-width:380px;margin:0 auto;animation:none;zoom:${popZ(t)/100};`+slowVars(t,p);
+function popSizePanel(){
+  const z=popZ();
+  return `<section class="panel"><h2>📐 Pop-up size</h2>
+    <p class="sub">Every pop-up in the shop sits in the middle of the screen and always fits it. Swipe to make all of them smaller or bigger. Press <b>Publish</b> after changing it.</p>
+    <div class="gslide"><div class="gs-l"><span>Size of all pop-ups</span><b id="popZv">${z}%</b></div><input type="range" min="70" max="130" step="5" value="${z}" data-popz aria-label="Size of all pop-ups" style="--p:${(z-70)/60*100}%"><div class="gs-ends"><span>Smaller</span><span>Bigger</span></div></div>
+    <div style="margin-top:8px"><button class="linkbtn sm" type="button" data-popzreset>Back to normal size (100%)</button></div></section>`;
+}
+function slowPanel(p){
+  const t=DB.settings,D=POP_DEF[p],warn=p==="warn",sw=(k,label)=>`<label class="chk"><span class="sw"><input type="checkbox" data-k="settings::${k}" ${t[k]!==false?"checked":""}><span></span></span><span>${label}</span></label>`,
     sel=(k,opts,d)=>`<select class="in" data-k="settings::${k}">${opts.map(([v,l])=>`<option value="${v}" ${(t[k]||d)===v?"selected":""}>${l}</option>`).join("")}</select>`,
-    col=(k,l,d)=>`<label class="af">${l}<input type="color" data-k="settings::${k}" value="${hexOk(t[k],d)}" style="width:100%;height:42px"></label>`,
-    tx=(k,l,max,ph)=>`<label class="af">${l}<input class="in" data-k="settings::${k}" maxlength="${max}" value="${esc(t[k]||"")}" placeholder="${esc(ph||"")}"></label>`,
-    u=imgOk(t.slowImg);
-  return `<section class="panel"><h2>😋 "Slow down" pop-up</h2>
-    <p class="sub">The small pop-up a visitor sees when they hit one of the limits below (too many tries, too many orders, courier prices busy). Leave a box empty to use the default wording. Press <b>Publish</b> after changing it.</p>
+    col=(k,l)=>`<label class="af">${l}<input type="color" data-k="settings::${p+k}" value="${hexOk(t[p+k],D[k])}" style="width:100%;height:42px"></label>`,
+    tx=(k,l,max)=>`<label class="af">${l}<input class="in" data-k="settings::${p+k}" maxlength="${max}" value="${esc(t[p+k]||"")}" placeholder="${esc(D[k])}"></label>`,
+    u=imgOk(t[p+"Img"]),groups=POP_GROUPS.filter(g=>!(warn&&g[0]==="Upload"));
+  return `<section class="panel"><h2>${warn?"⚠️ Warning pop-up (getting close to a limit)":"🛑 Stop pop-up (limit reached)"}</h2>
+    <p class="sub">${warn?"Shown once when a visitor has used most of one of their limits (see \"Warn visitors when they have used\" above). They can carry on.":"Shown when a visitor reaches a limit (too many tries, too many orders, courier prices busy). They have to wait a bit."} Leave a box empty to use the default wording. Press <b>Publish</b> after changing it.</p>
     <div class="stack" style="gap:12px">
-      ${sw("slowOn","Show the pop-up")}
-      <div class="grid2">${tx("slowTitle","Title",60,SLOW_DEF.Title)}${tx("slowBtn","Button text",28,SLOW_DEF.Btn)}</div>
-      <label class="af">Message<textarea class="in" rows="3" maxlength="240" data-k="settings::slowText" placeholder="${esc(SLOW_DEF.Text)}">${esc(t.slowText||"")}</textarea></label>
-      <div class="grid2"><label class="af">Icon (an emoji)<input class="in" data-k="settings::slowIcon" maxlength="4" value="${esc(t.slowIcon||"")}" placeholder="🍪"></label>
-        <label class="af">Icon / picture movement${sel("slowFx",SLOW_FX,"bounce")}</label></div>
+      ${sw(p+"On","Show this pop-up")}
+      <div class="grid2">${tx("Title","Title",60)}${tx("Btn","Button text",28)}</div>
+      <label class="af">Message<textarea class="in" rows="3" maxlength="240" data-k="settings::${p}Text" placeholder="${esc(D.Text)}">${esc(t[p+"Text"]||"")}</textarea></label>
+      <details class="secmsg"><summary>A different message for each kind of limit (optional)</summary><div class="stack" style="gap:10px;margin-top:10px">
+        ${groups.map(([g,l])=>`<label class="af">${l}<textarea class="in" rows="2" maxlength="240" data-k="settings::${p}Msg${g}" placeholder="Empty = the message above">${esc(t[p+"Msg"+g]||"")}</textarea></label>`).join("")}</div></details>
+      <div class="grid2"><label class="af">Icon (an emoji)<input class="in" data-k="settings::${p}Icon" maxlength="4" value="${esc(t[p+"Icon"]||"")}" placeholder="${D.Icon}"></label>
+        <label class="af">Icon / picture movement${sel(p+"Fx",SLOW_FX,D.Fx)}</label></div>
       <div class="af">Your own picture instead of the icon (a GIF, an animated WebP or APNG moves by itself)
-        <div class="colin" style="flex-wrap:wrap;gap:8px;align-items:center"><span>${u?`<img class="lpthumb" style="max-height:48px;max-width:64px;border-radius:8px" src="${esc(u)}" alt="">`:`<span class="note" style="margin:0">None</span>`}</span><label class="ghost mqbtn">${u?"Replace picture":"Upload picture"}<input type="file" accept="image/*" hidden data-slowimg></label>${u?`<button class="danger" type="button" data-slowimgrm>Use the icon instead</button>`:""}</div>
+        <div class="colin" style="flex-wrap:wrap;gap:8px;align-items:center"><span>${u?`<img class="lpthumb" style="max-height:48px;max-width:64px;border-radius:8px" src="${esc(u)}" alt="">`:`<span class="note" style="margin:0">None</span>`}</span><label class="ghost mqbtn">${u?"Replace picture":"Upload picture"}<input type="file" accept="image/*" hidden data-slowimg="${p}"></label>${u?`<button class="danger" type="button" data-slowimgrm="${p}">Use the icon instead</button>`:""}</div>
         <span class="note">Animated pictures up to 800 KB. Other pictures are resized for you.</span></div>
-      <div class="grid2">${col("slowBg","Background colour","#FFF4D6")}${col("slowInk","Text colour","#0B0B45")}</div>
-      <label class="af">Font${sel("slowFont",Object.entries(MQ_FONTS).map(([k,v])=>[k,v[0]]),"display")}</label>
-      <div class="grid2">${col("slowBtnBg","Button colour","#000096")}${col("slowBtnInk","Button text colour","#FFFFFF")}</div>
-      <label class="af">Button movement${sel("slowBtnFx",SLOW_BFX,"shine")}</label>
-      <div class="af">Preview<div class="sheet-card cw-card sl-card" id="slowPrev" style="position:static;max-width:380px;margin:0 auto;animation:none;${esc(slowVars(t))}">${slowCardHTML(t)}</div></div>
-      <div><button class="ghost" type="button" data-slowtest>Show it like a visitor sees it</button></div>
+      <div class="grid2">${col("Bg","Background colour")}${col("Ink","Text colour")}</div>
+      <label class="af">Font${sel(p+"Font",Object.entries(MQ_FONTS).map(([k,v])=>[k,v[0]]),"display")}</label>
+      <div class="grid2">${col("BtnBg","Button colour")}${col("BtnInk","Button text colour")}</div>
+      <label class="af">Button movement${sel(p+"BtnFx",SLOW_BFX,D.BtnFx)}</label>
+      <div class="af">Preview<div class="sheet-card cw-card sl-card" id="${p}Prev" style="${esc(popPrevStyle(t,p))}">${slowCardHTML(t,p)}</div></div>
+      <div><button class="ghost" type="button" data-slowtest="${p}">Show it like a visitor sees it</button></div>
     </div></section>`;
 }
-am.addEventListener("change",async e=>{const el=e.target;if(!el.dataset||el.dataset.slowimg===undefined)return;const f=el.files[0];if(!f)return;
+function popPrevDraw(){["slow","warn"].forEach(p=>{const g=$("#"+p+"Prev");if(g){g.style.cssText=popPrevStyle(DB.settings,p);g.innerHTML=slowCardHTML(DB.settings,p)}})}
+am.addEventListener("change",async e=>{const el=e.target,p=el.dataset&&el.dataset.slowimg;if(p!=="slow"&&p!=="warn")return;const f=el.files[0];if(!f)return;
   try{let data,cut;
     if(await imgAnimated(f)){if(f.size>800e3)throw new Error("That animated picture is over 800 KB. Try a smaller or shorter one.");data=await readData(f);cut=true}
     else{data=await lpResize(f,240,true);cut=await imgHasAlpha(f)}
-    const prev=DB.settings.slowImg,prevC=DB.settings.slowImgCut;DB.settings.slowImg=data;DB.settings.slowImgCut=cut;
-    if(!saveDB()){DB.settings.slowImg=prev;DB.settings.slowImgCut=prevC;toast("Not enough storage space. Remove another photo first.");return}
+    const prev=DB.settings[p+"Img"],prevC=DB.settings[p+"ImgCut"];DB.settings[p+"Img"]=data;DB.settings[p+"ImgCut"]=cut;
+    if(!saveDB()){DB.settings[p+"Img"]=prev;DB.settings[p+"ImgCut"]=prevC;toast("Not enough storage space. Remove another photo first.");return}
     renderAdmin();toast("Picture saved")}catch(err){toast(err.message)}});
-am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
-  if(b.dataset.slowimgrm!==undefined){DB.settings.slowImg="";delete DB.settings.slowImgCut;saveDB();renderAdmin();toast("Using the icon")}
-  else if(b.dataset.slowtest!==undefined)window.ddSlow(true)});
+am.addEventListener("input",e=>{if(e.target.dataset.popz===undefined)return;const v=+e.target.value;e.target.style.setProperty("--p",((v-70)/60*100)+"%");
+  const l=$("#popZv");if(l)l.textContent=v+"%";DB.settings.popScale=v;popPrevDraw();clearTimeout(SEC.zT);SEC.zT=setTimeout(saveSoon,300)});
+am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;const d=b.dataset;
+  if(d.slowimgrm==="slow"||d.slowimgrm==="warn"){DB.settings[d.slowimgrm+"Img"]="";delete DB.settings[d.slowimgrm+"ImgCut"];saveDB();renderAdmin();toast("Using the icon")}
+  else if(d.slowtest)window.ddSlow({force:true,kind:d.slowtest==="warn"?"warn":"stop"});
+  else if(d.popzreset!==undefined){DB.settings.popScale=100;saveDB();const y=scrollY;renderAdmin();scrollTo(0,y)}});
 
 /* --- owner password prompt (used for deletes, price changes and clearing the log) --- */
 function pwPrompt(o){
