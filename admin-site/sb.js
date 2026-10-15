@@ -482,6 +482,8 @@
     return d;
   };
   H.flush = flush;
+  // how many of each limited gift were handed out (the owner's gift stock counter)
+  H.giftUsed = function () { return K.rpc("admin_gift_used", {}, true); };
   // owner records a refund (full or part) on a paid order
   H.refundOrder = async function (id, amount, note, msgs, img) {
     var d = await K.rpc("admin_refund_order", { p_id: id, p_amount: amount, p_note: note || "", p_msgs: msgs || [], p_img: img || "" }, true);

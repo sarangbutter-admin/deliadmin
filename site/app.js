@@ -184,29 +184,34 @@ function bestSale(n,at=Date.now(),db=DB){
   return db.sales.filter(s=>!isFD(s)&&!isGift(s)&&saleStatus(s,at)==="live"&&(s.appliesTo==="all"||+s.appliesTo===n))
     .sort((a,b)=>saleDiscount(b,price)-saleDiscount(a,price))[0]||null;
 }
-/* --- gifts: a "Gifts Day" promo gives free items with certain boxes (always-given ones, plus a random pick from a pool) --- */
+/* --- gifts: a "Gifts" promo has a pool of gifts and rules per box size (a limit, specific or random). The server draws them when the payment proof is sent. --- */
 const giftQty=g=>Math.max(1,Math.min(10,Math.round(+g.qty)||1));
-function giftsOfSale(s,n){
-  const gs=(s.gifts||[]).filter(g=>g&&String(g.name||"").trim()&&(!(g.sizes&&g.sizes.length)||g.sizes.map(Number).includes(n)));
-  return {sale:s,fixed:gs.filter(g=>g.mode!=="random"),pool:gs.filter(g=>g.mode==="random"),pick:Math.max(1,Math.min(5,Math.round(+s.randomCount)||1))};
-}
+const giftHasRules=s=>Array.isArray(s.rules)&&s.rules.length>0;
+const giftRuleFor=(s,n)=>(s.rules||[]).find(r=>+r.from<=n&&n<=+r.to)||null;
 function giftPlan(n,at=Date.now(),db=DB){
-  return db.sales.filter(s=>isGift(s)&&saleStatus(s,at)==="live"&&(s.appliesTo==="all"||+s.appliesTo===n)).map(s=>giftsOfSale(s,n)).filter(x=>x.fixed.length||x.pool.length);
-}
-function giftPick(n,at=Date.now(),db=DB,rnd=Math.random){
   const out=[];
-  giftPlan(n,at,db).forEach(pl=>{
-    pl.fixed.forEach(g=>out.push({id:g.id,name:g.name,qty:giftQty(g),promo:pl.sale.name}));
-    const pool=pl.pool.slice();
-    for(let i=0;i<pl.pick&&pool.length;i++){const g=pool.splice(Math.floor(rnd()*pool.length),1)[0];out.push({id:g.id,name:g.name,qty:giftQty(g),promo:pl.sale.name,random:true})}
+  db.sales.forEach(s=>{
+    if(!isGift(s)||saleStatus(s,at)!=="live")return;const r=giftRuleFor(s,n);if(!r)return;
+    const ids=new Set(r.ids||[]),gs=(s.gifts||[]).filter(g=>g&&String(g.name||"").trim()&&ids.has(g.id));if(!gs.length)return;
+    const lim=Math.max(1,Math.min(5,Math.round(+r.limit)||1)),rnd=r.mode==="random"&&gs.length>lim;
+    out.push({sale:s,rule:r,mode:rnd?"random":"specific",limit:Math.min(lim,gs.length),gifts:rnd?gs:gs.slice(0,lim)});
   });
+  return out;
+}
+/* demo mode (no server): the same pick, made in the browser */
+function giftDrawLocal(o,db=DB,at=Date.now()){
+  const out=[];
+  giftPlan(o.size,at,db).forEach(x=>{const pool=x.gifts.slice();
+    for(let i=0;i<x.limit&&pool.length;i++){const g=x.mode==="random"?pool.splice(Math.floor(Math.random()*pool.length),1)[0]:pool.shift();out.push({id:g.id,name:g.name,promo:x.sale.name,promoId:x.sale.id,random:x.mode==="random"})}});
   return out;
 }
 const giftImg=id=>{for(const s of DB.sales||[])for(const g of s.gifts||[])if(g&&g.id===id&&g.img)return g.img;return ""};
 const giftChip=(g,extra="")=>{const im=g.img||giftImg(g.id);return `<span class="gc${extra}">${im?`<img src="${esc(imgOk(im))}" alt="" loading="lazy">`:`<i aria-hidden="true">🎁</i>`}<span>${esc(g.name)}${giftQty(g)>1?` ×${giftQty(g)}`:""}</span></span>`};
 const giftCard=(g,extra="")=>{const im=g.img||giftImg(g.id);return `<span class="gcard${extra}">${im?`<img src="${esc(imgOk(im))}" alt="" loading="lazy">`:`<i aria-hidden="true">🎁</i>`}<b>${esc(g.name)}${giftQty(g)>1?` ×${giftQty(g)}`:""}</b><em>FREE</em></span>`};
-const giftLines=n=>giftPlan(n).flatMap(x=>[...x.fixed.map(g=>`🎁 ${g.name}${giftQty(g)>1?" ×"+giftQty(g):""}`),...(x.pool.length?[`🎲 ${x.pick>1?x.pick+" surprise gifts":"1 surprise gift"}`]:[])]);
-const giftsHTML=o=>o.gifts&&o.gifts.length?`<div class="dsec"><h4>🎁 Your gifts</h4><div class="gl">${o.gifts.map(g=>giftChip(g,g.random?" rnd":"")).join("")}</div></div>`:"";
+const giftSurprise=n=>n>1?n+" surprise gifts":"1 surprise gift";
+const giftLines=n=>giftPlan(n).flatMap(x=>x.mode==="random"?[`🎲 ${giftSurprise(x.limit)}`]:x.gifts.map(g=>`🎁 ${g.name}`));
+const GIFT_NOTE="Gifts are subject to availability. Alternative gifts or a delayed shipment may happen.";
+const giftsHTML=(o,cust)=>o.gifts&&o.gifts.length?`<div class="dsec"><h4>🎁 ${cust?"Your gifts":"Free gifts to pack"}</h4><div class="gl">${o.gifts.map(g=>giftChip(g,g.random?" rnd":"")).join("")}</div>${PAID_ST.includes(o.status)?"":`<p class="note" style="margin:8px 0 0">${cust?"Confirmed once we verify your payment.":"Pack it once the payment is confirmed."}</p>`}</div>`:cust&&o.status==="awaiting"&&giftPlan(o.size).length?`<div class="dsec"><h4>🎁 Your free gift</h4><p class="hint" style="margin:0">It's revealed as soon as you send your payment proof.</p></div>`:"";
 /* --- optional courier prices from Biteship (does nothing unless the owner switches it on in Shop settings) --- */
 const bsOn=(db=DB)=>!!(SBH.on&&db.settings&&db.settings.biteship&&db.settings.biteship.on);
 const bsFallback=(db=DB)=>!(db.settings&&db.settings.biteship&&db.settings.biteship.fallback===false);
@@ -283,7 +288,9 @@ function quote(c,db=DB,{at=Date.now(),withDelivery=true}={}){
   return {ship:shipQ,feePending,base,sale,fdSale,discount,surcharge,addons,fee,coupon:cp&&cp.ok?cp.coupon:null,couponDisc,couponErr:cp&&!cp.ok?cp.err:"",total:r2(base-discount-couponDisc+surcharge+addons+fee)};
 }
 const saleOffText = s => isFD(s)?"Free delivery":isGift(s)?"Free gifts":s.type==="percent"?`${s.value}% off`:`${money(s.value)} off`;
-const saleAppliesText = s => s.appliesTo==="all"?"every box":`the box of ${s.appliesTo}`;
+function giftAppliesText(s){const ps=[...new Set(s.rules.map(r=>+r.from===+r.to&&DB.sizes.some(z=>z.n===+r.from)?`box of ${r.from}`:`custom boxes of ${r.from} to ${r.to}`))];
+  return ps.length>1?ps.slice(0,-1).join(", ")+" and "+ps[ps.length-1]:ps[0]}
+const saleAppliesText = s => isGift(s)&&giftHasRules(s)?giftAppliesText(s):s.appliesTo==="all"?"every box":`the box of ${s.appliesTo}`;
 /* --- cookie drawing --- */
 let gid=0;
 function cookieSVG(f, seed){
@@ -523,10 +530,11 @@ function renderStore(){
     cb.innerHTML=`<h4>Need a bigger box?</h4><p>Build your own from ${t.customMin} cookies, in steps of ${t.customStep}. ${money(t.customPer)} per cookie.</p>
     <div class="crow"><div class="stepper" role="group" aria-label="Custom box size"><button type="button" data-cstep="-1" aria-label="Fewer cookies" ${n<=t.customMin?"disabled":""}>−</button><input id="cvIn" type="number" inputmode="numeric" min="${t.customMin}" max="${t.customMax}" step="${t.customStep}" value="${n}" aria-label="Number of cookies"><button type="button" data-cstep="1" aria-label="More cookies" ${n+t.customStep>t.customMax?"disabled":""}>+</button></div>
     <span class="cprice num">${sale?`<s style="opacity:.6;font-weight:400">${money(base)}</s> `:""}${money(now)}</span>
-    <button class="btn btn-blue btn-sm cuse" type="button" data-cuse ${on?"disabled":""}>${on?"Selected":`Use box of ${n}`}</button></div>`}}
+    <button class="btn btn-blue btn-sm cuse" type="button" data-cuse ${on?"disabled":""}>${on?"Selected":`Use box of ${n}`}</button></div>${giftPlan(n).length?`<div class="gifthint inl"><span class="ic" aria-hidden="true">🎁</span><span class="t">Free gift with ${n} cookies!</span><button class="gifthint-b" type="button" data-giftsee="${n}">See gifts ›</button></div>`:""}`}}
   // sizes (with live sale prices)
   $("#sizes").innerHTML = activeSizes().map(s=>{const sale=bestSale(s.n),now=sale?r2(s.price-saleDiscount(sale,s.price)):s.price;
     return `<button class="size" type="button" data-size="${s.n}" aria-pressed="${s.n===S.size}">${sale?`<span class="saletag">${sale.type==="percent"?"−"+sale.value+"%":"Sale"}</span>`:""}${giftPlan(s.n).length?`<span class="saletag gifttag${sale?" l":""}">🎁 Gift</span>`:""}<strong>${s.n}</strong><small>COOKIES</small><span class="num">${sale?`<s>${money(s.price)}</s>`:""}${money(now)}</span></button>`}).join("");
+  renderGiftHint();
   document.querySelectorAll(".card").forEach(c=>{const st=c.querySelector(".stepper");if(!st)return;const n=countOf(c.dataset.id);st.querySelector("output").textContent=n;c.classList.toggle("has",n>0);
     st.querySelector('[data-act="dec"]').disabled=n===0;st.querySelector('[data-act="inc"]').disabled=full()||n>=stockLeft(prod(c.dataset.id))});
   $("#fillRest").disabled=full();
@@ -689,15 +697,39 @@ function celebrate(){if(RM)return;const p=$(".boxpanel");
 /* --- box actions --- */
 function setSize(n){S.size=n;if(S.box.length>n)S.box=S.box.slice(0,n);if(!full())S.step=1;renderStore()}
 function cpMsg(t,ok){const m=$("#cpnMsg");if(!m)return;m.textContent=t||"";m.hidden=!t;m.classList.toggle("ok",!!ok);clearTimeout(cpMsg.t);if(t)cpMsg.t=setTimeout(()=>{m.hidden=true},6000)}
+function renderGiftHint(){
+  const el=$("#giftHint");if(!el)return;const pl=giftPlan(S.size);
+  if(!pl.length){el.hidden=true;el.innerHTML="";return}
+  const rnd=pl.some(x=>x.mode==="random"),one=pl.length===1&&pl[0].mode==="specific"&&pl[0].gifts.length===1;
+  el.hidden=false;
+  el.innerHTML=`<span class="ic" aria-hidden="true">🎁</span><span class="t">${one?`Free gift with this box: ${esc(pl[0].gifts[0].name)}`:rnd?"Free surprise gift with this box!":"Free gifts with this box!"}</span><button class="gifthint-b" type="button" data-giftsee="${S.size}">See ${one?"gift":"gifts"} ›</button>`;
+}
 function renderGiftBox(){
   const el=$("#giftBox");if(!el)return;const pl=giftPlan(S.size);
   if(!pl.length){el.hidden=true;el.innerHTML="";return}
   const cl=(v,d)=>/^(#[0-9a-f]{6}|transparent)$/i.test(v||"")?v:d;
   el.hidden=false;
-  el.innerHTML=pl.map(x=>{const t=x.sale;
+  el.innerHTML=pl.map(x=>{const t=x.sale,rnd=x.mode==="random";
     return `<div class="gb fx-${["shine","pulse","none"].includes(t.fx)?t.fx:"shine"}" style="--gb:${cl(t.bg,"#FFE066")};--gi:${cl(t.ink,"#000096")}"><div class="gh"><span class="gtag">${esc(t.tag||"Gifts")}</span><b class="gt">${esc(t.name)}</b><span class="gend">Ends in <span class="cd" data-exp="${t.end}">${fmtLeft(t.end-Date.now())}</span></span></div>
-      <p class="gs">🎁 FREE with your box of ${S.size}. No extra cost:</p><div class="gl big">${x.fixed.map(g=>giftCard(g)).join("")}${x.pool.length?`<span class="gcard rnd"><i aria-hidden="true">🎲</i><b>${x.pick>1?x.pick+" surprise gifts":"1 surprise gift"}</b><em>FREE</em></span><div class="gpool">${x.pool.map(g=>giftChip(g," sm")).join("")}</div>`:""}</div></div>`}).join("");
+      <p class="gs">🎁 FREE with your box of ${S.size}. No extra cost:</p><div class="gl big">${rnd?`<span class="gcard rnd"><i aria-hidden="true">🎲</i><b>${giftSurprise(x.limit)}</b><em>FREE</em></span><div class="gpool">${x.gifts.map(g=>giftChip(g," sm")).join("")}</div>`:x.gifts.map(g=>giftCard(g)).join("")}</div>
+      <button class="gbsee" type="button" data-giftsee="${S.size}">👀 See what you ${rnd?"may get":"get"}</button><p class="gnote">${GIFT_NOTE}</p></div>`}).join("");
 }
+/* pop-up with the gifts a box size earns (opened from the strip under the box sizes and from the gift card) */
+function openGiftSheet(n){
+  const pl=giftPlan(n);if(!pl.length)return;
+  $("#gsBody").innerHTML=pl.map(x=>{const rnd=x.mode==="random";
+    return `<h3 id="gsTitle">🎁 ${rnd?"Gifts you may get":x.gifts.length>1?"Your free gifts":"Your free gift"}</h3>
+    <p class="gs-sub">${esc(x.sale.name)} · with your box of ${n} · ends in <span class="cd" data-exp="${x.sale.end}">${fmtLeft(x.sale.end-Date.now())}</span></p>
+    ${x.gifts.map(g=>{const im=g.img||giftImg(g.id);return `<div class="gs-g">${im?`<img src="${esc(imgOk(im))}" alt="">`:`<span class="gs-p" aria-hidden="true">🎁</span>`}<b>${esc(g.name)}</b><em>FREE</em></div>`}).join("")}
+    <div class="gs-note"><span aria-hidden="true">${rnd?"🎲":"✅"}</span><span>${rnd?`You get <b>${x.limit===1?"1 of these":x.limit+" of these"}</b>, picked at random when you send your payment proof. `:`${x.gifts.length>1?"These gifts come":"This gift comes"} with your box. `}It's confirmed once we verify your payment.</span></div>`}).join("")
+    +`<p class="gs-av">${GIFT_NOTE}</p><button class="btn btn-blue gs-ok" type="button" data-gsclose>Got it</button>`;
+  $("#giftSheet").hidden=false;setTimeout(()=>{const b=$("#giftSheet .gs-ok");b&&b.focus()},60);
+}
+function closeGiftSheet(){$("#giftSheet").hidden=true}
+document.addEventListener("click",e=>{
+  const b=e.target.closest("[data-giftsee]");if(b){openGiftSheet(+b.dataset.giftsee);return}
+  if(e.target.closest("[data-gsclose]"))closeGiftSheet()});
+addEventListener("keydown",e=>{if(e.key==="Escape"&&$("#giftSheet")&&!$("#giftSheet").hidden)closeGiftSheet()});
 function renderCoupon(q){
   const ap=$("#cpnAp"),f=$("#cpnForm"),ch=$("#cpnCh");if(!ap)return;
   const on=!!(S.coupon&&q.coupon);
@@ -1041,7 +1073,7 @@ $("#coForm").addEventListener("submit",e=>{
   const cust={name:$("#coName").value.trim(),email:$("#coEmail").value.trim(),phone:$("#coPhone").value.trim(),
     address:del?$("#coAddr").value.trim():""};
   const fields={notify,size:S.size,items:countItems(S.box),mode:S.mode,speed:S.mode==="pickup"?"pickup":S.speed,day:S.day,time:S.time,note:S.note,addons:[...S.addons],sale:q.sale?`${q.sale.name} (${saleOffText(q.sale)})`:"",
-    base:q.base,discount:q.discount,coupon:q.coupon?q.coupon.code:"",couponDisc:q.couponDisc,surcharge:q.surcharge,addonsTotal:q.addons,fee:q.fee,total:q.total,customer:cust,gifts:ed&&ed.size===S.size&&ed.gifts?ed.gifts:giftPick(S.size),...(S.mode==="delivery"&&(S.dnote||S.dphoto)?{place:{note:String(S.dnote||"").slice(0,200),photo:!!S.dphoto,img:S.dphoto||"",at:Date.now()}}:{})};
+    base:q.base,discount:q.discount,coupon:q.coupon?q.coupon.code:"",couponDisc:q.couponDisc,surcharge:q.surcharge,addonsTotal:q.addons,fee:q.fee,total:q.total,customer:cust,gifts:ed&&ed.size===S.size&&ed.gifts?ed.gifts:[],giftsAt:ed&&ed.size===S.size&&ed.gifts?ed.giftsAt:undefined,...(S.mode==="delivery"&&(S.dnote||S.dphoto)?{place:{note:String(S.dnote||"").slice(0,200),photo:!!S.dphoto,img:S.dphoto||"",at:Date.now()}}:{})};
   if(SBH.on){
     const btn=f.querySelector("button[type=submit]");if(btn)btn.disabled=true;
     const pNote=S.mode==="delivery"&&placeOn("dnoteOn")?String(S.dnote||"").trim():"",pImg=S.mode==="delivery"&&placeOn("dphotoOn")?S.dphoto:"";
@@ -1089,17 +1121,40 @@ function renderDone(o,ed,preview){
 }
 const doneGo=()=>{const id=$("#doneView").dataset.id;closeSheet();if(id)openMO(id)};
 function endPreview(){const sv=$("#storeView");if(sv.classList.contains("th-only")){sv.classList.remove("th-only");sv.hidden=true}}
+/* the magic gift box in the "proof sent" pop-up: it shakes, opens, and shows the gifts the order earned */
+function gmHTML(gl){
+  const rnd=gl.some(g=>g.random);
+  return `<div class="gmagic" id="gmagic" data-open="0"><button class="gm-box" type="button" id="gmBox" aria-label="Open your gift"><i class="gm-glow"></i><i class="gm-body"></i><i class="gm-lid"></i><i class="gm-bow">🎀</i></button>
+    <p class="gm-t" id="gmT">${rnd?"A surprise gift is waiting! Tap the box 🎁":"Your free gift is ready! Tap the box 🎁"}</p>
+    <div class="gm-gifts" id="gmGifts" hidden><p class="gm-h">${rnd?"Surprise! You got:":"Your free gift:"}</p><div class="gl big">${gl.map(g=>giftCard(g)).join("")}</div><p class="gm-n">Confirmed once we verify your payment. ${GIFT_NOTE}</p></div></div>`;
+}
+function gmConfetti(host){
+  const cols=["#FFD43B","#FF6B8B","#4DD0E1","#9CCC65","#FFFFFF","#FF9F43"];
+  for(let i=0;i<34;i++){const c=document.createElement("i");c.className="gm-c";const a=Math.random()*Math.PI*2,d=70+Math.random()*130;
+    c.style.cssText=`--dx:${Math.cos(a)*d}px;--dy:${Math.sin(a)*d-40}px;--r:${Math.random()*720-360}deg;background:${cols[i%cols.length]};animation-delay:${Math.random()*120}ms`;host.appendChild(c)}
+  setTimeout(()=>host.querySelectorAll(".gm-c").forEach(c=>c.remove()),1800);
+}
+let gmTimer=null;
+function gmOpen(){
+  const m=$("#gmagic");if(!m||m.dataset.open==="1")return;m.dataset.open="1";clearTimeout(gmTimer);
+  const still=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  m.classList.add(still?"opened":"opening");
+  const done=()=>{m.classList.remove("opening");m.classList.add("opened");$("#gmGifts").hidden=false;$("#gmT").hidden=true;gmConfetti(m)};
+  if(still)done();else setTimeout(done,950);
+}
+document.addEventListener("click",e=>{if(e.target.closest("#gmBox"))gmOpen()});
 function ppShow(o,preview){
-  const P=DB.proofpop;if(!P.on&&!preview)return false;
+  const P=DB.proofpop,gl=!preview&&o.gifts&&o.gifts.length?o.gifts:null;if(!P.on&&!preview&&!gl)return false;
   const pop=$("#ppPop");
   pop.style.setProperty("--pp-bg",P.bg);pop.style.setProperty("--pp-acc",P.accent);pop.style.setProperty("--pp-ink",P.ink);
-  $("#ppCard").innerHTML=`${P.emoji?`<div class="pp-emoji" aria-hidden="true">${esc(P.emoji)}</div>`:""}${P.img?`<img class="pp-img" src="${esc(P.img)}" alt="">`:""}<h3>${esc(thFill(P.title,o))}</h3><p>${esc(thFill(P.text,o))}</p><button class="btn" type="button" data-ppclose>${esc(P.btn)}</button>`;
+  $("#ppCard").innerHTML=`${P.emoji?`<div class="pp-emoji" aria-hidden="true">${esc(P.emoji)}</div>`:""}${P.img?`<img class="pp-img" src="${esc(P.img)}" alt="">`:""}<h3>${esc(P.on||preview?thFill(P.title,o):"Payment proof sent")}</h3><p>${esc(P.on||preview?thFill(P.text,o):"We'll confirm your payment soon.")}</p>${gl?gmHTML(gl):""}<button class="btn" type="button" data-ppclose>${esc(P.on||preview?P.btn:"Close")}</button>`;
   if(preview){const sv=$("#storeView");sv.hidden=false;sv.classList.add("th-only")}
   pop.hidden=false;fxBurst($("#ppFx"),P,DB.thanks.cookies);
+  if(gl){clearTimeout(gmTimer);gmTimer=setTimeout(gmOpen,1500)}
   setTimeout(()=>{const b=$("#ppCard [data-ppclose]");b&&b.focus()},60);
   return true;
 }
-function ppClose(){const pop=$("#ppPop");if(pop.hidden)return;pop.hidden=true;$("#ppFx").innerHTML="";endPreview()}
+function ppClose(){const pop=$("#ppPop");if(pop.hidden)return;clearTimeout(gmTimer);pop.hidden=true;$("#ppFx").innerHTML="";endPreview()}
 $("#ppPop").addEventListener("click",e=>{if(e.target.id==="ppPop"||e.target.closest("[data-ppclose]"))ppClose()});
 addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("#ppPop").hidden)ppClose()});
 $("#doneClose").addEventListener("click",doneGo);
@@ -1311,7 +1366,7 @@ function renderMO(){
     <div class="t"><span>Total</span><span class="num">${money(o.total)}</span></div></div>${o.mode==="delivery"?`<p class="hint">Your box may be split into smaller or bigger boxes for delivery safety.</p>`:""}</div>
   ${bsHTML(o,false)}
   ${placeHTML(o,true)}
-  ${giftsHTML(o)}
+  ${giftsHTML(o,true)}
   ${o.status==="completed"?ratingHTML(o):""}
   ${complaintHTML(o)}
   ${awaiting?`<div class="mo-row" style="margin-top:14px;gap:8px"><button class="btn btn-ghost-blue btn-sm" type="button" data-moedit="${o.id}">Edit order</button><button class="danger" type="button" data-mocancel="${o.id}">Cancel order</button></div><p class="hint">You can change your box until you've sent payment.</p>`:""}`;
@@ -1403,8 +1458,8 @@ $("#moSheet").addEventListener("submit",async e=>{
     try{
       const img=await processProof(f),prev={proof:o.proof,status:o.status,rejected:o.rejected};
       if(SBH.on){await SBH.proof(o.id,name,img);renderBag();renderMO();if(!ppShow(o))toast("Proof sent. We'll confirm your payment soon.");return}
-      o.proof={name,img,at:Date.now()};o.status="review";delete o.rejected;logMsg(o,chanList(o.notify||"both"),"review",msgText(o,"review"),"system");
-      if(!saveDB()){o.proof=prev.proof;o.status=prev.status;if(prev.rejected)o.rejected=prev.rejected;bad("Not enough storage space to save the image. Try a smaller screenshot.");btn.disabled=false;btn.textContent="I've paid, send proof";return}
+      o.proof={name,img,at:Date.now()};o.status="review";delete o.rejected;if(!o.giftsAt){o.gifts=giftDrawLocal(o);o.giftsAt=Date.now()}logMsg(o,chanList(o.notify||"both"),"review",msgText(o,"review"),"system");
+      if(!saveDB()){o.proof=prev.proof;o.status=prev.status;if(prev.rejected)o.rejected=prev.rejected;delete o.giftsAt;o.gifts=[];bad("Not enough storage space to save the image. Try a smaller screenshot.");btn.disabled=false;btn.textContent="I've paid, send proof";return}
       renderBag();renderMO();if(!ppShow(o))toast("Proof sent. We'll confirm your payment soon.");
     }catch(ex){bad(ex.message);btn.disabled=false;btn.textContent="I've paid, send proof"}
   }
