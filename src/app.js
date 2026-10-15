@@ -142,7 +142,7 @@ function defaultAlerts(){return {on:true,sound:true,vol:70,repeat:false,stay:tru
 function defaultLabel(){return {logo:"",qr:"",qrCaption:"",notes:"",warnOn:true,warn1:"UNBOXING WITH UNCUT VIDEO!",warn2:"CONTACT US IF SEAL BROKEN"}}
 const SLOT_PRESETS=Array.from({length:23},(_,h)=>String(h).padStart(2,"0")+" to "+String(h+1).padStart(2,"0"));
 function migrate(db){
-  if(db.settings){const D={samedayOn:false,samedayLeadH:3,samedayCutoff:15,samedayFee:8,samedayPayMin:60,minPayMin:30,rejPayMin:120,payCdColor:"#C8102E",payCdSize:"L",payCdFx:true,pickupOn:true,pickupLeadH:24,schedOn:true,schedLeadH:24,samedayMsg:"Sorry Sameday closed Today.\nyour order will be send tomorrow.",samedayOk:"OK",coWarnOn:true,coWarnEmoji:"⚠️",coWarnTitle:"Wait! Check your details",coWarnText:"Please make sure your name, WhatsApp number and address are correct before you place your order. We use them to send you updates and deliver your box.",coWarnOk:"Yes, my details are correct",coWarnBack:"Go back"};for(const k in D)if(db.settings[k]===undefined)db.settings[k]=D[k];
+  if(db.settings){const D={samedayOn:false,samedayLeadH:3,samedayCutoff:15,samedayFee:8,samedayPayMin:60,minPayMin:30,rejPayMin:120,payCdColor:"#C8102E",payCdSize:"L",payCdFx:true,pickupOn:true,pickupLeadH:24,schedOn:true,schedLeadH:24,samedayMsg:"Sorry Sameday closed Today.\nyour order will be send tomorrow.",samedayOk:"OK",samedayGo:"Continue with Sameday anyway",schedMaxDays:7,courierNoteOn:true,courierNote:"We need at least 3 hours of lead time. Once we have requested a courier, any delay or failed delivery is beyond our responsibility.",coWarnOn:true,coWarnEmoji:"⚠️",coWarnTitle:"Wait! Check your details",coWarnText:"Please make sure your name, WhatsApp number and address are correct before you place your order. We use them to send you updates and deliver your box.",coWarnOk:"Yes, my details are correct",coWarnBack:"Go back"};for(const k in D)if(db.settings[k]===undefined)db.settings[k]=D[k];
     if(!Array.isArray(db.settings.slots)){const hs=(db.settings.times||[]).map(slotStartMin).filter(m=>m!==null).map(m=>Math.floor(m/60));if(!hs.length)hs.push(10);db.settings.slots=SLOT_PRESETS.map((t,h)=>({t,on:true,limit:0})).filter((x,h)=>hs.includes(h))}
     db.settings.times=db.settings.slots.filter(x=>x.on).map(x=>x.t)}
   db.label=Object.assign(defaultLabel(),db.label||{});
@@ -227,7 +227,7 @@ const bsOn=(db=DB)=>!!(SBH.on&&db.settings&&db.settings.biteship&&db.settings.bi
 const bsFallback=(db=DB)=>!(db.settings&&db.settings.biteship&&db.settings.biteship.fallback===false);
 const bsShip=(c,at=Date.now(),db=DB)=>bsOn(db)&&c.mode==="delivery"&&c.ship&&c.ship.size===c.size&&+c.ship.exp>at?c.ship:null;
 const bsPending=(c,db=DB)=>bsOn(db)&&c.mode==="delivery"&&!c.bsSkip&&!bsShip(c,Date.now(),db);
-const BS_ST={confirmed:"Courier booked",scheduled:"Pickup scheduled",allocated:"Courier assigned",picking_up:"Courier is on the way to pick up",picked:"Picked up",dropping_off:"On the way to you",return_in_transit:"Returning",on_hold:"On hold",delivered:"Delivered",rejected:"Rejected by courier",disposed:"Disposed",courier_not_found:"No courier found",returned:"Returned",cancelled:"Booking cancelled"};
+const BS_ST={confirmed:"Courier booked",scheduled:"Pickup scheduled",allocated:"Courier assigned",picking_up:"Courier is on the way to pick up",picked:"Picked up",dropping_off:"On the way to you",return_in_transit:"Returning",on_hold:"On hold",delivered:"Delivered",rejected:"Rejected by courier",disposed:"Disposed",courier_not_found:"No courier found",returned:"Returned",cancelled:"Booking cancelled",night_stop:"Stopped for the night (no driver before closing time)"};
 const BS_FAIL=["courier_not_found","rejected","cancelled","returned","disposed"];
 // customers can change the note and photo on their order page until a courier is booked
 let PLE=null;
@@ -243,13 +243,15 @@ function placeEditHTML(o){
 const placeHTML=(o,cust)=>{if(cust&&placeEditable(o))return placeEditHTML(o);const p=o.place;if(!p||o.mode!=="delivery"||!(p.note||p.photo))return "";
   return `<div class="dsec"><h4>📍 Delivery details</h4>${p.note?`<p style="margin:0 0 6px"><b>Note for the driver:</b> ${esc(p.note)}</p>`:""}${p.photo?(p.img?`<a href="${esc(p.img)}" target="_blank" rel="noopener"><img class="placeprev big" src="${esc(p.img)}" alt="Photo of the delivery place"></a>`:`<p class="note">Loading the photo…</p>`):""}</div>`};
 const bsBadge=o=>{const b=o.bship;if(!b||!b.courier||o.mode!=="delivery")return null;
+  if(b.nightHold&&!b.biteshipId)return {t:"Searching again tomorrow",c:"wait"};
   if(b.failed)return {t:"Courier failed",c:"bad"};if(!b.biteshipId)return b.status==="cancelled"?{t:"Courier cancelled",c:"bad"}:{t:"Courier not booked",c:"wait"};
   const m={confirmed:["Searching driver","wait"],scheduled:["Pickup scheduled","wait"],allocated:["Driver assigned","go"],picking_up:["Driver on the way","go"],picked:["Picked up","go"],dropping_off:["On the way","go"],delivered:["Delivered","done"],on_hold:["On hold","bad"]}[b.status];
   return m?{t:m[0],c:m[1]}:{t:BS_ST[b.status]||b.status||"Booked",c:"wait"}};
 const bsProof=(b,k)=>{const ov=b.proofOverride&&b.proofOverride[k];if(ov)return {urls:[ov],by:"shop"};const a=(b.proofs&&b.proofs[k])||[];return a.length?{urls:a,by:"courier"}:null};
 const bsHTML=(o,adm)=>{const b=o.bship;if(!b||!b.courier||o.mode!=="delivery")return "";
   const booked=!!b.biteshipId,st=b.status?(BS_ST[b.status]||b.status):"",nm=esc((b.courierName||b.courier)+" "+(b.serviceName||b.service)),dr=b.driver;
-  const fail=adm&&b.failed?`<div class="oc-alert cmp" style="margin:0 0 8px">🛵 ${esc(st||"Courier failed")}. Book again below${b.retries?" (already retried once)":""}</div>`:"";
+  const fail=adm&&b.nightHold&&!booked?`<div class="oc-alert appr" style="margin:0 0 8px">🌙 No driver before closing time. Searching again automatically tomorrow at ${fmtHour(b.resumeH??9)}. You can still book now yourself.<div style="margin-top:6px"><button class="ghost" type="button" data-bsact="nohold" data-oid="${o.id}">Don't search tomorrow</button></div></div>`
+    :adm&&b.failed?`<div class="oc-alert cmp" style="margin:0 0 8px">🛵 ${esc(st||"Courier failed")}. Book again below${b.retries?" (already retried once)":""}${b.nightErr?`<br><small>Tomorrow's automatic search didn't start: ${esc(b.nightErr)}</small>`:""}</div>`:"";
   const lines=!adm?`<dt>Courier</dt><dd>${nm}${b.eta?` · ${esc(b.eta)}`:""}</dd>${b.waybill?`<dt>Waybill</dt><dd>${esc(b.waybill)}</dd>`:""}`:`<dt>Courier</dt><dd>${nm}${b.eta?` · ${esc(b.eta)}`:""}</dd>${st?`<dt>Status</dt><dd><b>${esc(st)}</b>${b.statusAt?` <small class="note">${fmtAgo(b.statusAt)}</small>`:""}</dd>`:booked?"":`<dt>Status</dt><dd>${adm?"Not booked yet":"We'll call the courier when your cookies are ready"}</dd>`}
     ${dr&&(dr.name||dr.plate)?`<dt>Driver</dt><dd>${esc(dr.name||"")}${dr.plate?` · ${esc(dr.plate)}`:""}${dr.phone?` · <a href="tel:${esc(dr.phone)}">${esc(dr.phone)}</a>`:""}</dd>`:""}
     ${b.waybill?`<dt>Waybill</dt><dd>${esc(b.waybill)}</dd>`:""}${(adm?o._clink||b.link:b.link)&&booked?`<dt>Tracking</dt><dd><a href="${esc(safeUrl(adm?o._clink||b.link:b.link))}" target="_blank" rel="noopener">${adm?"Track the courier live (team only)":"Track the courier live"}</a></dd>`:""}
@@ -395,19 +397,21 @@ function shopNow(){
 // the three ways to get an order: Sameday shipment, Pickup, Scheduled delivery (each can be switched off and has its own lead time)
 const OPT_NAME={sameday:"Sameday shipment",pickup:"Pickup",scheduled:"Scheduled delivery"};
 const optOf=c=>c.mode==="pickup"?"pickup":c.speed==="sameday"?"sameday":"scheduled";
-const whenTxt=o=>o.mode!=="pickup"&&o.speed==="sameday"?"Today (sameday)":`${fmtDay(o.day)}, ${o.time}`;
+const whenTxt=o=>o.mode!=="pickup"&&o.speed==="sameday"?(/after cut-off/.test(o.time||"")?"Sameday (ordered after the cut-off)":"Today (sameday)"):`${fmtDay(o.day)}, ${o.time}`;
 const modeName=o=>o.mode==="pickup"?"Pickup":o.speed==="sameday"?"Sameday shipment":o.speed==="scheduled"?"Scheduled delivery":"Delivery";
 const optLead=(k,s=DB.settings)=>Math.max(0,+(k==="sameday"?s.samedayLeadH:k==="pickup"?s.pickupLeadH:s.schedLeadH)||0);
 const fmtLead=h=>h>=24&&h%24===0?`${h/24} day${h/24>1?"s":""}`:`${h} hour${h===1?"":"s"}`;
 function samedayOpen(){const n=shopNow(),s=DB.settings;return !!s.samedayOn&&n.h<s.samedayCutoff&&!s.closedWeekdays.includes(n.d.getDay())}
 function samedayLate(){const n=shopNow(),s=DB.settings;return !!s.samedayOn&&n.h>=s.samedayCutoff&&!s.closedWeekdays.includes(n.d.getDay())}
 const optOn=k=>k==="sameday"?!!DB.settings.samedayOn:k==="pickup"?DB.settings.pickupOn!==false:DB.settings.schedOn!==false;
-const optAvail=k=>k==="sameday"?samedayOpen():optOn(k);
+const optAvail=k=>k==="sameday"?samedayOpen()||(!!S.sdLate&&samedayLate()):optOn(k);
+const schedDays=()=>Math.max(1,Math.min(60,Math.round(+DB.settings.schedMaxDays||7)));
 function dayOptions(){
   const now=shopNow(),k=optOf(S);
   if(k==="sameday")return [now.d];
   let start=addDays(now.d,Math.floor((now.h+Math.ceil(optLead(k)))/24));if(now.h>=DB.settings.cutoffHour)start=addDays(start,1);
-  return Array.from({length:7},(_,i)=>addDays(start,i));
+  if(k==="scheduled"&&ymd(start)<=ymd(now.d))start=addDays(now.d,1);   // scheduled delivery starts tomorrow at the earliest
+  return Array.from({length:k==="scheduled"?schedDays():7},(_,i)=>addDays(start,i));
 }
 // keep the chosen option, day and time valid
 function fixWhen(){
@@ -500,8 +504,9 @@ function renderMenu(){
 }
 function renderOpts(){
   const set=DB.settings;fixWhen();
-  $("#modes").innerHTML=["sameday","pickup","scheduled"].filter(optOn).map(k=>{const late=k==="sameday"&&!optAvail(k)&&samedayLate(),ok=optAvail(k)||late;return `<button class="chip" type="button" data-opt="${k}" ${late?"data-late=\"1\"":""} ${ok?"":"disabled"}>${OPT_NAME[k]}${ok?"":" (closed today)"}</button>`}).join("");
+  $("#modes").innerHTML=["sameday","pickup","scheduled"].filter(optOn).map(k=>{const late=k==="sameday"&&!samedayOpen()&&samedayLate(),ok=optAvail(k)||late;return `<button class="chip" type="button" data-opt="${k}" ${late?"data-late=\"1\"":""} ${ok?"":"disabled"}>${OPT_NAME[k]}${ok?"":" (closed today)"}</button>`}).join("");
   const sd=optOf(S)==="sameday";$("#dayBlock").hidden=sd;$("#timeBlock").hidden=sd;
+  {const k=optOf(S),t=String(set.courierNote||"").trim(),on=set.courierNoteOn!==false&&!!t;$("#cnoteSd").hidden=!(on&&k==="sameday");$("#cnoteSch").hidden=!(on&&k==="scheduled");$("#cnoteSd").textContent=$("#cnoteSch").textContent=t}
   $("#days").innerHTML = dayOptions().map(d=>{const closed=set.closedWeekdays.includes(d.getDay());
     return `<button class="day" type="button" data-day="${ymd(d)}" ${closed?`disabled aria-label="${fmtDay(ymd(d))}, closed"`:""}><small>${DOW[d.getDay()]}</small><strong>${d.getDate()}</strong></button>`}).join("");
   const closedTxt=set.closedWeekdays.length?`We're closed ${listJoin(set.closedWeekdays.slice().sort().map(d=>DOW_LONG[d])).replace(" or "," and ")}. `:"";
@@ -581,7 +586,7 @@ function renderStore(){
   if(S.step===2){
     S.addons.forEach(id=>{const a=DB.addons.find(x=>x.id===id);if(a)L+=`<div><dt>${esc(a.name)}</dt><dd>+${money(a.price)}</dd></div>`});
     L+=`<div><dt>${OPT_NAME[optOf(S)]}</dt><dd>${q.feePending?"Choose a courier":q.fee?money(q.fee):"Free"}</dd></div>`;
-    if(S.day)L+=`<div><dt>When</dt><dd>${S.mode!=="pickup"&&S.speed==="sameday"?"Today (sameday)":fmtDay(S.day)+(S.time?", "+esc(S.time):"")}</dd></div>`;
+    if(S.day)L+=`<div><dt>When</dt><dd>${S.mode!=="pickup"&&S.speed==="sameday"?(samedayOpen()?"Today (sameday)":"Sameday (after the cut-off)"):fmtDay(S.day)+(S.time?", "+esc(S.time):"")}</dd></div>`;
     if(bsOn()&&S.mode==="delivery"){const sh=bsShip(S);
       L+=`<div class="bscour${q.feePending?" need":""}" id="bsRow"><dt>Courier</dt><dd><button type="button" class="bscbtn" data-bscourier>${sh?`${esc((sh.courierName||sh.courier)+" "+(sh.serviceName||sh.service))} · Change`:S.bsSkip?"Standard delivery · Change":"🛵 Choose courier"}</button></dd></div>`}
   }
@@ -1204,12 +1209,13 @@ $("#clearBtn").addEventListener("click",()=>guardBox("clear",clearBox));
 $("#tab1").addEventListener("click",()=>goStep(1));
 $("#tab2").addEventListener("click",()=>goStep(2));
 $("#backBtn").addEventListener("click",()=>goStep(1));
-$("#modes").addEventListener("click",e=>{const b=e.target.closest("[data-opt]");if(b&&!b.disabled){const k=b.dataset.opt;if(b.dataset.late){openSdPop();return}S.mode=k==="pickup"?"pickup":"delivery";S.speed=k==="sameday"?"sameday":"scheduled";renderOpts();renderStore()}});
+$("#modes").addEventListener("click",e=>{const b=e.target.closest("[data-opt]");if(b&&!b.disabled){const k=b.dataset.opt;if(b.dataset.late&&!S.sdLate){openSdPop();return}S.mode=k==="pickup"?"pickup":"delivery";S.speed=k==="sameday"?"sameday":"scheduled";renderOpts();renderStore()}});
 $("#days").addEventListener("click",e=>{const b=e.target.closest("[data-day]");if(b&&!b.disabled){S.day=b.dataset.day;if(S.time&&slotTooSoon(S.day,S.time,optOf(S)))S.time=null;renderTimes();renderStore()}});
-function openSdPop(){const s=DB.settings;$("#sdCard").innerHTML=`<p class="sdmsg">${esc(s.samedayMsg||"").replace(/\n/g,"<br>")}</p><button class="btn btn-blue" type="button" data-sdok>${esc(s.samedayOk||"OK")}</button>`;$("#sdSheet").hidden=false;document.body.style.overflow="hidden";const b=$("#sdCard [data-sdok]");b&&b.focus()}
+function openSdPop(){const s=DB.settings;$("#sdCard").innerHTML=`<p class="sdmsg">${esc(s.samedayMsg||"").replace(/\n/g,"<br>")}</p><button class="btn btn-blue" type="button" data-sdok>${esc(s.samedayOk||"OK")}</button>${String(s.samedayGo||"").trim()?`<button class="btn btn-ghost-blue" type="button" data-sdgo style="margin-top:8px">${esc(s.samedayGo)}</button>`:""}`;$("#sdSheet").hidden=false;document.body.style.overflow="hidden";const b=$("#sdCard [data-sdok]");b&&b.focus()}
 function closeSdPop(){const m=$("#sdSheet");if(!m||m.hidden)return;m.hidden=true;document.body.style.overflow=""}
 $("#sdSheet").addEventListener("click",e=>{
   if(e.target.id==="sdSheet"){closeSdPop();return}
+  if(e.target.closest("[data-sdgo]")){closeSdPop();S.sdLate=true;S.mode="delivery";S.speed="sameday";renderOpts();renderStore();return}
   if(!e.target.closest("[data-sdok]"))return;
   closeSdPop();
   const k=["scheduled","pickup"].find(optAvail);if(k){S.mode=k==="pickup"?"pickup":"delivery";S.speed="scheduled";fixWhen();const d=dayOptions().find(x=>!DB.settings.closedWeekdays.includes(x.getDay()));S.day=d?ymd(d):null;S.time=null}
@@ -1249,7 +1255,7 @@ $("#coForm").addEventListener("submit",e=>{
   if(SBH.on){
     const btn=f.querySelector("button[type=submit]");if(btn)btn.disabled=true;
     const pNote=S.mode==="delivery"&&placeOn("dnoteOn")?String(S.dnote||"").trim():"",pImg=S.mode==="delivery"&&placeOn("dphotoOn")?S.dphoto:"";
-    SBH.place({notify,shuffled:!!S.shuf,size:S.size,items:fields.items,mode:S.mode,speed:S.speed,day:S.day,time:S.time,note:S.note,addons:[...S.addons],coupon:fields.coupon,expectTotal:q.total,customer:cust,ship:q.ship||undefined},ed).then(o=>{
+    SBH.place({notify,sdLate:S.mode!=="pickup"&&S.speed==="sameday"&&!samedayOpen()?true:undefined,shuffled:!!S.shuf,size:S.size,items:fields.items,mode:S.mode,speed:S.speed,day:S.day,time:S.time,note:S.note,addons:[...S.addons],coupon:fields.coupon,expectTotal:q.total,customer:cust,ship:q.ship||undefined},ed).then(o=>{
       if(pNote||pImg)SBH.placeInfo(o.id,pNote,pImg).catch(err=>toast("Order placed, but the driver note or photo didn't save: "+err.message));
       addMine(o.id);S.editId=null;saveCart();renderDone(o,!!ed);
       S=fresh();$("#coForm").reset();saveCart();sanitizeCart();renderStoreStatic();renderStore();renderEditBar();renderBag();
@@ -1461,6 +1467,7 @@ function courierStep(o,b){
     if(b.status==="allocated"||b.status==="picking_up")return {label:b.status==="picking_up"?"Driver on the way to pick up":"Driver found",sub:both||"Your driver is coming to pick up your cookies."};
     return {label:"Searching for a driver…",srch:1,sub:["We're finding a courier for your order.",lk].filter(Boolean).join("<br>")};
   }
+  if(b.nightHold)return {label:"Searching again tomorrow",srch:1,sub:`No driver was free today. We'll look for a courier again tomorrow from ${fmtHour(b.resumeH??9)}.`};
   if(b.failed)return {label:"Searching for a driver…",srch:1,sub:`<span class="trk-rej">No driver yet. We're arranging another courier.</span>`};
   return {label:"Courier pickup",sub:"We'll call the courier when your cookies are ready."};
 }
@@ -3237,6 +3244,9 @@ function bsPanel(){
     <div class="grid3" style="margin-top:10px">${inp("Length (cm)","dims.l",d.l,"25","number")}${inp("Width (cm)","dims.w",d.w,"25","number")}${inp("Height (cm)","dims.h",d.h,"10","number")}</div>
     <h3 style="margin:18px 0 4px;font-size:15px">Pickup and problems</h3>
     <div style="display:flex;gap:10px;align-items:center;margin:4px 0"><label class="sw"><input type="checkbox" data-bsauto ${c.autoRetry?"checked":""} aria-label="Book again automatically"><span></span></label><span class="stlabel">If no driver is found, book again automatically once (after 1 minute)</span></div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:8px 0 4px"><label class="sw"><input type="checkbox" data-bsflag="nightStop" ${c.nightStop!==false?"checked":""} aria-label="Stop searching in the evening"><span></span></label><span class="stlabel">Stop searching for a driver at</span><select class="in" data-bshour="stopHour" style="width:auto">${Array.from({length:24},(_,h)=>`<option value="${h}" ${h===(c.stopHour??19)?"selected":""}>${fmtHour(h)}</option>`).join("")}</select></div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:4px 0"><label class="sw"><input type="checkbox" data-bsflag="autoNext" ${c.autoNext!==false?"checked":""} aria-label="Search again the next day"><span></span></label><span class="stlabel">Then search again automatically the next day at</span><select class="in" data-bshour="resumeHour" style="width:auto">${Array.from({length:24},(_,h)=>`<option value="${h}" ${h===(c.resumeHour??9)?"selected":""}>${fmtHour(h)}</option>`).join("")}</select></div>
+    <p class="note" style="margin:0 0 6px">At the stop time, bookings still searching for a driver are cancelled and the customer is told. With the next-day search off, you book again yourself. A pickup you request yourself after the stop time is never stopped. On each order you can also choose "Don't search tomorrow".</p>
     <p class="note" style="margin:0">You get a sound and pop-up alert either way. Press <b>Save courier settings</b> after changing this.</p>
     <h3 style="margin:18px 0 4px;font-size:15px">5. Price</h3>
     <div class="grid2">${inp("Add to every courier price","markup",c.markup,"0","number")}${inp("Round up to the nearest","roundTo",c.roundTo,"500","number")}</div>
@@ -3267,7 +3277,11 @@ function viewDelivery(){
         <label class="chk"><input type="checkbox" data-k="settings::${on}" ${s[on]!==false&&(on!=="samedayOn"||s[on])?"checked":""}> <b>${n}</b></label>
         <div class="grid3"><label class="af">Lead time<div class="money-in"><input class="in" type="number" min="0" step="1" data-k="settings::${lead}" value="${s[lead]}"><span style="padding-right:10px">${u}</span></div><small class="note">${hint}</small></label>
         ${k==="sameday"?`<label class="af">Order by (today)<select class="in" data-k="settings::samedayCutoff">${Array.from({length:24},(_,h)=>`<option value="${h}" ${h===s.samedayCutoff?"selected":""}>${fmtHour(h)}</option>`).join("")}</select></label>
-        <label class="af">Sameday fee<div class="money-in"><span>${esc(s.currency)}</span><input class="in" type="number" min="0" step="0.5" data-k="settings::samedayFee" value="${s.samedayFee}"></div></label>`:""}</div></div>`).join("")}</div>
+        <label class="af">Sameday fee<div class="money-in"><span>${esc(s.currency)}</span><input class="in" type="number" min="0" step="0.5" data-k="settings::samedayFee" value="${s.samedayFee}"></div></label>`:""}
+        ${k==="scheduled"?`<label class="af">Days customers can choose<div class="money-in"><input class="in" type="number" min="1" max="60" step="1" data-k="settings::schedMaxDays" value="${schedDays()}"><span style="padding-right:10px">days</span></div><small class="note">Starts tomorrow at the earliest (never today)</small></label>`:""}</div></div>`).join("")}</div>
+      <h3 style="margin:18px 0 4px;font-size:15px">Courier note</h3><p class="sub" style="margin:0 0 8px">Shown under Sameday shipment, and under the time slots of Scheduled delivery.</p>
+      <label class="chk"><input type="checkbox" data-k="settings::courierNoteOn" ${s.courierNoteOn!==false?"checked":""}> <b>Show the courier note</b></label>
+      <label class="af" style="margin-top:8px">Note<textarea class="in" rows="2" maxlength="300" data-k="settings::courierNote">${esc(s.courierNote||"")}</textarea></label>
       <h3 style="margin:18px 0 4px;font-size:15px">Time slots</h3><p class="sub" style="margin:0 0 8px">One-hour boxes on a 24-hour clock. Pick the hour in each box, switch it on or off, and set how many paid orders it takes per day (0 = no limit). Only orders with confirmed payment use up the limit. A full slot can't be chosen by customers.</p>
       <div class="stack slotlist" style="gap:8px">${(s.slots||[]).map((x,i)=>`<div class="pmcard slotrow">
         <select class="in" data-slotsel="${i}" aria-label="Time slot ${i+1}">${SLOT_PRESETS.map(t=>`<option value="${t}" ${t===x.t?"selected":""} ${t!==x.t&&s.slots.some(y=>y.t===t)?"disabled":""}>${t}</option>`).join("")}</select>
@@ -3276,9 +3290,9 @@ function viewDelivery(){
         <small class="note">Paid today: ${slotUsed(ymd(shopNow().d),x.t)}</small>
         <button class="ghost" type="button" data-slotdel="${i}">Remove</button></div>`).join("")}</div>
       <button class="ghost" type="button" data-slotadd style="margin-top:8px">+ Add time slot</button>
-      <h3 style="margin:18px 0 4px;font-size:15px">Sameday closed pop-up</h3><p class="sub" style="margin:0 0 8px">Shown when a customer taps Sameday shipment after the order-by time. They tap the button to carry on and choose a day and time slot.</p>
+      <h3 style="margin:18px 0 4px;font-size:15px">Sameday closed pop-up</h3><p class="sub" style="margin:0 0 8px">Shown when a customer taps Sameday shipment after the order-by time. The first button switches them to a day and time slot. The second button lets them keep Sameday anyway (leave it empty to hide it). Those orders show "ordered after the cut-off".</p>
       <label class="af">Message<textarea class="in" rows="3" data-k="settings::samedayMsg">${esc(s.samedayMsg)}</textarea></label>
-      <label class="af" style="margin-top:8px;max-width:200px">Button name<input class="in" data-k="settings::samedayOk" value="${esc(s.samedayOk)}" maxlength="20"></label>
+      <div class="grid2" style="margin-top:8px"><label class="af">Button name<input class="in" data-k="settings::samedayOk" value="${esc(s.samedayOk)}" maxlength="20"></label><label class="af">Keep Sameday button<input class="in" data-k="settings::samedayGo" value="${esc(s.samedayGo||"")}" maxlength="40" placeholder="(hidden)"></label></div>
     </section>
     <section class="panel">
       <h2>Note for the driver and photo of the place</h2><p class="sub">Optional fields for delivery orders, in the courier pop-up and at checkout. The note goes to the courier with the booking. The photo is private (only you and the customer) and is deleted 3 days after delivery.</p>
@@ -3399,6 +3413,7 @@ function setK(el){
   let v=el.type==="checkbox"?el.checked:el.type==="number"?Math.max(0,parseFloat(el.value)||0):el.value;
   if(field==="cutoffHour"||field==="samedayCutoff")v=+v;
   if(/^(sameday|pickup|sched)LeadH$/.test(field))v=Math.min(720,Math.round(v));
+  if(field==="schedMaxDays")v=Math.max(1,Math.min(60,Math.round(v)));
   if(field==="payWindowH"||field==="complaintWindowH"||field==="samedayPayMin"||field==="minPayMin"||field==="rejPayMin")v=Math.max(1,v);
   if(field==="stock"||field==="lowStockAt"||field==="samedayPayMin"||field==="minPayMin"||field==="rejPayMin"||field==="payWindowH"||field==="complaintWindowH"||/^custom(Min|Step|Max)$/.test(field))v=Math.round(v);
   if(coll==="settings"){DB.settings[field]=v;const t=DB.settings;if(/^custom/.test(field)){t.customMin=Math.max(1,t.customMin);t.customStep=Math.max(1,t.customStep);if(t.customMax<t.customMin)t.customMax=t.customMin}}
@@ -4351,9 +4366,9 @@ am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
 });
 $("#drawer").addEventListener("click",async e=>{const b=e.target.closest("[data-bsact]");if(!b)return;
   const id=b.dataset.oid,act=b.dataset.bsact,o=DB.orders.find(x=>x.id===id),msg=$("#bsMsg");if(!o)return;
-  const go=async()=>{b.disabled=true;if(msg){msg.hidden=false;msg.style.color="";msg.textContent=act==="book"?"Booking the courier…":act==="cancel"?"Cancelling…":"Checking…"}
+  const go=async()=>{b.disabled=true;if(msg){msg.hidden=false;msg.style.color="";msg.textContent=act==="book"?"Booking the courier…":act==="cancel"?"Cancelling…":act==="nohold"?"Saving…":"Checking…"}
     try{const r=await SBH.fn("biteship",{action:act,orderId:id},true);bsApply(o,r);
-      toast(act==="book"?"Pickup requested. Searching for a driver.":act==="cancel"?"Courier booking cancelled":"Status updated");renderAdmin();openOrder(id)}
+      toast(act==="book"?"Pickup requested. Searching for a driver.":act==="cancel"?"Courier booking cancelled":act==="nohold"?"It won't search tomorrow. Book the courier yourself when ready.":"Status updated");renderAdmin();openOrder(id)}
     catch(err){b.disabled=false;if(msg){msg.hidden=false;msg.style.color="var(--red)";msg.textContent=err.message}}};
   if(act==="cancel")armed(b,go);else go()});
 $("#drawer").addEventListener("change",async e=>{const el=e.target;if(el.dataset.bsproof===undefined)return;const f=el.files[0];if(!f)return;
@@ -4511,7 +4526,9 @@ am.addEventListener("input",e=>{const el=e.target;
   if(el.dataset.bsc||el.dataset.bsw)BSA.dirty=true;
   if(el.dataset.bsc){const path=el.dataset.bsc.split("."),c=BSA.cfg;let t=c;for(let i=0;i<path.length-1;i++)t=t[path[i]]=t[path[i]]||{};t[path[path.length-1]]=el.type==="number"?(el.value===""?"":+el.value):el.value}
   else if(el.dataset.bsw){BSA.cfg.weights=BSA.cfg.weights||{};BSA.cfg.weights[el.dataset.bsw]=el.value===""?"":+el.value}});
-am.addEventListener("change",e=>{const el=e.target;if(el.dataset.bsauto!==undefined){BSA.cfg.autoRetry=el.checked;BSA.dirty=true;return}if(!el.dataset.bsset)return;const b=DB.settings.biteship=DB.settings.biteship||{on:false,fallback:true};
+am.addEventListener("change",e=>{const el=e.target;if(el.dataset.bsauto!==undefined){BSA.cfg.autoRetry=el.checked;BSA.dirty=true;return}
+  if(el.dataset.bsflag){BSA.cfg[el.dataset.bsflag]=el.checked;BSA.dirty=true;return}
+  if(el.dataset.bshour){BSA.cfg[el.dataset.bshour]=Math.min(23,Math.max(0,+el.value||0));BSA.dirty=true;return}if(!el.dataset.bsset)return;const b=DB.settings.biteship=DB.settings.biteship||{on:false,fallback:true};
   if(el.dataset.bsset==="on"&&el.checked&&!(BSA.hasKey&&BSA.cfg.origin&&BSA.cfg.origin.name&&BSA.cfg.origin.phone&&BSA.cfg.origin.address)){el.checked=false;toast("Save your API key and pickup details first");return}
   b[el.dataset.bsset]=el.checked;saveSoon()});
 am.addEventListener("click",async e=>{const b=e.target.closest("button");if(!b)return;const d=b.dataset;

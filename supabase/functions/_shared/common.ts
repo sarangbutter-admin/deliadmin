@@ -175,6 +175,23 @@ export async function applyUpdate(db: any, row: { id: string; data: any }, up: {
   return next;
 }
 
+// the driver search stops in the evening and (when switched on) starts again the next morning (Delivery & courier settings)
+export function courierHours(set: any, cfg: any) {
+  let h = new Date().getUTCHours(), m = new Date().getUTCMinutes();
+  try {
+    const p = new Intl.DateTimeFormat("en-GB", { timeZone: String(set?.tz || "Asia/Jakarta"), hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date());
+    h = +(p.find((x) => x.type === "hour")?.value || 0); m = +(p.find((x) => x.type === "minute")?.value || 0);
+  } catch { /* unknown time zone: UTC */ }
+  const hr = (v: unknown, d: number) => Math.min(23, Math.max(0, Math.round(nm(v ?? d, d))));
+  const stopH = hr(cfg.stopHour, 19), startH = hr(cfg.resumeHour, 9), on = cfg.nightStop !== false && stopH !== startH;
+  const night = on && (stopH > startH ? (h >= stopH || h < startH) : (h >= stopH && h < startH));
+  const sinceStop = (((h * 60 + m) - stopH * 60) % 1440 + 1440) % 1440;
+  return { night, stopH, startH, autoNext: cfg.autoNext !== false, stopAt: Date.now() - sinceStop * 60_000 };
+}
+export const nightText = (c: { stopH: number; startH: number; autoNext: boolean }) => c.autoNext
+  ? `No driver was free before ${c.stopH}:00 today. We'll look for a courier again tomorrow from ${c.startH}:00.`
+  : `No driver was free before ${c.stopH}:00 today. We'll arrange your courier and let you know.`;
+
 // weight (grams) and size (cm) of a box
 export function boxOf(cfg: any, size: number) {
   const w = cfg.weights && nm(cfg.weights[String(size)]) > 0 ? nm(cfg.weights[String(size)]) : size * nm(cfg.gramsPerCookie, 100) + nm(cfg.boxGrams, 200);
@@ -226,7 +243,7 @@ export async function bookOrder(db: any, key: string, cfg: any, row: { id: strin
   const b = r.body, cr = b.courier || {}, now = Date.now(), showLink = await showLinkOn(db);
   const nsh: any = {
     ...sh, biteshipId: cl(b.id, 60), trackingId: showLink ? cl(cr.tracking_id, 60) : "", waybill: cl(cr.waybill_id, 60), link: showLink ? cl(cr.link, 300) : "",
-    status: cl(b.status, 30) || "confirmed", statusAt: now, bookedAt: now, bookedPrice: nm(b.price, nm(sh.price)), failed: false,
+    status: cl(b.status, 30) || "confirmed", statusAt: now, bookedAt: now, bookedPrice: nm(b.price, nm(sh.price)), failed: false, nightHold: false, nightErr: "",
     retries: sh.failed ? (sh.retries || 0) + 1 : (sh.retries || 0),
     history: [...(sh.history || []), { s: cl(b.status, 30) || "confirmed", at: now }].slice(-25),
   };

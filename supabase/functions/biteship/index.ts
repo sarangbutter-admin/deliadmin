@@ -190,7 +190,7 @@ Deno.serve(async (req) => {
       return json({ ok: true, mode: key.startsWith("biteship_test") ? "test" : key.startsWith("biteship_live") ? "live" : "unknown", couriers: [...new Set(list)].slice(0, 60) });
     }
 
-    if (action === "book" || action === "cancel" || action === "refresh" || action === "proof") {
+    if (action === "book" || action === "cancel" || action === "refresh" || action === "proof" || action === "nohold") {
       const id = clean(body.orderId, 40);
       const { data: row } = await db.from("orders").select("id,data").eq("id", id).maybeSingle();
       if (!row) return json({ error: "Order not found." }, 404);
@@ -202,6 +202,13 @@ Deno.serve(async (req) => {
         const kind = body.kind === "delivery" ? "delivery" : "pickup", url = clean(body.url, 500);
         if (url && !/^https:\/\//i.test(url)) return json({ error: "Bad picture link." }, 400);
         const nsh = { ...sh, proofOverride: { ...(sh.proofOverride || {}), [kind]: url } };
+        await db.from("orders").update({ data: { ...o, bship: nsh }, updated_at: Date.now() }).eq("id", id);
+        return json({ ok: true, bship: nsh });
+      }
+
+      // the team turns off tomorrow's automatic driver search for this order (they book it themselves)
+      if (action === "nohold") {
+        const nsh = { ...sh, nightHold: false };
         await db.from("orders").update({ data: { ...o, bship: nsh }, updated_at: Date.now() }).eq("id", id);
         return json({ ok: true, bship: nsh });
       }
@@ -231,7 +238,7 @@ Deno.serve(async (req) => {
       console.log("cancel", o.code, r.status, r.ok ? "ok" : bsErr(r));
       if (!r.ok) return json({ error: bsErr(r) }, 502);
       const now = Date.now();
-      const nsh = { ...sh, status: "cancelled", statusAt: now, cancelledAt: now, prevIds: [...(sh.prevIds || []), sh.biteshipId].slice(-10), biteshipId: "", failed: false,
+      const nsh = { ...sh, status: "cancelled", statusAt: now, cancelledAt: now, prevIds: [...(sh.prevIds || []), sh.biteshipId].slice(-10), biteshipId: "", failed: false, nightHold: false,
         history: [...(sh.history || []), { s: "cancelled", at: now, by: "shop" }].slice(-25) };
       await db.from("orders").update({ data: { ...o, bship: nsh }, updated_at: now }).eq("id", id);
       return json({ ok: true, bship: nsh });

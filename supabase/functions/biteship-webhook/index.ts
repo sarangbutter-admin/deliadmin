@@ -4,10 +4,46 @@
 //   https://<project>.supabase.co/functions/v1/biteship-webhook?k=<webhook secret shown in Shop settings>
 // Moves the order on by itself (picked up -> Out for delivery, delivered -> Delivered), saves proof photos,
 // tells the customer, and (when switched on) books a new courier once if no driver was found.
-import { admin, applyUpdate, bookOrder, bs, driverOf, FAILED, findProofs, hmacHex, json, kv } from "../_shared/common.ts";
+import { admin, applyUpdate, bookOrder, bs, bsErr, courierHours, driverOf, FAILED, findProofs, hmacHex, json, kv, nightText, settings } from "../_shared/common.ts";
 
 const clean = (s: unknown, n: number) => String(s ?? "").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, n);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+// Biteship statuses that mean "still looking for a driver"
+const SEARCHING = ["confirmed", "pending", "placed", ""];
+
+// runs every hour (database scheduler): in the evening, stop the driver search for bookings made before the stop time;
+// in the morning, search again for the orders that were stopped (when the next-day search is on)
+async function sweep(db: ReturnType<typeof admin>) {
+  const [set, cfg, keyRow] = await Promise.all([settings(db), kv(db, "biteship_cfg"), kv(db, "biteship_key")]);
+  const key = keyRow && keyRow.v ? String(keyRow.v) : "", c = cfg || {};
+  if (!key || !set?.biteship?.on) return { skipped: true };
+  const ch = courierHours(set, c), out = { night: ch.night, stopped: 0, booked: 0 };
+  const { data: rows } = await db.from("orders").select("id,data").in("status", ["baking", "ready"]);
+  for (const row of rows || []) {
+    const o: any = row.data, sh: any = o.bship;
+    if (!sh || !sh.courier || o.mode !== "delivery") continue;
+    if (ch.night) {
+      if (!sh.biteshipId || !SEARCHING.includes(String(sh.status || "")) || (sh.bookedAt || 0) >= ch.stopAt) continue;
+      const why = { cancellation_reason_code: "others", cancellation_reason: "No driver found before closing time" };
+      let r = await bs(key, "DELETE", "/v1/orders/" + encodeURIComponent(sh.biteshipId), why);
+      if (!r.ok && (r.status === 404 || r.status === 405)) r = await bs(key, "POST", "/v1/orders/" + encodeURIComponent(sh.biteshipId) + "/cancel", why);
+      console.log("night stop", o.code, r.status, r.ok ? "ok" : bsErr(r));
+      if (!r.ok) continue;
+      const now = Date.now();
+      const nsh = { ...sh, status: "night_stop", statusAt: now, prevIds: [...(sh.prevIds || []), sh.biteshipId].slice(-10), biteshipId: "", failed: true, failAt: now,
+        nightHold: ch.autoNext, resumeH: ch.startH, history: [...(sh.history || []), { s: "night_stop", at: now }].slice(-25) };
+      const msgs = [...(o.msgs || []), { at: now, channel: o.notify === "email" ? "email" : "whatsapp", status: o.status, by: "system", courier: true, text: nightText(ch) }].slice(-80);
+      await db.from("orders").update({ data: { ...o, bship: nsh, msgs }, updated_at: now }).eq("id", row.id);
+      out.stopped++;
+    } else if (ch.autoNext && sh.nightHold && !sh.biteshipId) {
+      const r = await bookOrder(db, key, c, { id: row.id, data: { ...o, bship: { ...sh, nightHold: false } } });
+      console.log("morning search", o.code, (r as any).error || "booked");
+      if ((r as any).error) await db.from("orders").update({ data: { ...o, bship: { ...sh, nightHold: false, nightErr: String((r as any).error).slice(0, 200) } }, updated_at: Date.now() }).eq("id", row.id);
+      else out.booked++;
+    }
+  }
+  return out;
+}
 
 Deno.serve(async (req) => {
   const url = new URL(req.url);
@@ -29,6 +65,7 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ ok: true });
   let b: any = {};
   try { b = await req.json(); } catch { return json({ ok: true }); }   // Biteship's "test" ping can be empty
+  if (b && b.cron === "sweep") return json({ ok: true, ...(await sweep(db)) });
   const bid = clean(b.order_id, 60), status = clean(b.status, 30).toLowerCase();
   console.log("webhook", b.event || "", bid, status);
   if (!bid) return json({ ok: true });
@@ -47,9 +84,15 @@ Deno.serve(async (req) => {
     price: b.price ?? b.order_price, driver: driver || undefined, proofs,
   }, true);
 
-  // optional: try once more by itself when no driver took the order
-  const cfg = (await kv(db, "biteship_cfg")) || {};
-  if (FAILED.includes(status) && status !== "returned" && cfg.autoRetry && key && (next.bship.retries || 0) < 1 && ["baking", "ready"].includes(next.status)) {
+  // optional: try once more by itself when no driver took the order. In the evening it waits for the next morning instead
+  const cfg = (await kv(db, "biteship_cfg")) || {}, ch = courierHours(await settings(db), cfg);
+  const failedNow = FAILED.includes(status) && status !== "returned" && ["baking", "ready"].includes(next.status) && !next.bship.biteshipId;
+  if (failedNow && ch.night) {
+    if (ch.autoNext) {
+      const now = Date.now(), msgs = [...(next.msgs || []), { at: now, channel: next.notify === "email" ? "email" : "whatsapp", status: next.status, by: "system", courier: true, text: nightText(ch) }].slice(-80);
+      await db.from("orders").update({ data: { ...next, bship: { ...next.bship, nightHold: true, resumeH: ch.startH }, msgs }, updated_at: now }).eq("id", row.id);
+    }
+  } else if (failedNow && cfg.autoRetry && key && (next.bship.retries || 0) < 1) {
     const job = (async () => {
       await sleep(60_000);
       const { data: fresh } = await db.from("orders").select("id,data").eq("id", row.id).maybeSingle();
