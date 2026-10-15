@@ -66,7 +66,26 @@ export function limited(ip: string, max: number, ms: number): boolean {
   if (hits.size > 5000) hits.clear();
   return a.length > max;
 }
-export const ipOf = (req: Request) => (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "x";
+// the visitor's address: Cloudflare's header can't be faked by the visitor, the forwarded one is the fallback
+export const ipOf = (req: Request) => (req.headers.get("cf-connecting-ip") || (req.headers.get("x-forwarded-for") || "").split(",")[0]).trim() || "x";
+// limits kept in the database, so they hold across every server instance (true = allowed). If the check itself fails, shoppers are not blocked.
+export async function allow(db: any, key: string, max: number, ms: number): Promise<boolean> {
+  const { data, error } = await db.rpc("throttle_ok", { p_key: key, p_max: max, p_window_ms: ms });
+  return error ? true : data === true;
+}
+export async function sha(s: string): Promise<string> {
+  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+  return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 40);
+}
+// short-lived answers kept so repeated lookups don't cost Biteship or Google calls
+export async function cacheGet(db: any, k: string): Promise<any | null> {
+  const { data } = await db.from("quote_cache").select("exp,data").eq("k", k).maybeSingle();
+  return data && +data.exp > Date.now() ? data.data : null;
+}
+export async function cacheSet(db: any, k: string, ttlMs: number, val: unknown) {
+  await db.from("quote_cache").upsert({ k, exp: Date.now() + ttlMs, data: val });
+  if (Math.random() < 0.05) await db.from("quote_cache").delete().lt("exp", Date.now());
+}
 
 // map Biteship status codes to words the owner and customer understand
 export const STATUS_TXT: Record<string, string> = {

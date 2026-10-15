@@ -1,7 +1,7 @@
 // Delidome: optional Biteship courier integration.
 // Deploy:  supabase functions deploy biteship
 // The API key is saved by the owner in Shop settings -> Courier delivery (stored in a private table, never sent to the website).
-import { admin, applyUpdate, bookOrder, boxOf, bs, bsErr, cors, driverOf, findProofs, hmacHex, INSTANT, ipOf, json, kv, limited, settings, teamRole } from "../_shared/common.ts";
+import { admin, allow, applyUpdate, bookOrder, boxOf, bs, bsErr, cacheGet, cacheSet, cors, driverOf, findProofs, hmacHex, INSTANT, ipOf, json, kv, limited, settings, sha, teamRole } from "../_shared/common.ts";
 
 const num = (v: unknown, d = 0) => (Number.isFinite(+(v as number)) ? +(v as number) : d);
 const clean = (s: unknown, n: number) => String(s ?? "").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, n);
@@ -24,11 +24,20 @@ Deno.serve(async (req) => {
     if (action === "areas" || action === "geocode" || action === "rates") {
       const { set, cfg, key } = await load(db);
       if (!set?.biteship?.on || !key) return json({ error: "Courier prices are not available right now." }, 503);
-      if (limited(ipOf(req), 40, 60_000)) return json({ error: "Too many tries. Please wait a minute." }, 429);
+      const ip = ipOf(req);
+      if (limited(ip, 40, 60_000)) return json({ error: "Too many tries. Please wait a minute." }, 429);
+      // limits per visitor, kept in the database so they hold on every server; and a daily cap on the calls that cost money
+      const perIp: [string, number, number][] = action === "areas" ? [["bs-areas", 40, 60_000]] : action === "geocode" ? [["bs-geo-m", 12, 60_000], ["bs-geo-h", 60, 3_600_000]] : [["bs-rates-m", 10, 60_000], ["bs-rates-h", 60, 3_600_000]];
+      for (const [k, m, ms] of perIp) if (!(await allow(db, k + ":" + ip, m, ms))) return json({ error: "Too many tries. Please wait a minute." }, 429);
+      const cap = Math.max(50, num(cfg.dailyCap, action === "rates" ? 800 : action === "geocode" ? 400 : 1500));
+      const busy = () => json({ error: "Courier prices are busy right now. Please try again later." }, 429);
 
       if (action === "areas") {
         const q = clean(body.q, 80);
         if (q.length < 3) return json({ areas: [] });
+        const ak = "qa:" + await sha(q.toLowerCase()), ac = await cacheGet(db, ak);
+        if (ac) return json({ areas: ac });
+        if (!(await allow(db, "bs-day-areas", cap, 86_400_000))) return busy();
         let r = await bs(key, "GET", "/v1/maps/areas?countries=ID&type=single&input=" + encodeURIComponent(q));
         console.log("areas", q, r.status, r.ok ? (r.body?.areas || []).length : bsErr(r));
         if (r.ok && !(r.body?.areas || []).length) {
@@ -40,6 +49,7 @@ Deno.serve(async (req) => {
         const areas = ((r.body && r.body.areas) || []).slice(0, 8).map((a: any) => ({
           id: clean(a.id, 60), name: clean(a.name, 160), postal: clean(a.postal_code, 12),
         }));
+        if (areas.length) await cacheSet(db, ak, 86_400_000, areas);
         return json({ areas });
       }
 
@@ -66,11 +76,16 @@ Deno.serve(async (req) => {
         };
         const find = gkey ? google : photon;
         const addr = clean(body.address, 200), area = clean(body.area, 160).replace(/\b\d{5}\b/g, "").trim();
+        const gk = "qg:" + await sha((gkey ? "g|" : "p|") + addr.toLowerCase() + "|" + area.toLowerCase()), gc = await cacheGet(db, gk);
+        if (gc) return json(gc);
+        if (!(await allow(db, "bs-day-geocode", cap, 86_400_000))) return busy();
         let hit = await find([addr, area].filter(Boolean).join(", ")), approx = false;
         if (!hit && area) { hit = await find(area); approx = true; }
         if (!hit && gkey) { hit = await photon([addr, area].filter(Boolean).join(", ")); }
-        if (!hit) return json({ found: false });
-        return json({ found: true, approx: approx || hit.rough, lat: (+hit.lat).toFixed(5), lng: (+hit.lng).toFixed(5), label: hit.label });
+        if (!hit) { await cacheSet(db, gk, 3_600_000, { found: false }); return json({ found: false }); }
+        const out = { found: true, approx: approx || hit.rough, lat: (+hit.lat).toFixed(5), lng: (+hit.lng).toFixed(5), label: hit.label };
+        await cacheSet(db, gk, 86_400_000, out);
+        return json(out);
       }
 
       // rates
@@ -91,19 +106,24 @@ Deno.serve(async (req) => {
       const inst = allowed.filter((c) => INSTANT.includes(c)), reg = allowed.filter((c) => !INSTANT.includes(c));
       const pricing: any[] = [];
       let lastErr = "";
-      if (inst.length && Number.isFinite(lat) && Number.isFinite(lng) && Number.isFinite(num(o.lat, NaN)) && Number.isFinite(num(o.lng, NaN))) {
+      // the same box to the same place within 10 minutes reuses the last courier answer (no new Biteship call)
+      const rk = "qr:" + await sha([size, lat.toFixed(3), lng.toFixed(3), postal, allowed.join(","), num(o.lat), num(o.lng), num(o.postal)].join("|")), rc = await cacheGet(db, rk);
+      if (rc) pricing.push(...rc);
+      else if (!(await allow(db, "bs-day-rates", cap, 86_400_000))) return busy();
+      if (!rc && inst.length && Number.isFinite(lat) && Number.isFinite(lng) && Number.isFinite(num(o.lat, NaN)) && Number.isFinite(num(o.lng, NaN))) {
         const r = await bs(key, "POST", "/v1/rates/couriers", {
           origin_latitude: num(o.lat), origin_longitude: num(o.lng), destination_latitude: lat, destination_longitude: lng, couriers: inst.join(","), items,
         });
         console.log("rates instant", r.status, r.ok ? (r.body?.pricing || []).length : bsErr(r));
         if (r.ok && r.body && Array.isArray(r.body.pricing)) pricing.push(...r.body.pricing); else lastErr = bsErr(r);
-      } else if (inst.length) console.log("rates instant skipped: missing coordinates", Number.isFinite(lat), Number.isFinite(num(o.lat, NaN)));
-      if (reg.length && postal && o.postal) {
+      } else if (!rc && inst.length) console.log("rates instant skipped: missing coordinates", Number.isFinite(lat), Number.isFinite(num(o.lat, NaN)));
+      if (!rc && reg.length && postal && o.postal) {
         const r = await bs(key, "POST", "/v1/rates/couriers", {
           origin_postal_code: Math.round(num(o.postal)), destination_postal_code: Math.round(num(postal)), couriers: reg.join(","), items,
         });
         if (r.ok && r.body && Array.isArray(r.body.pricing)) pricing.push(...r.body.pricing); else lastErr = lastErr || bsErr(r);
       }
+      if (!rc && pricing.length) await cacheSet(db, rk, 600_000, pricing);
       if (!pricing.length && !lastErr && inst.length && !(Number.isFinite(lat) && Number.isFinite(lng)))
         return json({ options: [], error: "Press \"Find my address on the map\" so we can show Gojek and Grab prices." });
       if (!pricing.length && !lastErr && inst.length && !Number.isFinite(num(o.lat, NaN)))
