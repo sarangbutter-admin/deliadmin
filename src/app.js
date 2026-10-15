@@ -1673,10 +1673,11 @@ function renderAdmin(){
   $("#cSales").textContent=nLive?nLive+" live":"";$("#cSales").hidden=!nLive;
   const lowN=DB.products.filter(isLow).length;
   $("#cProducts").textContent=lowN?lowN+" low":DB.products.filter(p=>p.status==="available").length;$("#cProducts").classList.toggle("live",!!lowN);
-  $("#amain").innerHTML=({notify:viewNotify,dashboard:viewDashboard,orders:viewOrders,sales:viewSales,products:viewProducts,complaints:viewComplaints,boxes:viewBoxes,marquee:viewMarquee,announcer:viewAnnouncer,coupons:viewCoupons,hero:viewHero,labels:viewLabels,landing:viewLanding,settings:viewSettings,delivery:viewDelivery,customers:viewCustomers,team:viewTeam,badges:viewBadges,log:viewLog})[A.tab]();
+  $("#amain").innerHTML=({notify:viewNotify,dashboard:viewDashboard,orders:viewOrders,sales:viewSales,products:viewProducts,complaints:viewComplaints,boxes:viewBoxes,marquee:viewMarquee,announcer:viewAnnouncer,coupons:viewCoupons,hero:viewHero,labels:viewLabels,landing:viewLanding,settings:viewSettings,delivery:viewDelivery,customers:viewCustomers,team:viewTeam,badges:viewBadges,log:viewLog,security:viewSecurity})[A.tab]();
   if(A.tab==="log"&&LG.list===null)loadLog();
   if(A.tab==="customers"&&(CU.list===null||CU.stale))loadCustomers();
   if(A.tab==="team"&&TM.list===null)loadTeam();
+  if(A.tab==="security"&&SEC.cfg===null)loadSec();
   tickAdmin();
   if(A.tab==="sales")updatePreview();if(A.tab==="boxes"&&typeof fpInit==="function")fpInit();
   if(A.tab==="marquee")afterViewMarquee();
@@ -4731,6 +4732,89 @@ am.addEventListener("click",async e=>{const b=e.target.closest("button");if(!b||
   else if(d.lgclear!==undefined){pwPrompt({title:"Delete the whole activity log?",text:"This can't be undone. Type your own owner password to confirm.",button:"Delete everything",danger:true,
       run:async pw=>{try{return await SBH.rpc("admin_log_clear",{p_password:pw})}catch(x){return {ok:false,err:x.message}}}})
     .then(()=>{LG.list=null;renderAdmin();loadLog();toast("Activity log deleted")}).catch(()=>{})}
+});
+
+/* --- Security (owners only): abuse limits, daily courier caps and the emergency stop. Changes need Owner mode --- */
+// [name, label, hint, default]; 0 = no limit, blank = default
+const SEC_GROUPS=[
+  ["💸 Cost guard: courier & maps","The calls that cost you money. When a daily cap is reached, the shop says \"Courier prices are busy, try again later\" until the next 24 hours.",[
+    ["capRates","Courier price checks per day","Biteship rate checks, whole shop",800],
+    ["capGeo","Address-on-map lookups per day","Google Maps (when you saved a Google key), whole shop",400],
+    ["capAreas","Area searches per day","Biteship area search, whole shop",1500],
+    ["cacheMin","Reuse a courier price for (minutes)","Same box to the same place reuses the last price, no new paid call",10]]],
+  ["🛵 Courier lookups per visitor","Counted per internet connection, so one person or bot can't use up the daily caps.",[
+    ["bsRatesIpM","Price checks per minute","",10],["bsRatesIpH","Price checks per hour","",60],
+    ["bsGeoIpM","Map lookups per minute","",12],["bsGeoIpH","Map lookups per hour","",60],
+    ["bsAreasIpM","Area searches per minute","",40]]],
+  ["🧾 Orders","Stops fake orders that hold your cookie stock.",[
+    ["orderIpH","Orders per visitor per hour","",10],["orderIpD","Orders per visitor per day","",30],
+    ["phoneOpen","Unpaid orders per phone number","A new order waits until one is paid or cancelled",3],
+    ["orderAll","New orders per minute, whole shop","",60]]],
+  ["🔎 Order tracking & coupons","Stops guessing order codes and coupon codes.",[
+    ["trackIpM","Order lookups per visitor per minute","",12],["trackIpH","Order lookups per visitor per hour","",120],["trackAll","Order lookups per minute, whole shop","",30],
+    ["cpIpM","Coupon tries per visitor per minute","",20],["cpAll","Coupon tries per minute, whole shop","",120]]],
+  ["📷 Uploads per order","Pictures customers send for one order.",[
+    ["proofH","Payment proof uploads per hour","",8],["complaintH","Complaints per hour","",4],["placeH","Place photo changes per hour","",12]]],
+  ["👀 Visitor counter","Only affects the visitor numbers on the Dashboard.",[
+    ["visitIpM","Counted visits per visitor per minute","",120],["visitAll","Counted visits per minute, whole shop","",600]]]];
+const SEC={cfg:null,used:{},draft:{},err:"",loading:false,saving:false};
+const SEC_ID="__security__";
+const secOn=()=>(OWNM[SEC_ID]||0)>Date.now();
+async function loadSec(){
+  if(!SBH.on||SEC.loading)return;SEC.loading=true;
+  try{const r=await SBH.rpc("admin_security_get",{});SEC.cfg=r.cfg||{};SEC.used=r.used||{};SEC.err="";if(r.until>Date.now())OWNM[SEC_ID]=r.until}
+  catch(e){SEC.err=/does not exist|Could not find/i.test(e.message)?"Run the latest database file (20260129000000_security_tab.sql) first.":e.message;SEC.cfg=SEC.cfg||{}}
+  SEC.loading=false;if(A.tab==="security"&&!A.modal){const y=scrollY;renderAdmin();scrollTo(0,y)}
+}
+const secVal=k=>k in SEC.draft?SEC.draft[k]:(SEC.cfg&&SEC.cfg[k]!==undefined?String(SEC.cfg[k]):"");
+function secRow([k,label,hint,dflt],on){
+  const v=secVal(k),cap={capRates:"rates",capGeo:"geocode",capAreas:"areas"}[k];
+  const lim=v===""?dflt:+v,used=cap?(+SEC.used[cap]||0):null,pct=cap&&lim>0?Math.min(100,Math.round(used/lim*100)):0;
+  return `<div class="secrow"><div class="secl"><b>${esc(label)}</b>${hint?`<span class="note">${esc(hint)}</span>`:""}
+      ${cap?`<div class="secbar${pct>=90?" hot":pct>=60?" warm":""}" title="${used} used in the last 24 hours"><i style="width:${lim>0?pct:0}%"></i></div><span class="note">${used} used in the last 24 hours${lim>0?` of ${lim}`:" (no cap)"}</span>`:""}</div>
+    <div class="secv"><input class="in" type="number" inputmode="numeric" min="0" max="1000000" step="1" data-seck="${k}" value="${esc(v)}" placeholder="${dflt}" ${on?"":"disabled"} aria-label="${esc(label)}">
+      <span class="note">${v===""?"default":v==="0"?"<b class=\"secoff\">no limit</b>":"default "+dflt}</span></div></div>`;
+}
+function viewSecurity(){
+  const h=head("Security","Limits that protect your shop from abuse, bots and surprise bills. Only owners can see this.");
+  if(!SBH.on)return h+MOCK+`<section class="panel"><div class="empty">Security works once the site is connected to Supabase.</div></section>`;
+  if(SEC.cfg===null)return h+`<section class="panel"><div class="empty">Loading…</div></section>`;
+  const on=secOn(),stop="courierOff" in SEC.draft?SEC.draft.courierOff:!!SEC.cfg.courierOff;
+  return h+`<div class="stack">
+    <section class="panel secown${on?" on":""}"><div><b>${on?"🔓 Owner mode is on":"🔒 Locked"}</b><p class="note">${on?"You can change the limits. It switches off by itself.":"Turn on Owner mode with the owner password to change anything here."}</p></div>
+      <button class="oc-b ownm${on?" on":""}" type="button" data-secm>${on?`🔓 Owner mode · <span data-ownt="${SEC_ID}">${fmtLeftS(OWNM[SEC_ID]-Date.now())}</span>`:"🔒 Turn on Owner mode"}</button></section>
+    ${SEC.err?`<p class="err">${esc(SEC.err)}</p>`:""}
+    <section class="panel secstop${stop?" on":""}"><label class="secsw"><input type="checkbox" data-secstop ${stop?"checked":""} ${on?"":"disabled"}><span><b>🚨 Emergency stop: pause live courier prices</b>
+      <span class="note">Use it if you see a sudden jump in courier usage. No new Biteship or Google calls are made. Customers can still choose pickup, or your normal delivery fee if \"If courier prices can't load, allow my normal delivery fee\" is on in Delivery & courier.</span></span></label></section>
+    ${SEC_GROUPS.map(([t,sub,rows])=>`<section class="panel"><h3 class="sech">${t}</h3><p class="note" style="margin:2px 0 10px">${esc(sub)}</p><div class="seclist">${rows.map(r=>secRow(r,on)).join("")}</div></section>`).join("")}
+    <p class="note">Leave a box empty to use the default. 0 means no limit, so use 0 carefully. Changes work within a few seconds, no Publish needed.</p>
+    <div class="secact"><button class="btn btn-blue" type="button" data-secsave ${on&&!SEC.saving?"":"disabled"}>${SEC.saving?"Saving…":"Save security limits"}</button>
+      <button class="ghost" type="button" data-secdef ${on?"":"disabled"}>Back to defaults</button><button class="ghost" type="button" data-secreload>Refresh usage</button></div>
+    <section class="panel"><h3 class="sech">🌐 Big attacks (DDoS)</h3><p class="note" style="margin-top:4px">These limits stop people and bots from using up your courier money and stock. A very large flood of traffic is stopped by your hosting, not by the shop. Also set a <b>spend cap</b> and <b>billing alerts</b> in Supabase, and in Netlify, and consider Cloudflare in front of the shop.</p></section>
+  </div>`;
+}
+async function secModeToggle(){
+  if(secOn()){delete OWNM[SEC_ID];SBH.rpc("admin_security_mode",{p_password:""}).catch(()=>{});toast("Owner mode off");renderAdmin();return}
+  const ok=await pwPrompt({title:"Owner mode for Security",text:"Type the owner password. This unlocks changing the security limits for 5 minutes.",button:"Turn on",
+    run:async pw=>{try{const r=await SBH.rpc("admin_security_mode",{p_password:pw});if(r&&r.ok)OWNM[SEC_ID]=r.until;return r}catch(x){return {ok:false,err:x.message}}}}).then(()=>true,()=>false);
+  if(ok&&secOn()){toast("Owner mode on for 5 minutes");const y=scrollY;renderAdmin();scrollTo(0,y)}
+}
+async function secSave(){
+  const p={};SEC_GROUPS.forEach(g=>g[2].forEach(([k])=>{const v=String(secVal(k)).trim();if(v!=="")p[k]=v}));
+  for(const k in p)if(!/^\d{1,7}$/.test(p[k])||+p[k]>1000000){toast("Use whole numbers from 0 to 1,000,000.");return}
+  p.courierOff="courierOff" in SEC.draft?SEC.draft.courierOff:!!SEC.cfg.courierOff;
+  SEC.saving=true;renderAdmin();
+  try{SEC.cfg=await SBH.rpc("admin_security_set",{p});SEC.draft={};toast("Security limits saved")}catch(x){toast(x.message)}
+  SEC.saving=false;const y=scrollY;renderAdmin();scrollTo(0,y);
+}
+am.addEventListener("input",e=>{const k=e.target.dataset&&e.target.dataset.seck;if(!k)return;SEC.draft[k]=e.target.value.trim();
+  const n=e.target.parentNode.querySelector(".note");if(n){const v=SEC.draft[k];n.innerHTML=v===""?"default":v==="0"?"<b class=\"secoff\">no limit</b>":"default "+e.target.placeholder}});
+am.addEventListener("change",e=>{if(e.target.matches("[data-secstop]")){SEC.draft.courierOff=e.target.checked;e.target.closest(".secstop").classList.toggle("on",e.target.checked)}});
+am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b||A.tab!=="security")return;const d=b.dataset;
+  if(d.secm!==undefined)secModeToggle();
+  else if(d.secsave!==undefined)secSave();
+  else if(d.secreload!==undefined)loadSec();
+  else if(d.secdef!==undefined){SEC_GROUPS.forEach(g=>g[2].forEach(([k])=>SEC.draft[k]=""));SEC.draft.courierOff=false;const y=scrollY;renderAdmin();scrollTo(0,y);toast("Defaults filled in. Press Save to use them.")}
 });
 
 /* --- owner password prompt (used for deletes, price changes and clearing the log) --- */

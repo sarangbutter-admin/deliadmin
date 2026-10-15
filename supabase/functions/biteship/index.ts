@@ -7,8 +7,8 @@ const num = (v: unknown, d = 0) => (Number.isFinite(+(v as number)) ? +(v as num
 const clean = (s: unknown, n: number) => String(s ?? "").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, n);
 
 async function load(db: ReturnType<typeof admin>) {
-  const [set, cfg, keyRow] = await Promise.all([settings(db), kv(db, "biteship_cfg"), kv(db, "biteship_key")]);
-  return { set, cfg: cfg || {}, key: keyRow && keyRow.v ? String(keyRow.v) : "" };
+  const [set, cfg, keyRow, sec] = await Promise.all([settings(db), kv(db, "biteship_cfg"), kv(db, "biteship_key"), kv(db, "security")]);
+  return { set, cfg: cfg || {}, key: keyRow && keyRow.v ? String(keyRow.v) : "", sec: (sec || {}) as Record<string, unknown> };
 }
 
 Deno.serve(async (req) => {
@@ -22,14 +22,20 @@ Deno.serve(async (req) => {
   try {
     /* ---------- public (shop checkout) ---------- */
     if (action === "areas" || action === "geocode" || action === "rates") {
-      const { set, cfg, key } = await load(db);
-      if (!set?.biteship?.on || !key) return json({ error: "Courier prices are not available right now." }, 503);
+      const { set, cfg, key, sec } = await load(db);
+      // the owner's Security tab: limits and daily caps (missing = default, 0 = no limit), and an emergency stop
+      const L = (k: string, d: number) => { const v = sec[k]; return Number.isInteger(v) && (v as number) >= 0 ? (v as number) : d; };
+      if (!set?.biteship?.on || !key || sec.courierOff === true) return json({ error: "Courier prices are not available right now." }, 503);
       const ip = ipOf(req);
-      if (limited(ip, 40, 60_000)) return json({ error: "Too many tries. Please wait a minute." }, 429);
+      if (limited(ip, Math.max(40, L("bsAreasIpM", 40) || 1000), 60_000)) return json({ error: "Too many tries. Please wait a minute." }, 429);
       // limits per visitor, kept in the database so they hold on every server; and a daily cap on the calls that cost money
-      const perIp: [string, number, number][] = action === "areas" ? [["bs-areas", 40, 60_000]] : action === "geocode" ? [["bs-geo-m", 12, 60_000], ["bs-geo-h", 60, 3_600_000]] : [["bs-rates-m", 10, 60_000], ["bs-rates-h", 60, 3_600_000]];
-      for (const [k, m, ms] of perIp) if (!(await allow(db, k + ":" + ip, m, ms))) return json({ error: "Too many tries. Please wait a minute." }, 429);
-      const cap = Math.max(50, num(cfg.dailyCap, action === "rates" ? 800 : action === "geocode" ? 400 : 1500));
+      const perIp: [string, number, number][] = action === "areas" ? [["bs-areas", L("bsAreasIpM", 40), 60_000]]
+        : action === "geocode" ? [["bs-geo-m", L("bsGeoIpM", 12), 60_000], ["bs-geo-h", L("bsGeoIpH", 60), 3_600_000]]
+        : [["bs-rates-m", L("bsRatesIpM", 10), 60_000], ["bs-rates-h", L("bsRatesIpH", 60), 3_600_000]];
+      for (const [k, m, ms] of perIp) if (m > 0 && !(await allow(db, k + ":" + ip, m, ms))) return json({ error: "Too many tries. Please wait a minute." }, 429);
+      const cap = action === "rates" ? L("capRates", num(cfg.dailyCap, 800)) : action === "geocode" ? L("capGeo", num(cfg.dailyCap, 400)) : L("capAreas", num(cfg.dailyCap, 1500));
+      const dayOk = async (k: string) => cap <= 0 || await allow(db, k, cap, 86_400_000);
+      const cacheMs = L("cacheMin", 10) * 60_000;
       const busy = () => json({ error: "Courier prices are busy right now. Please try again later." }, 429);
 
       if (action === "areas") {
@@ -37,7 +43,7 @@ Deno.serve(async (req) => {
         if (q.length < 3) return json({ areas: [] });
         const ak = "qa:" + await sha(q.toLowerCase()), ac = await cacheGet(db, ak);
         if (ac) return json({ areas: ac });
-        if (!(await allow(db, "bs-day-areas", cap, 86_400_000))) return busy();
+        if (!(await dayOk("bs-day-areas"))) return busy();
         let r = await bs(key, "GET", "/v1/maps/areas?countries=ID&type=single&input=" + encodeURIComponent(q));
         console.log("areas", q, r.status, r.ok ? (r.body?.areas || []).length : bsErr(r));
         if (r.ok && !(r.body?.areas || []).length) {
@@ -78,7 +84,7 @@ Deno.serve(async (req) => {
         const addr = clean(body.address, 200), area = clean(body.area, 160).replace(/\b\d{5}\b/g, "").trim();
         const gk = "qg:" + await sha((gkey ? "g|" : "p|") + addr.toLowerCase() + "|" + area.toLowerCase()), gc = await cacheGet(db, gk);
         if (gc) return json(gc);
-        if (!(await allow(db, "bs-day-geocode", cap, 86_400_000))) return busy();
+        if (!(await dayOk("bs-day-geocode"))) return busy();
         let hit = await find([addr, area].filter(Boolean).join(", ")), approx = false;
         if (!hit && area) { hit = await find(area); approx = true; }
         if (!hit && gkey) { hit = await photon([addr, area].filter(Boolean).join(", ")); }
@@ -106,10 +112,10 @@ Deno.serve(async (req) => {
       const inst = allowed.filter((c) => INSTANT.includes(c)), reg = allowed.filter((c) => !INSTANT.includes(c));
       const pricing: any[] = [];
       let lastErr = "";
-      // the same box to the same place within 10 minutes reuses the last courier answer (no new Biteship call)
-      const rk = "qr:" + await sha([size, lat.toFixed(3), lng.toFixed(3), postal, allowed.join(","), num(o.lat), num(o.lng), num(o.postal)].join("|")), rc = await cacheGet(db, rk);
+      // the same box to the same place within a few minutes (Security tab, default 10) reuses the last courier answer (no new Biteship call)
+      const rk = "qr:" + await sha([size, lat.toFixed(3), lng.toFixed(3), postal, allowed.join(","), num(o.lat), num(o.lng), num(o.postal)].join("|")), rc = cacheMs > 0 ? await cacheGet(db, rk) : null;
       if (rc) pricing.push(...rc);
-      else if (!(await allow(db, "bs-day-rates", cap, 86_400_000))) return busy();
+      else if (!(await dayOk("bs-day-rates"))) return busy();
       if (!rc && inst.length && Number.isFinite(lat) && Number.isFinite(lng) && Number.isFinite(num(o.lat, NaN)) && Number.isFinite(num(o.lng, NaN))) {
         const r = await bs(key, "POST", "/v1/rates/couriers", {
           origin_latitude: num(o.lat), origin_longitude: num(o.lng), destination_latitude: lat, destination_longitude: lng, couriers: inst.join(","), items,
@@ -123,7 +129,7 @@ Deno.serve(async (req) => {
         });
         if (r.ok && r.body && Array.isArray(r.body.pricing)) pricing.push(...r.body.pricing); else lastErr = lastErr || bsErr(r);
       }
-      if (!rc && pricing.length) await cacheSet(db, rk, 600_000, pricing);
+      if (!rc && pricing.length && cacheMs > 0) await cacheSet(db, rk, cacheMs, pricing);
       if (!pricing.length && !lastErr && inst.length && !(Number.isFinite(lat) && Number.isFinite(lng)))
         return json({ options: [], error: "Press \"Find my address on the map\" so we can show Gojek and Grab prices." });
       if (!pricing.length && !lastErr && inst.length && !Number.isFinite(num(o.lat, NaN)))
