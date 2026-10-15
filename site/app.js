@@ -163,6 +163,7 @@ function migrate(db){
   if(db.settings.payWindowH===undefined)Object.assign(db.settings,{payWindowH:24,payBank:"Example Bank\nAccount 123 456 7890\nName: Delidome Cookies"});
   if(db.settings.lowStockAt===undefined)db.settings.lowStockAt=10;
   if(db.settings.customOn===undefined)Object.assign(db.settings,{customOn:true,customMin:14,customStep:2,customMax:48,customPer:3.25});
+  if(db.settings.fabGest===undefined)Object.assign(db.settings,{fabGest:true,fabBgType:"color",fabBg2:"#FF9F43",fabRing:"",fabImgSize:84,fabSizePx:58,fabOpacity:100,fabImg:"",rbImg:"",rbImg2:""});
   if(db.settings.rbOn===undefined)Object.assign(db.settings,{rbOn:true,rbIcon:"🎲",rbIcon2:"🔀",rbBg:"#FFD43B",rbFx:"wiggle",rbScroll:true,fabOn:true,fabIcon:"📦",fabText:"My box",fabTextOn:true,fabFx:"bounce",fabBg:"#FFD43B",fabInk:"#000096",fabHide:true});
   if(!Array.isArray(db.categories)){db.categories=DEFAULT_CATS.map(c=>({...c}));db.products.forEach(p=>{if(p.cat===undefined)p.cat=CAT_OF[p.id]||""})}
   db.products.forEach(p=>{if(p.cat===undefined)p.cat="";if(!Array.isArray(p.reviews))p.reviews=[]});
@@ -804,28 +805,82 @@ function renderBarExtras(){
   rb.disabled=!availProducts().length;
 }
 let boxSeen=false;
+const fabNum=(v,lo,hi,d)=>{v=parseFloat(v);return Number.isFinite(v)?Math.min(hi,Math.max(lo,v)):d};
+const imgIsCut=u=>!/^data:image\/jpe?g/i.test(u||"");
+/* the round background behind the circle's icon: same choices as the flavor plates (solid, gradient, none, ring, picture size) */
+function fabPlateCss(t){
+  const type=["color","gradient","none"].includes(t.fabBgType)?t.fabBgType:"color",ring=/^#[0-9a-f]{6}$/i.test(t.fabRing||"")?t.fabRing:"";
+  return plateBg({},{type,c1:hexOk(t.fabBg,"#FFD43B"),c2:hexOk(t.fabBg2,"#FF9F43"),dir:"diag",ring,size:fabNum(t.fabImgSize,40,100,84)}).css;
+}
+const fabIconHTML=(img,emoji,dflt)=>imgOk(img)?`<img class="fab-img${imgIsCut(img)?" cut":""}" src="${esc(imgOk(img))}" alt="" draggable="false">`:esc(String(emoji||"").trim()||dflt);
+function fabPillCss(t){const ink=hexOk(t.fabInk,"#000096");return `background:${ink};color:${lumOf(ink)<.5?"#fff":"#000"}`}
+const FAB_KEY="delidome-fab-v1";
+const fabPrefs=()=>{try{return JSON.parse(localStorage.getItem(FAB_KEY)||"null")||{}}catch(e){return {}}};
+const fabSave=o=>{try{localStorage.setItem(FAB_KEY,JSON.stringify(Object.assign(fabPrefs(),o)))}catch(e){}};
+/* size and fade: the owner sets the starting values, a customer can only make it smaller or fainter (pinch, or press and hold) */
+function fabDims(){
+  const t=DB.settings,ds=fabNum(t.fabSizePx,40,96,58),dopa=fabNum(t.fabOpacity,30,100,100),pr=t.fabGest!==false?fabPrefs():{};
+  return {ds,dopa,s:Math.min(ds,fabNum(pr.s,30,ds,ds)),o:Math.min(dopa,fabNum(pr.o,25,dopa,dopa))};
+}
+function renderBarExtras(){
+  const t=DB.settings,rb=$("#barRand");if(!rb)return;
+  const on=t.rbOn!==false;rb.hidden=!on;if(!on)return;
+  const shuf=full(),im=shuf?t.rbImg2:t.rbImg,html=fabIconHTML(im,shuf?t.rbIcon2:t.rbIcon,shuf?"🔀":"🎲");
+  if(rb.dataset.ic!==html){rb.dataset.ic=html;rb.innerHTML=html}
+  rb.className="barrand fx-"+fxOk(t.rbFx,["wiggle","pulse","none"],"wiggle");
+  rb.style.setProperty("--rb-bg",hexOk(t.rbBg,"#FFD43B"));
+  rb.setAttribute("aria-label",shuf?"Shuffle my box":"Random fill");rb.title=shuf?"Shuffle my box":"Random fill";
+  rb.disabled=!availProducts().length;
+}
 function renderFab(){
   const t=DB.settings,f=$("#fab");if(!f)return;
   const on=t.fabOn!==false;f.hidden=!on;if(!on)return;
-  const ic=String(t.fabIcon).trim()||"📦",tx=t.fabTextOn!==false?String(t.fabText||"").trim().slice(0,14):"";
-  if($("#fabIc").textContent!==ic)$("#fabIc").textContent=ic;
-  const tt=$("#fabTx");if(tt.textContent!==tx)tt.textContent=tx;tt.hidden=!tx;
+  const tx=t.fabTextOn!==false?String(t.fabText||"").trim().slice(0,14):"",ic=fabIconHTML(t.fabImg,t.fabIcon,"📦"),ics=$("#fabIc");
+  if(ics.dataset.h!==ic){ics.dataset.h=ic;ics.innerHTML=ic}
+  const pl=$("#fabPl"),css=fabPlateCss(t);if(pl.dataset.c!==css){pl.dataset.c=css;pl.style.cssText=css}
+  const tt=$("#fabTx");if(tt.textContent!==tx)tt.textContent=tx;tt.hidden=!tx;tt.style.cssText=fabPillCss(t);
   f.className="fab fx-"+fxOk(t.fabFx,["bounce","pulse","glow","none"],"bounce")+(f.classList.contains("dragging")?" dragging":"")+(t.fabHide!==false&&boxSeen?" away":"");
-  f.style.setProperty("--fab-bg",hexOk(t.fabBg,"#FFD43B"));f.style.setProperty("--fab-ink",hexOk(t.fabInk,"#000096"));
+  f.style.setProperty("--fab-ink",hexOk(t.fabInk,"#000096"));
+  const d=fabDims();f.style.setProperty("--fab-s",d.s+"px");f.style.setProperty("--fab-o",d.o/100);
   f.title=tx||"Show my box";
   if(!f.dataset.placed){f.dataset.placed="1";if(window.fabApply)fabApply()}
+  if(t.fabGest!==false&&!f.classList.contains("away")&&!fabPrefs().hinted){fabSave({hinted:1});setTimeout(()=>toast("Tip: drag the circle to move it. Pinch it, or press and hold, to make it smaller or fainter."),1800)}
 }
 (function(){
-  const f=$("#fab");if(!f)return;const KEY="delidome-fab-v1";let st=null;
+  const f=$("#fab");if(!f)return;let st=null,pinch=null,longT=null;const ptrs=new Map();
   const place=(x,y)=>{const w=f.offsetWidth||58,h=f.offsetHeight||58;x=Math.min(Math.max(6,x),innerWidth-w-6);y=Math.min(Math.max(6,y),innerHeight-h-6);f.style.left=x+"px";f.style.top=y+"px";f.style.bottom="auto"};
-  window.fabApply=()=>{try{const q=JSON.parse(localStorage.getItem(KEY)||"null");if(q&&typeof q.x==="number"&&typeof q.y==="number")place(q.x*innerWidth,q.y*innerHeight)}catch(e){}};
-  f.addEventListener("pointerdown",e=>{st={id:e.pointerId,sx:e.clientX,sy:e.clientY,ox:f.offsetLeft,oy:f.offsetTop,moved:false};try{f.setPointerCapture(e.pointerId)}catch(x){}});
-  f.addEventListener("pointermove",e=>{if(!st||e.pointerId!==st.id)return;const dx=e.clientX-st.sx,dy=e.clientY-st.sy;if(!st.moved&&Math.hypot(dx,dy)<7)return;st.moved=true;f.classList.add("dragging");place(st.ox+dx,st.oy+dy)});
-  const end=()=>{if(!st)return;const m=st.moved;st=null;f.classList.remove("dragging");
-    if(m){try{localStorage.setItem(KEY,JSON.stringify({x:f.offsetLeft/innerWidth,y:f.offsetTop/innerHeight}))}catch(x){}f.dataset.moved="1";setTimeout(()=>{delete f.dataset.moved},60)}};
+  window.fabApply=()=>{const q=fabPrefs();if(typeof q.x==="number"&&typeof q.y==="number")place(q.x*innerWidth,q.y*innerHeight)};
+  const setDims=(s,o)=>{const d=fabDims();s=Math.min(d.ds,Math.max(30,s));o=Math.min(d.dopa,Math.max(25,o));f.style.setProperty("--fab-s",s+"px");f.style.setProperty("--fab-o",o/100);if(f.style.top)place(f.offsetLeft,f.offsetTop);return {s,o}};
+  const cur=()=>{const d=fabDims();return {s:d.s,o:d.o}};
+  /* press and hold: a tiny panel with size and fade sliders */
+  const tune=()=>{let el=$("#fabTune");if(!el){el=document.createElement("div");el.id="fabTune";el.className="fabtune";el.hidden=true;
+    el.innerHTML=`<label>Size<input type="range" id="ftS" min="30" max="96" step="1"></label><label>Fade<input type="range" id="ftO" min="25" max="100" step="1"></label><button type="button" id="ftR">Reset</button>`;
+    document.body.appendChild(el);
+    el.addEventListener("input",e=>{const r=setDims(+$("#ftS").value,+$("#ftO").value);fabSave(r);moveTune()});
+    $("#ftR").addEventListener("click",()=>{const d=fabDims();fabSave({s:d.ds,o:d.dopa});$("#ftS").value=d.ds;$("#ftO").value=d.dopa;setDims(d.ds,d.dopa)});
+    document.addEventListener("pointerdown",e=>{if(!el.hidden&&!e.target.closest("#fabTune")&&!e.target.closest("#fab"))el.hidden=true})}return el};
+  const moveTune=()=>{const el=$("#fabTune");if(!el||el.hidden)return;const r=f.getBoundingClientRect(),w=el.offsetWidth||190;
+    el.style.left=Math.min(Math.max(8,r.left+r.width/2-w/2),innerWidth-w-8)+"px";el.style.top=Math.max(8,r.top-(el.offsetHeight||110)-10)+"px"};
+  const openTune=()=>{const el=tune(),d=fabDims();$("#ftS").max=d.ds;$("#ftS").value=d.s;$("#ftO").max=d.dopa;$("#ftO").value=Math.round(d.o);el.hidden=false;moveTune()};
+  f.addEventListener("pointerdown",e=>{
+    ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});try{f.setPointerCapture(e.pointerId)}catch(x){}
+    if(DB.settings.fabGest!==false&&ptrs.size===2){const [a,b]=[...ptrs.values()];pinch={d0:Math.max(10,Math.hypot(a.x-b.x,a.y-b.y)),s0:cur().s,o0:cur().o};clearTimeout(longT);if(st)st.moved=true;return}
+    if(ptrs.size===1){st={id:e.pointerId,sx:e.clientX,sy:e.clientY,ox:f.offsetLeft,oy:f.offsetTop,moved:false,long:false};
+      if(DB.settings.fabGest!==false)longT=setTimeout(()=>{if(st&&!st.moved){st.long=true;openTune()}},550)}});
+  f.addEventListener("pointermove",e=>{
+    if(ptrs.has(e.pointerId))ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(pinch&&ptrs.size>=2){const [a,b]=[...ptrs.values()],k=Math.hypot(a.x-b.x,a.y-b.y)/pinch.d0;f.classList.add("dragging");setDims(pinch.s0*k,pinch.o0);return}
+    if(!st||e.pointerId!==st.id)return;const dx=e.clientX-st.sx,dy=e.clientY-st.sy;if(!st.moved&&Math.hypot(dx,dy)<7)return;
+    st.moved=true;clearTimeout(longT);f.classList.add("dragging");place(st.ox+dx,st.oy+dy)});
+  const end=e=>{
+    ptrs.delete(e.pointerId);clearTimeout(longT);
+    if(pinch){if(ptrs.size<2){const c=cur(),cs=parseFloat(f.style.getPropertyValue("--fab-s"))||c.s;fabSave({s:Math.round(cs)});pinch=null;f.classList.remove("dragging");f.dataset.moved="1";setTimeout(()=>{delete f.dataset.moved},120)}return}
+    if(!st)return;const m=st.moved,lg=st.long;st=null;f.classList.remove("dragging");
+    if(m){fabSave({x:f.offsetLeft/innerWidth,y:f.offsetTop/innerHeight})}
+    if(m||lg){f.dataset.moved="1";setTimeout(()=>{delete f.dataset.moved},60)}};
   f.addEventListener("pointerup",end);f.addEventListener("pointercancel",end);
   f.addEventListener("click",()=>{if(f.dataset.moved)return;showMyBox()});
-  addEventListener("resize",()=>{if(f.style.top)window.fabApply()});
+  addEventListener("resize",()=>{if(f.style.top)window.fabApply();moveTune()});
   const bp=$(".boxpanel");if(bp&&"IntersectionObserver" in window)new IntersectionObserver(es=>{boxSeen=es[0].intersectionRatio>0.35;renderFab()},{threshold:[0,.35,.7]}).observe(bp);
 })();
 function clearBox(){if(!S.box.length)return;S.shuf=0;S.box.forEach((_,i)=>ghostOut(i));S.box=[];S.step=1;renderStore()}

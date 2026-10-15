@@ -166,6 +166,7 @@ function migrate(db){
   if(db.settings.payWindowH===undefined)Object.assign(db.settings,{payWindowH:24,payBank:"Example Bank\nAccount 123 456 7890\nName: Delidome Cookies"});
   if(db.settings.lowStockAt===undefined)db.settings.lowStockAt=10;
   if(db.settings.customOn===undefined)Object.assign(db.settings,{customOn:true,customMin:14,customStep:2,customMax:48,customPer:3.25});
+  if(db.settings.fabGest===undefined)Object.assign(db.settings,{fabGest:true,fabBgType:"color",fabBg2:"#FF9F43",fabRing:"",fabImgSize:84,fabSizePx:58,fabOpacity:100,fabImg:"",rbImg:"",rbImg2:""});
   if(db.settings.rbOn===undefined)Object.assign(db.settings,{rbOn:true,rbIcon:"🎲",rbIcon2:"🔀",rbBg:"#FFD43B",rbFx:"wiggle",rbScroll:true,fabOn:true,fabIcon:"📦",fabText:"My box",fabTextOn:true,fabFx:"bounce",fabBg:"#FFD43B",fabInk:"#000096",fabHide:true});
   if(!Array.isArray(db.categories)){db.categories=DEFAULT_CATS.map(c=>({...c}));db.products.forEach(p=>{if(p.cat===undefined)p.cat=CAT_OF[p.id]||""})}
   db.products.forEach(p=>{if(p.cat===undefined)p.cat="";if(!Array.isArray(p.reviews))p.reviews=[]});
@@ -817,28 +818,82 @@ function renderBarExtras(){
   rb.disabled=!availProducts().length;
 }
 let boxSeen=false;
+const fabNum=(v,lo,hi,d)=>{v=parseFloat(v);return Number.isFinite(v)?Math.min(hi,Math.max(lo,v)):d};
+const imgIsCut=u=>!/^data:image\/jpe?g/i.test(u||"");
+/* the round background behind the circle's icon: same choices as the flavor plates (solid, gradient, none, ring, picture size) */
+function fabPlateCss(t){
+  const type=["color","gradient","none"].includes(t.fabBgType)?t.fabBgType:"color",ring=/^#[0-9a-f]{6}$/i.test(t.fabRing||"")?t.fabRing:"";
+  return plateBg({},{type,c1:hexOk(t.fabBg,"#FFD43B"),c2:hexOk(t.fabBg2,"#FF9F43"),dir:"diag",ring,size:fabNum(t.fabImgSize,40,100,84)}).css;
+}
+const fabIconHTML=(img,emoji,dflt)=>imgOk(img)?`<img class="fab-img${imgIsCut(img)?" cut":""}" src="${esc(imgOk(img))}" alt="" draggable="false">`:esc(String(emoji||"").trim()||dflt);
+function fabPillCss(t){const ink=hexOk(t.fabInk,"#000096");return `background:${ink};color:${lumOf(ink)<.5?"#fff":"#000"}`}
+const FAB_KEY="delidome-fab-v1";
+const fabPrefs=()=>{try{return JSON.parse(localStorage.getItem(FAB_KEY)||"null")||{}}catch(e){return {}}};
+const fabSave=o=>{try{localStorage.setItem(FAB_KEY,JSON.stringify(Object.assign(fabPrefs(),o)))}catch(e){}};
+/* size and fade: the owner sets the starting values, a customer can only make it smaller or fainter (pinch, or press and hold) */
+function fabDims(){
+  const t=DB.settings,ds=fabNum(t.fabSizePx,40,96,58),dopa=fabNum(t.fabOpacity,30,100,100),pr=t.fabGest!==false?fabPrefs():{};
+  return {ds,dopa,s:Math.min(ds,fabNum(pr.s,30,ds,ds)),o:Math.min(dopa,fabNum(pr.o,25,dopa,dopa))};
+}
+function renderBarExtras(){
+  const t=DB.settings,rb=$("#barRand");if(!rb)return;
+  const on=t.rbOn!==false;rb.hidden=!on;if(!on)return;
+  const shuf=full(),im=shuf?t.rbImg2:t.rbImg,html=fabIconHTML(im,shuf?t.rbIcon2:t.rbIcon,shuf?"🔀":"🎲");
+  if(rb.dataset.ic!==html){rb.dataset.ic=html;rb.innerHTML=html}
+  rb.className="barrand fx-"+fxOk(t.rbFx,["wiggle","pulse","none"],"wiggle");
+  rb.style.setProperty("--rb-bg",hexOk(t.rbBg,"#FFD43B"));
+  rb.setAttribute("aria-label",shuf?"Shuffle my box":"Random fill");rb.title=shuf?"Shuffle my box":"Random fill";
+  rb.disabled=!availProducts().length;
+}
 function renderFab(){
   const t=DB.settings,f=$("#fab");if(!f)return;
   const on=t.fabOn!==false;f.hidden=!on;if(!on)return;
-  const ic=String(t.fabIcon).trim()||"📦",tx=t.fabTextOn!==false?String(t.fabText||"").trim().slice(0,14):"";
-  if($("#fabIc").textContent!==ic)$("#fabIc").textContent=ic;
-  const tt=$("#fabTx");if(tt.textContent!==tx)tt.textContent=tx;tt.hidden=!tx;
+  const tx=t.fabTextOn!==false?String(t.fabText||"").trim().slice(0,14):"",ic=fabIconHTML(t.fabImg,t.fabIcon,"📦"),ics=$("#fabIc");
+  if(ics.dataset.h!==ic){ics.dataset.h=ic;ics.innerHTML=ic}
+  const pl=$("#fabPl"),css=fabPlateCss(t);if(pl.dataset.c!==css){pl.dataset.c=css;pl.style.cssText=css}
+  const tt=$("#fabTx");if(tt.textContent!==tx)tt.textContent=tx;tt.hidden=!tx;tt.style.cssText=fabPillCss(t);
   f.className="fab fx-"+fxOk(t.fabFx,["bounce","pulse","glow","none"],"bounce")+(f.classList.contains("dragging")?" dragging":"")+(t.fabHide!==false&&boxSeen?" away":"");
-  f.style.setProperty("--fab-bg",hexOk(t.fabBg,"#FFD43B"));f.style.setProperty("--fab-ink",hexOk(t.fabInk,"#000096"));
+  f.style.setProperty("--fab-ink",hexOk(t.fabInk,"#000096"));
+  const d=fabDims();f.style.setProperty("--fab-s",d.s+"px");f.style.setProperty("--fab-o",d.o/100);
   f.title=tx||"Show my box";
   if(!f.dataset.placed){f.dataset.placed="1";if(window.fabApply)fabApply()}
+  if(t.fabGest!==false&&!f.classList.contains("away")&&!fabPrefs().hinted){fabSave({hinted:1});setTimeout(()=>toast("Tip: drag the circle to move it. Pinch it, or press and hold, to make it smaller or fainter."),1800)}
 }
 (function(){
-  const f=$("#fab");if(!f)return;const KEY="delidome-fab-v1";let st=null;
+  const f=$("#fab");if(!f)return;let st=null,pinch=null,longT=null;const ptrs=new Map();
   const place=(x,y)=>{const w=f.offsetWidth||58,h=f.offsetHeight||58;x=Math.min(Math.max(6,x),innerWidth-w-6);y=Math.min(Math.max(6,y),innerHeight-h-6);f.style.left=x+"px";f.style.top=y+"px";f.style.bottom="auto"};
-  window.fabApply=()=>{try{const q=JSON.parse(localStorage.getItem(KEY)||"null");if(q&&typeof q.x==="number"&&typeof q.y==="number")place(q.x*innerWidth,q.y*innerHeight)}catch(e){}};
-  f.addEventListener("pointerdown",e=>{st={id:e.pointerId,sx:e.clientX,sy:e.clientY,ox:f.offsetLeft,oy:f.offsetTop,moved:false};try{f.setPointerCapture(e.pointerId)}catch(x){}});
-  f.addEventListener("pointermove",e=>{if(!st||e.pointerId!==st.id)return;const dx=e.clientX-st.sx,dy=e.clientY-st.sy;if(!st.moved&&Math.hypot(dx,dy)<7)return;st.moved=true;f.classList.add("dragging");place(st.ox+dx,st.oy+dy)});
-  const end=()=>{if(!st)return;const m=st.moved;st=null;f.classList.remove("dragging");
-    if(m){try{localStorage.setItem(KEY,JSON.stringify({x:f.offsetLeft/innerWidth,y:f.offsetTop/innerHeight}))}catch(x){}f.dataset.moved="1";setTimeout(()=>{delete f.dataset.moved},60)}};
+  window.fabApply=()=>{const q=fabPrefs();if(typeof q.x==="number"&&typeof q.y==="number")place(q.x*innerWidth,q.y*innerHeight)};
+  const setDims=(s,o)=>{const d=fabDims();s=Math.min(d.ds,Math.max(30,s));o=Math.min(d.dopa,Math.max(25,o));f.style.setProperty("--fab-s",s+"px");f.style.setProperty("--fab-o",o/100);if(f.style.top)place(f.offsetLeft,f.offsetTop);return {s,o}};
+  const cur=()=>{const d=fabDims();return {s:d.s,o:d.o}};
+  /* press and hold: a tiny panel with size and fade sliders */
+  const tune=()=>{let el=$("#fabTune");if(!el){el=document.createElement("div");el.id="fabTune";el.className="fabtune";el.hidden=true;
+    el.innerHTML=`<label>Size<input type="range" id="ftS" min="30" max="96" step="1"></label><label>Fade<input type="range" id="ftO" min="25" max="100" step="1"></label><button type="button" id="ftR">Reset</button>`;
+    document.body.appendChild(el);
+    el.addEventListener("input",e=>{const r=setDims(+$("#ftS").value,+$("#ftO").value);fabSave(r);moveTune()});
+    $("#ftR").addEventListener("click",()=>{const d=fabDims();fabSave({s:d.ds,o:d.dopa});$("#ftS").value=d.ds;$("#ftO").value=d.dopa;setDims(d.ds,d.dopa)});
+    document.addEventListener("pointerdown",e=>{if(!el.hidden&&!e.target.closest("#fabTune")&&!e.target.closest("#fab"))el.hidden=true})}return el};
+  const moveTune=()=>{const el=$("#fabTune");if(!el||el.hidden)return;const r=f.getBoundingClientRect(),w=el.offsetWidth||190;
+    el.style.left=Math.min(Math.max(8,r.left+r.width/2-w/2),innerWidth-w-8)+"px";el.style.top=Math.max(8,r.top-(el.offsetHeight||110)-10)+"px"};
+  const openTune=()=>{const el=tune(),d=fabDims();$("#ftS").max=d.ds;$("#ftS").value=d.s;$("#ftO").max=d.dopa;$("#ftO").value=Math.round(d.o);el.hidden=false;moveTune()};
+  f.addEventListener("pointerdown",e=>{
+    ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});try{f.setPointerCapture(e.pointerId)}catch(x){}
+    if(DB.settings.fabGest!==false&&ptrs.size===2){const [a,b]=[...ptrs.values()];pinch={d0:Math.max(10,Math.hypot(a.x-b.x,a.y-b.y)),s0:cur().s,o0:cur().o};clearTimeout(longT);if(st)st.moved=true;return}
+    if(ptrs.size===1){st={id:e.pointerId,sx:e.clientX,sy:e.clientY,ox:f.offsetLeft,oy:f.offsetTop,moved:false,long:false};
+      if(DB.settings.fabGest!==false)longT=setTimeout(()=>{if(st&&!st.moved){st.long=true;openTune()}},550)}});
+  f.addEventListener("pointermove",e=>{
+    if(ptrs.has(e.pointerId))ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(pinch&&ptrs.size>=2){const [a,b]=[...ptrs.values()],k=Math.hypot(a.x-b.x,a.y-b.y)/pinch.d0;f.classList.add("dragging");setDims(pinch.s0*k,pinch.o0);return}
+    if(!st||e.pointerId!==st.id)return;const dx=e.clientX-st.sx,dy=e.clientY-st.sy;if(!st.moved&&Math.hypot(dx,dy)<7)return;
+    st.moved=true;clearTimeout(longT);f.classList.add("dragging");place(st.ox+dx,st.oy+dy)});
+  const end=e=>{
+    ptrs.delete(e.pointerId);clearTimeout(longT);
+    if(pinch){if(ptrs.size<2){const c=cur(),cs=parseFloat(f.style.getPropertyValue("--fab-s"))||c.s;fabSave({s:Math.round(cs)});pinch=null;f.classList.remove("dragging");f.dataset.moved="1";setTimeout(()=>{delete f.dataset.moved},120)}return}
+    if(!st)return;const m=st.moved,lg=st.long;st=null;f.classList.remove("dragging");
+    if(m){fabSave({x:f.offsetLeft/innerWidth,y:f.offsetTop/innerHeight})}
+    if(m||lg){f.dataset.moved="1";setTimeout(()=>{delete f.dataset.moved},60)}};
   f.addEventListener("pointerup",end);f.addEventListener("pointercancel",end);
   f.addEventListener("click",()=>{if(f.dataset.moved)return;showMyBox()});
-  addEventListener("resize",()=>{if(f.style.top)window.fabApply()});
+  addEventListener("resize",()=>{if(f.style.top)window.fabApply();moveTune()});
   const bp=$(".boxpanel");if(bp&&"IntersectionObserver" in window)new IntersectionObserver(es=>{boxSeen=es[0].intersectionRatio>0.35;renderFab()},{threshold:[0,.35,.7]}).observe(bp);
 })();
 function clearBox(){if(!S.box.length)return;S.shuf=0;S.box.forEach((_,i)=>ghostOut(i));S.box=[];S.step=1;renderStore()}
@@ -3003,23 +3058,26 @@ function viewBoxes(){
 /* Boxes & extras: the phone bar random button and the floating "show my box" circle */
 const BTN_FX_RB=[["wiggle","Wiggle now and then"],["pulse","Gentle pulse"],["none","No movement"]],BTN_FX_FAB=[["bounce","Bounce"],["pulse","Gentle pulse"],["glow","Glowing ring"],["none","No movement"]];
 function btnPreviewHTML(){
-  const t=DB.settings,ic=String(t.rbIcon).trim()||"🎲",ic2=String(t.rbIcon2).trim()||"🔀",fi=String(t.fabIcon).trim()||"📦",tx=t.fabTextOn!==false?String(t.fabText||"").trim().slice(0,14):"";
-  return `<span class="barrand fx-${fxOk(t.rbFx,["wiggle","pulse","none"],"wiggle")}" style="--rb-bg:${hexOk(t.rbBg,"#FFD43B")}" title="Random fill">${esc(ic)}</span>
-    <span class="barrand fx-none" style="--rb-bg:${hexOk(t.rbBg,"#FFD43B")}" title="After the box is full (shuffle)">${esc(ic2)}</span>
-    <span class="fab fx-${fxOk(t.fabFx,["bounce","pulse","glow","none"],"bounce")}" style="--fab-bg:${hexOk(t.fabBg,"#FFD43B")};--fab-ink:${hexOk(t.fabInk,"#000096")}"><span aria-hidden="true">${esc(fi)}</span>${tx?`<small class="fab-tx">${esc(tx)}</small>`:""}</span>`;
+  const t=DB.settings,d=fabDims(),tx=t.fabTextOn!==false?String(t.fabText||"").trim().slice(0,14):"",bg=hexOk(t.rbBg,"#FFD43B");
+  return `<span class="barrand fx-${fxOk(t.rbFx,["wiggle","pulse","none"],"wiggle")}" style="--rb-bg:${bg}" title="Random fill">${fabIconHTML(t.rbImg,t.rbIcon,"🎲")}</span>
+    <span class="barrand fx-none" style="--rb-bg:${bg}" title="After the box is full (shuffle)">${fabIconHTML(t.rbImg2,t.rbIcon2,"🔀")}</span>
+    <span class="fab fx-${fxOk(t.fabFx,["bounce","pulse","glow","none"],"bounce")}" style="--fab-ink:${hexOk(t.fabInk,"#000096")};--fab-s:${d.ds}px;--fab-o:${d.dopa/100}"><span class="fab-pl" style="${esc(fabPlateCss(t))}"><span>${fabIconHTML(t.fabImg,t.fabIcon,"📦")}</span></span>${tx?`<small class="fab-tx" style="${esc(fabPillCss(t))}">${esc(tx)}</small>`:""}</span>`;
 }
 function btnPanels(){
   const t=DB.settings,sw=(k,label)=>`<label class="chk"><span class="sw"><input type="checkbox" data-k="settings::${k}" ${t[k]!==false?"checked":""}><span></span></span><span>${label}</span></label>`,
     sel=(k,opts)=>`<select class="in" data-k="settings::${k}">${opts.map(([v,l])=>`<option value="${v}" ${t[k]===v?"selected":""}>${l}</option>`).join("")}</select>`,
-    col=(k,l)=>`<label class="af">${l}<input type="color" data-k="settings::${k}" value="${hexOk(t[k],"#FFD43B")}" style="width:100%;height:42px"></label>`;
+    col=(k,l,d)=>`<label class="af">${l}<input type="color" data-k="settings::${k}" value="${hexOk(t[k],d||"#FFD43B")}" style="width:100%;height:42px"></label>`,
+    num=(k,l,lo,hi,d,unit)=>`<label class="af">${l}<div class="money-in"><input class="in" type="number" min="${lo}" max="${hi}" step="1" data-k="settings::${k}" value="${fabNum(t[k],lo,hi,d)}"><span style="padding-right:10px">${unit}</span></div></label>`,
+    pic=(k,l)=>`<div class="af">${l}<div class="colin" style="flex-wrap:wrap;gap:8px;align-items:center"><span class="lpthumb-box">${imgOk(t[k])?`<img class="lpthumb" style="max-height:48px;max-width:48px;border-radius:50%" src="${esc(imgOk(t[k]))}" alt="">`:`<span class="note" style="margin:0">None</span>`}</span><label class="ghost mqbtn">${imgOk(t[k])?"Replace picture":"Upload picture"}<input type="file" accept="image/*" hidden data-btnimg="${k}"></label>${imgOk(t[k])?`<button class="danger" type="button" data-btnimgrm="${k}">Use the icon instead</button>`:""}</div></div>`;
   return `<section class="panel">
     <h2>Random button and "show my box" circle</h2>
-    <p class="sub">Two helpers for phone customers. Press <b>Publish</b> after changing them. Emoji work best as icons, one or two characters.</p>
+    <p class="sub">Two helpers for phone customers. Press <b>Publish</b> after changing them. Use an emoji (one or two characters) or upload your own picture. A picture with a transparent background (PNG or WebP) looks best, like the flavor pictures.</p>
     <div class="stack" style="gap:14px">
       <h3 style="margin:0;font-size:15px">1. Random button (next to the pick button on phones)</h3>
       ${sw("rbOn","Show the random button")}
       <div class="grid2"><label class="af">Icon<input class="in" data-k="settings::rbIcon" maxlength="4" value="${esc(t.rbIcon||"")}" placeholder="🎲"></label>
         <label class="af">Icon once the box is full (shuffle)<input class="in" data-k="settings::rbIcon2" maxlength="4" value="${esc(t.rbIcon2||"")}" placeholder="🔀"></label></div>
+      <div class="grid2">${pic("rbImg","Own picture instead of the icon")}${pic("rbImg2","Own picture once the box is full")}</div>
       <div class="grid2">${col("rbBg","Button colour")}<label class="af">Movement${sel("rbFx",BTN_FX_RB)}</label></div>
       ${sw("rbScroll","Scroll to the box after the customer presses it")}
       <h3 style="margin:6px 0 0;font-size:15px">2. Floating "show my box" circle</h3>
@@ -3027,9 +3085,17 @@ function btnPanels(){
       ${sw("fabOn","Show the floating circle")}
       <div class="grid2"><label class="af">Icon<input class="in" data-k="settings::fabIcon" maxlength="4" value="${esc(t.fabIcon||"")}" placeholder="📦"></label>
         <label class="af">Tiny text under the icon<input class="in" data-k="settings::fabText" maxlength="14" value="${esc(t.fabText||"")}" placeholder="My box"></label></div>
+      ${pic("fabImg","Own picture instead of the icon")}
       ${sw("fabTextOn","Show the tiny text")}
-      <div class="grid2">${col("fabBg","Circle colour")}${col("fabInk","Icon and text colour")}</div>
-      <label class="af">Movement${sel("fabFx",BTN_FX_FAB)}</label>
+      <div class="af">Background behind the icon or picture (like the flavor plates)
+        <div class="grid2" style="margin-top:6px"><label class="af">Style${sel("fabBgType",[["color","Solid colour"],["gradient","Gradient"],["none","None (see through)"]])}</label>
+          ${num("fabImgSize","Picture size inside the circle",40,100,84,"%")}</div>
+        <div class="grid2" style="margin-top:6px">${col("fabBg","Colour")}${col("fabBg2","Second colour (gradient)","#FF9F43")}</div>
+        <div class="grid2" style="margin-top:6px"><label class="af">Ring colour (optional)<input type="color" data-k="settings::fabRing" value="${hexOk(t.fabRing,"#000096")}" style="width:100%;height:42px"></label>
+          <div class="af">&nbsp;<button class="ghost" type="button" data-fabringoff>${/^#[0-9a-f]{6}$/i.test(t.fabRing||"")?"Remove the ring":"No ring"}</button></div></div></div>
+      <div class="grid2">${col("fabInk","Tiny text and icon colour","#000096")}<label class="af">Movement${sel("fabFx",BTN_FX_FAB)}</label></div>
+      <div class="grid2">${num("fabSizePx","Starting size",40,96,58,"px")}${num("fabOpacity","Starting opacity",30,100,100,"%")}</div>
+      ${sw("fabGest","Let customers make it smaller and fainter (pinch it, or press and hold it)")}
       ${sw("fabHide","Hide the circle while the box is already on screen")}
       <div class="af">Preview<div class="fabprev" id="btnPrev">${btnPreviewHTML()}</div></div>
     </div>
@@ -4367,6 +4433,12 @@ am.addEventListener("click",async e=>{const b=e.target.closest("button");if(!b)r
       toast(BSA.test.t);renderAdmin()}
     else if(d.bsa==="copy"){const i=b.parentNode.querySelector("input");try{await navigator.clipboard.writeText(i.value);toast("Copied")}catch(err){i.select()}}
   }catch(err){b.disabled=false;if(d.bsa==="test")b.textContent="Test connection";bsAdmMsg(err.message,true);toast(err.message)}});
+/* Boxes & extras: pictures for the two buttons */
+am.addEventListener("change",async e=>{const el=e.target,k=el.dataset&&el.dataset.btnimg;if(!k||!/^(rb|fab)Img2?$/.test(k))return;const f=el.files[0];if(!f)return;
+  try{const data=await lpResize(f,k==="fabImg"?220:140,true),prev=DB.settings[k];DB.settings[k]=data;if(!saveDB()){DB.settings[k]=prev;toast("Not enough storage space. Remove another photo first.");return}renderAdmin();toast("Picture saved")}catch(err){toast(err.message)}});
+am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
+  if(b.dataset.btnimgrm&&/^(rb|fab)Img2?$/.test(b.dataset.btnimgrm)){DB.settings[b.dataset.btnimgrm]="";saveDB();renderAdmin();toast("Using the icon")}
+  else if(b.dataset.fabringoff!==undefined){DB.settings.fabRing="";saveDB();renderAdmin()}});
 /* Boxes & extras: keep the little preview of the two buttons in step with the settings */
 ["input","change"].forEach(ev=>am.addEventListener(ev,e=>{const k=e.target.dataset&&e.target.dataset.k;if(k&&/^settings::(rb|fab)/.test(k)){const pv=$("#btnPrev");if(pv)pv.innerHTML=btnPreviewHTML()}}));
 /* --- gift editor (Flash sales tab, Gifts promo) --- */
