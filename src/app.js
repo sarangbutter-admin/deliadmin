@@ -917,6 +917,24 @@ $("#gdSheet").addEventListener("click",e=>{
   if(e.target.closest("[data-gdok]")){const f=gdFn;closeGuard();if(f)f();return}
   if(e.target.closest("[data-gdno]")||e.target.id==="gdSheet")closeGuard()});
 addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("#gdSheet").hidden)closeGuard()});
+/* a lively "slow down" pop-up when a visitor hits a limit (look and wording set in the Security tab) */
+const SLOW_DEF={Title:"Slow down a little, friends!",Text:"Cookies are best eaten slowly… and so is this website. Please wait a moment and try again.",Btn:"OK, I'll slow down"};
+const SLOW_FX=[["bounce","Bounce"],["wiggle","Wiggle"],["float","Float up and down"],["pulse","Pulse"],["spin","Slow spin"],["none","Still"]],SLOW_BFX=[["shine","Shine sweep"],["pulse","Gentle pulse"],["wiggle","Wiggle"],["none","Still"]];
+const slowVars=t=>`--sl-bg:${hexOk(t.slowBg,"#FFF4D6")};--sl-ink:${hexOk(t.slowInk,"#0B0B45")};--sl-bb:${hexOk(t.slowBtnBg,"#000096")};--sl-bi:${hexOk(t.slowBtnInk,"#FFFFFF")};--sl-font:${(MQ_FONTS[t.slowFont]||MQ_FONTS.display)[1].replace(/"/g,"'")}`;
+function slowCardHTML(t){
+  const g=k=>String(t["slow"+k]||"").trim()||SLOW_DEF[k],fx=fxOk(t.slowFx,SLOW_FX.map(x=>x[0]),"bounce"),bfx=fxOk(t.slowBtnFx,SLOW_BFX.map(x=>x[0]),"shine"),u=imgOk(t.slowImg);
+  const pic=u?`<div class="sl-pic fx-${fx}"><img class="${imgIsCut(u,t.slowImgCut)?"":"crop"}" src="${esc(u)}" alt="" draggable="false"></div>`:`<div class="sl-pic fx-${fx}"><span class="sl-emo" aria-hidden="true">${esc(String(t.slowIcon||"").trim()||"🍪")}</span></div>`;
+  return `${pic}<h3 id="slowTitle">${esc(g("Title"))}</h3><p>${esc(g("Text")).replace(/\n/g,"<br>")}</p><button class="sl-btn bfx-${bfx}" type="button" data-slowok><span>${esc(g("Btn"))}</span></button>`;
+}
+let slowAt=0;
+window.ddSlow=function(force){
+  const t=DB.settings,sh=$("#slowSheet");if(!sh||(!force&&(t.slowOn===false||(typeof SBH!=="undefined"&&SBH.admin))))return;
+  const now=Date.now();if(!force&&(!sh.hidden||now-slowAt<20000))return;slowAt=now;
+  const c=$("#slowCard");c.style.cssText=slowVars(t);c.innerHTML=slowCardHTML(t);sh.hidden=false;
+  setTimeout(()=>{const b=c.querySelector("[data-slowok]");b&&b.focus()},60);
+};
+$("#slowSheet").addEventListener("click",e=>{if(e.target.closest("[data-slowok]")||e.target.id==="slowSheet")$("#slowSheet").hidden=true});
+addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("#slowSheet").hidden)$("#slowSheet").hidden=true});
 function clearBox(){if(!S.box.length)return;S.shuf=0;S.box.forEach((_,i)=>ghostOut(i));S.box=[];S.step=1;renderStore()}
 function scrollToEl(el){
   const go=()=>{const fl=$("#flash"),head=$(".top").getBoundingClientRect().height+(fl.hidden||fl.parentNode===$(".top")?0:fl.getBoundingClientRect().height);
@@ -1693,8 +1711,8 @@ const DRAFT_NAMES={settings:"Shop settings",marquee:"Marquee banner",page:"Landi
 function drawDraftBar(){
   const am=$("#amain");if(!am||!SBH.pending)return;
   const keys=SBH.pending();let bar=$("#draftBar");
-  {const tabs={settings:["settings","boxes","delivery"],marquee:["marquee"],page:["landing","hero"]};document.querySelectorAll("[data-tab]").forEach(b=>b.classList.toggle("pend",keys.some(k=>(tabs[k]||[]).includes(b.dataset.tab))))}
-  const onTab=SBH.admin&&["settings","delivery","boxes","marquee","landing","hero"].includes(A.tab);
+  {const tabs={settings:["settings","boxes","delivery","security"],marquee:["marquee"],page:["landing","hero"]};document.querySelectorAll("[data-tab]").forEach(b=>b.classList.toggle("pend",keys.some(k=>(tabs[k]||[]).includes(b.dataset.tab))))}
+  const onTab=SBH.admin&&["settings","delivery","boxes","security","marquee","landing","hero"].includes(A.tab);
   if(!keys.length&&!onTab){if(bar)bar.remove();return}
   const busy=keys.length>0,sig=(busy?keys.join():"idle")+"|"+A.tab;
   const html=busy?`<div class="db-tx"><b>Not published yet</b><span>${keys.map(k=>esc(DRAFT_NAMES[k])).join(", ")}. Customers still see the old version.</span></div><div class="db-act"><button class="btn btn-blue" type="button" data-dbpub>Save &amp; publish</button><button class="ghost" type="button" data-dbdisc>Discard changes</button></div>`
@@ -1704,7 +1722,7 @@ function drawDraftBar(){
   if(bar.dataset.sig!==sig){bar.dataset.sig=sig;bar.innerHTML=html}
 }
 function afterSave(){if(SBH.on&&SBH.admin)requestAnimationFrame(()=>{try{drawDraftBar()}catch(e){}})}
-function toastHook(msg){return msg==="Saved"&&SBH.admin&&SBH.pending&&["settings","delivery","boxes","marquee","landing","hero"].includes(A.tab)&&SBH.pending().length?"Draft kept. Press Publish changes to show it in the shop.":msg}
+function toastHook(msg){return msg==="Saved"&&SBH.admin&&SBH.pending&&["settings","delivery","boxes","security","marquee","landing","hero"].includes(A.tab)&&SBH.pending().length?"Draft kept. Press Publish changes to show it in the shop.":msg}
 document.addEventListener("click",async e=>{
   const b=e.target.closest("[data-dbpub],[data-dbdisc]");if(!b||!SBH.pending)return;
   const keys=SBH.pending();if(!keys.length)return;
@@ -4512,7 +4530,8 @@ am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
   else if(b.dataset.fabringoff!==undefined){DB.settings.fabRing="";saveDB();renderAdmin()}});
 /* Boxes & extras: keep the little preview of the two buttons in step with the settings */
 ["input","change"].forEach(ev=>am.addEventListener(ev,e=>{const k=e.target.dataset&&e.target.dataset.k;if(k&&/^settings::(rb|fab)/.test(k)){const pv=$("#btnPrev");if(pv)pv.innerHTML=btnPreviewHTML()}
-  if(k&&/^settings::guard/.test(k)){const g=$("#gdPrev");if(g)g.innerHTML=guardPrevHTML()}}));
+  if(k&&/^settings::guard/.test(k)){const g=$("#gdPrev");if(g)g.innerHTML=guardPrevHTML()}
+  if(k&&/^settings::slow/.test(k)){const g=$("#slowPrev");if(g){g.style.cssText="position:static;max-width:380px;margin:0 auto;animation:none;"+slowVars(DB.settings);g.innerHTML=slowCardHTML(DB.settings)}}}));
 /* --- gift editor (Flash sales tab, Gifts promo) --- */
 am.addEventListener("input",e=>{const el=e.target,D=A.draft;
   if(el.dataset.gname!==undefined){D.gifts[+el.dataset.gname].name=el.value;document.querySelectorAll("[data-rchips]").forEach(c=>{c.innerHTML=giftChipsHTML(D,D.rules[+c.dataset.rchips],+c.dataset.rchips)});updatePreview()}
@@ -4786,6 +4805,7 @@ function viewSecurity(){
     ${SEC.err?`<p class="err">${esc(SEC.err)}</p>`:""}
     <section class="panel secstop${stop?" on":""}"><label class="secsw"><input type="checkbox" data-secstop ${stop?"checked":""} ${on?"":"disabled"}><span><b>🚨 Emergency stop: pause live courier prices</b>
       <span class="note">Use it if you see a sudden jump in courier usage. No new Biteship or Google calls are made. Customers can still choose pickup, or your normal delivery fee if \"If courier prices can't load, allow my normal delivery fee\" is on in Delivery & courier.</span></span></label></section>
+    ${slowPanel()}
     ${SEC_GROUPS.map(([t,sub,rows])=>`<section class="panel"><h3 class="sech">${t}</h3><p class="note" style="margin:2px 0 10px">${esc(sub)}</p><div class="seclist">${rows.map(r=>secRow(r,on)).join("")}</div></section>`).join("")}
     <p class="note">Leave a box empty to use the default. 0 means no limit, so use 0 carefully. Changes work within a few seconds, no Publish needed.</p>
     <div class="secact"><button class="btn btn-blue" type="button" data-secsave ${on&&!SEC.saving?"":"disabled"}>${SEC.saving?"Saving…":"Save security limits"}</button>
@@ -4816,6 +4836,50 @@ am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b||A.tab!
   else if(d.secreload!==undefined)loadSec();
   else if(d.secdef!==undefined){SEC_GROUPS.forEach(g=>g[2].forEach(([k])=>SEC.draft[k]=""));SEC.draft.courierOff=false;const y=scrollY;renderAdmin();scrollTo(0,y);toast("Defaults filled in. Press Save to use them.")}
 });
+
+/* Security: the pop-up visitors see when they hit a limit */
+async function imgAnimated(f){
+  if(f.type==="image/gif")return true;
+  try{const b=new Uint8Array(await f.slice(0,65536).arrayBuffer()),ch=(i,n)=>String.fromCharCode.apply(null,b.subarray(i,i+n));
+    if(f.type==="image/webp")return ch(0,4)==="RIFF"&&ch(8,4)==="WEBP"&&ch(12,4)==="VP8X"&&!!(b[20]&2);
+    if(f.type==="image/png"){for(let i=8;i<b.length-4;i++)if(b[i]===0x61&&b[i+1]===0x63&&b[i+2]===0x54&&b[i+3]===0x4c)return true}}catch(e){}
+  return false;
+}
+function slowPanel(){
+  const t=DB.settings,sw=(k,label)=>`<label class="chk"><span class="sw"><input type="checkbox" data-k="settings::${k}" ${t[k]!==false?"checked":""}><span></span></span><span>${label}</span></label>`,
+    sel=(k,opts,d)=>`<select class="in" data-k="settings::${k}">${opts.map(([v,l])=>`<option value="${v}" ${(t[k]||d)===v?"selected":""}>${l}</option>`).join("")}</select>`,
+    col=(k,l,d)=>`<label class="af">${l}<input type="color" data-k="settings::${k}" value="${hexOk(t[k],d)}" style="width:100%;height:42px"></label>`,
+    tx=(k,l,max,ph)=>`<label class="af">${l}<input class="in" data-k="settings::${k}" maxlength="${max}" value="${esc(t[k]||"")}" placeholder="${esc(ph||"")}"></label>`,
+    u=imgOk(t.slowImg);
+  return `<section class="panel"><h2>😋 "Slow down" pop-up</h2>
+    <p class="sub">The small pop-up a visitor sees when they hit one of the limits below (too many tries, too many orders, courier prices busy). Leave a box empty to use the default wording. Press <b>Publish</b> after changing it.</p>
+    <div class="stack" style="gap:12px">
+      ${sw("slowOn","Show the pop-up")}
+      <div class="grid2">${tx("slowTitle","Title",60,SLOW_DEF.Title)}${tx("slowBtn","Button text",28,SLOW_DEF.Btn)}</div>
+      <label class="af">Message<textarea class="in" rows="3" maxlength="240" data-k="settings::slowText" placeholder="${esc(SLOW_DEF.Text)}">${esc(t.slowText||"")}</textarea></label>
+      <div class="grid2"><label class="af">Icon (an emoji)<input class="in" data-k="settings::slowIcon" maxlength="4" value="${esc(t.slowIcon||"")}" placeholder="🍪"></label>
+        <label class="af">Icon / picture movement${sel("slowFx",SLOW_FX,"bounce")}</label></div>
+      <div class="af">Your own picture instead of the icon (a GIF, an animated WebP or APNG moves by itself)
+        <div class="colin" style="flex-wrap:wrap;gap:8px;align-items:center"><span>${u?`<img class="lpthumb" style="max-height:48px;max-width:64px;border-radius:8px" src="${esc(u)}" alt="">`:`<span class="note" style="margin:0">None</span>`}</span><label class="ghost mqbtn">${u?"Replace picture":"Upload picture"}<input type="file" accept="image/*" hidden data-slowimg></label>${u?`<button class="danger" type="button" data-slowimgrm>Use the icon instead</button>`:""}</div>
+        <span class="note">Animated pictures up to 800 KB. Other pictures are resized for you.</span></div>
+      <div class="grid2">${col("slowBg","Background colour","#FFF4D6")}${col("slowInk","Text colour","#0B0B45")}</div>
+      <label class="af">Font${sel("slowFont",Object.entries(MQ_FONTS).map(([k,v])=>[k,v[0]]),"display")}</label>
+      <div class="grid2">${col("slowBtnBg","Button colour","#000096")}${col("slowBtnInk","Button text colour","#FFFFFF")}</div>
+      <label class="af">Button movement${sel("slowBtnFx",SLOW_BFX,"shine")}</label>
+      <div class="af">Preview<div class="sheet-card cw-card sl-card" id="slowPrev" style="position:static;max-width:380px;margin:0 auto;animation:none;${esc(slowVars(t))}">${slowCardHTML(t)}</div></div>
+      <div><button class="ghost" type="button" data-slowtest>Show it like a visitor sees it</button></div>
+    </div></section>`;
+}
+am.addEventListener("change",async e=>{const el=e.target;if(!el.dataset||el.dataset.slowimg===undefined)return;const f=el.files[0];if(!f)return;
+  try{let data,cut;
+    if(await imgAnimated(f)){if(f.size>800e3)throw new Error("That animated picture is over 800 KB. Try a smaller or shorter one.");data=await readData(f);cut=true}
+    else{data=await lpResize(f,240,true);cut=await imgHasAlpha(f)}
+    const prev=DB.settings.slowImg,prevC=DB.settings.slowImgCut;DB.settings.slowImg=data;DB.settings.slowImgCut=cut;
+    if(!saveDB()){DB.settings.slowImg=prev;DB.settings.slowImgCut=prevC;toast("Not enough storage space. Remove another photo first.");return}
+    renderAdmin();toast("Picture saved")}catch(err){toast(err.message)}});
+am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
+  if(b.dataset.slowimgrm!==undefined){DB.settings.slowImg="";delete DB.settings.slowImgCut;saveDB();renderAdmin();toast("Using the icon")}
+  else if(b.dataset.slowtest!==undefined)window.ddSlow(true)});
 
 /* --- owner password prompt (used for deletes, price changes and clearing the log) --- */
 function pwPrompt(o){

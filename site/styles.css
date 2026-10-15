@@ -973,3 +973,28 @@ body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
 .secv .in{width:100%;text-align:right}
 .secbar.warm i{background:#e6a23c}.secbar.hot i{background:#d64541}
 .secstop.on{border-color:#d64541;background:#fff3f2}
+
+/* "Slow down" pop-up (Security tab) */
+.cw-card.sl-card{background:var(--sl-bg,#FFF4D6);color:var(--sl-ink,#0B0B45);font-family:var(--sl-font,var(--body))}
+.sl-card h3{font-family:inherit;color:inherit;font-size:24px;line-height:1.15}
+.sl-card p{color:inherit}
+.sl-pic{width:120px;height:120px;margin:0 auto;display:grid;place-items:center}
+.sl-pic img{width:100%;height:100%;object-fit:contain;display:block;pointer-events:none}
+.sl-pic img.crop{border-radius:50%;object-fit:cover;box-shadow:0 6px 16px rgba(0,0,60,.28)}
+.sl-emo{font-size:76px;line-height:1;display:inline-block}
+.sl-pic.fx-bounce>*{animation:slBounce 1.1s ease-in-out infinite}
+.sl-pic.fx-wiggle>*{animation:cwWiggle 1.2s ease-in-out infinite;transform-origin:50% 80%}
+.sl-pic.fx-float>*{animation:slFloat 2.4s ease-in-out infinite}
+.sl-pic.fx-pulse>*{animation:slPulse 1.4s ease-in-out infinite}
+.sl-pic.fx-spin>*{animation:slSpin 6s linear infinite}
+@keyframes slBounce{0%,100%{transform:translateY(0)}35%{transform:translateY(-14px)}60%{transform:translateY(0)}78%{transform:translateY(-5px)}}
+@keyframes slFloat{0%,100%{transform:translateY(-6px)}50%{transform:translateY(6px)}}
+@keyframes slPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
+@keyframes slSpin{to{transform:rotate(360deg)}}
+.sl-btn{box-sizing:border-box;position:relative;overflow:hidden;width:100%;border:0;border-radius:999px;padding:15px 24px;background:var(--sl-bb,#000096);color:var(--sl-bi,#fff);font:inherit;font-weight:800;font-size:16px;cursor:pointer;box-shadow:0 6px 16px rgba(0,0,60,.25)}
+.sl-btn span{position:relative}
+.sl-btn.bfx-shine::after{content:"";position:absolute;top:0;left:-60%;width:40%;height:100%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.55),transparent);transform:skewX(-20deg);animation:slShine 2.6s ease-in-out infinite}
+.sl-btn.bfx-pulse{animation:slPulse 1.5s ease-in-out infinite}
+.sl-btn.bfx-wiggle{animation:cwWiggle 1.6s ease-in-out infinite}
+@keyframes slShine{0%,55%{left:-60%}100%{left:130%}}
+@media (prefers-reduced-motion:reduce){.sl-pic>*,.sl-btn,.sl-btn::after{animation:none!important}}

@@ -20,6 +20,11 @@
     if (/Failed to fetch|NetworkError|Load failed|aborted/i.test(msg)) return "Can't reach the shop right now. Check your internet and try again.";
     return msg;
   }
+  // a visitor hit one of the shop's limits: let the page show its friendly "slow down" pop-up
+  function limitHit(msg) {
+    try { if (/^(too many|we.re very busy|courier prices are busy)/i.test(msg) && window.ddSlow) window.ddSlow(); } catch (e) {}
+    return msg;
+  }
   function headers(token, extra) {
     var h = { "apikey": KEY, "Content-Type": "application/json" };
     // legacy anon keys are JWTs and may be sent as a bearer; new publishable keys must not be
@@ -61,10 +66,11 @@
       var txt = await r.text(), j = null;
       try { j = txt ? JSON.parse(txt) : null; } catch (e) { j = null; }
       if (!r.ok) {
-        var err = new Error(nice((j && (j.message || j.error_description || j.hint)) || ("Request failed (" + r.status + ")")));
+        var err = new Error(limitHit(nice((j && (j.message || j.error_description || j.hint)) || ("Request failed (" + r.status + ")"))));
         err.status = r.status; err.code = j && j.code;
         throw err;
       }
+      if (j && j.ok === false && typeof j.err === "string") limitHit(j.err);
       return j;
     };
     try { return await attempt(tok); }
@@ -86,7 +92,7 @@
     t.done();
     var txt = await r.text(), j = null;
     try { j = txt ? JSON.parse(txt) : null; } catch (e) { j = null; }
-    if (!r.ok) { var err = new Error(nice((j && (j.error || j.message)) || ("Request failed (" + r.status + ")"))); err.status = r.status; throw err; }
+    if (!r.ok) { var err = new Error(limitHit(nice((j && (j.error || j.message)) || ("Request failed (" + r.status + ")")))); err.status = r.status; throw err; }
     return j;
   }
 

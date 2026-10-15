@@ -904,6 +904,24 @@ $("#gdSheet").addEventListener("click",e=>{
   if(e.target.closest("[data-gdok]")){const f=gdFn;closeGuard();if(f)f();return}
   if(e.target.closest("[data-gdno]")||e.target.id==="gdSheet")closeGuard()});
 addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("#gdSheet").hidden)closeGuard()});
+/* a lively "slow down" pop-up when a visitor hits a limit (look and wording set in the Security tab) */
+const SLOW_DEF={Title:"Slow down a little, friends!",Text:"Cookies are best eaten slowly… and so is this website. Please wait a moment and try again.",Btn:"OK, I'll slow down"};
+const SLOW_FX=[["bounce","Bounce"],["wiggle","Wiggle"],["float","Float up and down"],["pulse","Pulse"],["spin","Slow spin"],["none","Still"]],SLOW_BFX=[["shine","Shine sweep"],["pulse","Gentle pulse"],["wiggle","Wiggle"],["none","Still"]];
+const slowVars=t=>`--sl-bg:${hexOk(t.slowBg,"#FFF4D6")};--sl-ink:${hexOk(t.slowInk,"#0B0B45")};--sl-bb:${hexOk(t.slowBtnBg,"#000096")};--sl-bi:${hexOk(t.slowBtnInk,"#FFFFFF")};--sl-font:${(MQ_FONTS[t.slowFont]||MQ_FONTS.display)[1].replace(/"/g,"'")}`;
+function slowCardHTML(t){
+  const g=k=>String(t["slow"+k]||"").trim()||SLOW_DEF[k],fx=fxOk(t.slowFx,SLOW_FX.map(x=>x[0]),"bounce"),bfx=fxOk(t.slowBtnFx,SLOW_BFX.map(x=>x[0]),"shine"),u=imgOk(t.slowImg);
+  const pic=u?`<div class="sl-pic fx-${fx}"><img class="${imgIsCut(u,t.slowImgCut)?"":"crop"}" src="${esc(u)}" alt="" draggable="false"></div>`:`<div class="sl-pic fx-${fx}"><span class="sl-emo" aria-hidden="true">${esc(String(t.slowIcon||"").trim()||"🍪")}</span></div>`;
+  return `${pic}<h3 id="slowTitle">${esc(g("Title"))}</h3><p>${esc(g("Text")).replace(/\n/g,"<br>")}</p><button class="sl-btn bfx-${bfx}" type="button" data-slowok><span>${esc(g("Btn"))}</span></button>`;
+}
+let slowAt=0;
+window.ddSlow=function(force){
+  const t=DB.settings,sh=$("#slowSheet");if(!sh||(!force&&(t.slowOn===false||(typeof SBH!=="undefined"&&SBH.admin))))return;
+  const now=Date.now();if(!force&&(!sh.hidden||now-slowAt<20000))return;slowAt=now;
+  const c=$("#slowCard");c.style.cssText=slowVars(t);c.innerHTML=slowCardHTML(t);sh.hidden=false;
+  setTimeout(()=>{const b=c.querySelector("[data-slowok]");b&&b.focus()},60);
+};
+$("#slowSheet").addEventListener("click",e=>{if(e.target.closest("[data-slowok]")||e.target.id==="slowSheet")$("#slowSheet").hidden=true});
+addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("#slowSheet").hidden)$("#slowSheet").hidden=true});
 function clearBox(){if(!S.box.length)return;S.shuf=0;S.box.forEach((_,i)=>ghostOut(i));S.box=[];S.step=1;renderStore()}
 function scrollToEl(el){
   const go=()=>{const fl=$("#flash"),head=$(".top").getBoundingClientRect().height+(fl.hidden||fl.parentNode===$(".top")?0:fl.getBoundingClientRect().height);
