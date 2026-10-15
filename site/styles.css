@@ -962,4 +962,4 @@ body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
 .fabtune label{display:grid;grid-template-columns:44px 1fr;align-items:center;gap:8px}
 .fabtune input[type=range]{width:100%;accent-color:#000096}
 .fabtune button{justify-self:end;border:1.5px solid #C9CCF0;background:#fff;color:#000096;border-radius:99px;padding:4px 12px;font-weight:800;font-size:12px;cursor:pointer}
-.fabprev .fab{touch-action:none;cursor:ns-resize}
+

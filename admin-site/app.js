@@ -1657,7 +1657,7 @@ function renderAdmin(){
   if(A.tab==="customers"&&(CU.list===null||CU.stale))loadCustomers();
   if(A.tab==="team"&&TM.list===null)loadTeam();
   tickAdmin();
-  if(A.tab==="sales")updatePreview();
+  if(A.tab==="sales")updatePreview();if(A.tab==="boxes"&&typeof fpInit==="function")fpInit();
   if(A.tab==="marquee")afterViewMarquee();
   if(A.tab==="announcer")anDrawPrev();
   if(A.tab==="hero")hrDraw();
@@ -3057,6 +3057,7 @@ function viewBoxes(){
 }
 /* Boxes & extras: the phone bar random button and the floating "show my box" circle */
 const BTN_FX_RB=[["wiggle","Wiggle now and then"],["pulse","Gentle pulse"],["none","No movement"]],BTN_FX_FAB=[["bounce","Bounce"],["pulse","Gentle pulse"],["glow","Glowing ring"],["none","No movement"]];
+function fpInit(){document.querySelectorAll("[data-fpk]").forEach(r=>{const [,lo,hi]=FP_KEYS[r.dataset.fpk];r.style.setProperty("--p",((+r.value-lo)/(hi-lo)*100)+"%")})}
 function btnPreviewHTML(){
   const t=DB.settings,d=fabDims(),tx=t.fabTextOn!==false?String(t.fabText||"").trim().slice(0,14):"",bg=hexOk(t.rbBg,"#FFD43B");
   return `<span class="barrand fx-${fxOk(t.rbFx,["wiggle","pulse","none"],"wiggle")}" style="--rb-bg:${bg}" title="Random fill">${fabIconHTML(t.rbImg,t.rbIcon,"🎲")}</span>
@@ -3095,11 +3096,12 @@ function btnPanels(){
       <div class="grid2">${col("fabInk","Tiny text and icon colour","#000096")}<label class="af">Movement${sel("fabFx",BTN_FX_FAB)}</label></div>
       ${sw("fabGest","Let customers make it smaller and fainter (pinch it, or press and hold it)")}
       ${sw("fabHide","Hide the circle while the box is already on screen")}
-      <div class="af">Size, fade and picture size: use a gesture on the circle below
-        <div class="seg" id="fabModes" style="margin-top:6px">${[["s","Circle size"],["o","Fade"],["i","Picture size"]].map(([m,l])=>`<button type="button" data-fabmode="${m}" aria-pressed="${FP.mode===m}">${l}</button>`).join("")}</div>
-        <p class="note" style="margin:6px 0 0">Choose what to change, then <b>pinch</b> the circle with two fingers, or <b>drag up and down</b> on it, or use the <b>mouse wheel</b>. This is the starting look; customers can only make it smaller or fainter.</p>
+      <div class="af">Size, fade and picture size
+        <p class="note" style="margin:0 0 4px">Swipe each slider left or right. This is the starting look; customers can only make it smaller or fainter.</p>
+        ${[["s","Circle size"],["o","Opacity (fade)"],["i","Picture size inside the circle"]].map(([m,l])=>`<div class="gslide"><div class="gs-l"><span>${l}</span><b data-fpv="${m}">${fpGet(m)}${FP_KEYS[m][4]}</b></div><input type="range" min="${FP_KEYS[m][1]}" max="${FP_KEYS[m][2]}" step="1" value="${fpGet(m)}" data-fpk="${m}" aria-label="${l}"><div class="gs-ends"><span>Low</span><span>High</span></div></div>`).join("")}
+        ${imgOk(t.fabImg)?"":`<p class="note" style="margin:0">Picture size shows once you upload a picture.</p>`}
         <div class="fabprev" id="btnPrev">${btnPreviewHTML()}</div>
-        <div class="colin" style="gap:10px;align-items:center;flex-wrap:wrap"><span class="note" id="fabRead" style="margin:0">${fpReadout()}</span><button class="ghost" type="button" data-fabreset>Reset size, fade and picture size</button></div></div>
+        <div><button class="ghost" type="button" data-fabreset>Reset size, opacity and picture size</button></div></div>
     </div>
   </section>`;
 }
@@ -4435,30 +4437,19 @@ am.addEventListener("click",async e=>{const b=e.target.closest("button");if(!b)r
       toast(BSA.test.t);renderAdmin()}
     else if(d.bsa==="copy"){const i=b.parentNode.querySelector("input");try{await navigator.clipboard.writeText(i.value);toast("Copied")}catch(err){i.select()}}
   }catch(err){b.disabled=false;if(d.bsa==="test")b.textContent="Test connection";bsAdmMsg(err.message,true);toast(err.message)}});
-/* owner: set the circle's starting size, fade and picture size by gesture on the preview (pinch, drag up and down, mouse wheel) */
-const FP={mode:"s",ptrs:new Map(),pinch:null,drag:null},FP_KEYS={s:["fabSizePx",40,96,58],o:["fabOpacity",30,100,100],i:["fabImgSize",40,100,84]};
+/* owner: the circle's starting size, fade and picture size are set with sliders (swipe left or right), like the phone's own settings */
+const FP_KEYS={s:["fabSizePx",40,96,58,"px"],o:["fabOpacity",30,100,100,"%"],i:["fabImgSize",40,100,84,"%"]};
 const fpGet=m=>{const [k,lo,hi,d]=FP_KEYS[m];return Math.round(fabNum(DB.settings[k],lo,hi,d))};
-const fpReadout=()=>`Circle size ${fpGet("s")}px · Fade ${fpGet("o")}% · Picture ${fpGet("i")}%${imgOk(DB.settings.fabImg)?"":" (upload a picture to see it)"}`;
-function fpApply(v){
-  const [k,lo,hi]=FP_KEYS[FP.mode];v=Math.round(Math.min(hi,Math.max(lo,v)));DB.settings[k]=v;
+function fpLive(){
   const f=document.querySelector("#btnPrev .fab");
   if(f){f.style.setProperty("--fab-s",fpGet("s")+"px");f.style.setProperty("--fab-o",fpGet("o")/100);const pl=f.querySelector(".fab-pl");if(pl)pl.style.setProperty("--ck",fpGet("i")+"%")}
-  const r=$("#fabRead");if(r)r.textContent=fpReadout();
+  document.querySelectorAll("[data-fpv]").forEach(x=>{x.textContent=fpGet(x.dataset.fpv)+FP_KEYS[x.dataset.fpv][4]});
+  document.querySelectorAll("[data-fpk]").forEach(r=>{const [,lo,hi]=FP_KEYS[r.dataset.fpk];r.style.setProperty("--p",((+r.value-lo)/(hi-lo)*100)+"%")});
 }
-function fpEnd(){FP.pinch=null;FP.drag=null;saveSoon()}
-am.addEventListener("pointerdown",e=>{const f=e.target.closest&&e.target.closest("#btnPrev .fab");if(!f)return;
-  FP.ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});try{f.setPointerCapture(e.pointerId)}catch(x){}
-  if(FP.ptrs.size===2){const [a,b]=[...FP.ptrs.values()];FP.pinch={d0:Math.max(10,Math.hypot(a.x-b.x,a.y-b.y)),v0:fpGet(FP.mode)};FP.drag=null}
-  else if(FP.ptrs.size===1)FP.drag={y0:e.clientY,v0:fpGet(FP.mode)}});
-am.addEventListener("pointermove",e=>{if(!FP.ptrs.has(e.pointerId))return;FP.ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
-  if(FP.pinch&&FP.ptrs.size>=2){const [a,b]=[...FP.ptrs.values()],d=Math.hypot(a.x-b.x,a.y-b.y);fpApply(FP.mode==="o"?FP.pinch.v0+(d-FP.pinch.d0)*.5:FP.pinch.v0*d/FP.pinch.d0);return}
-  if(FP.drag&&FP.ptrs.size===1)fpApply(FP.drag.v0+(FP.drag.y0-e.clientY)*.5)});
-const fpUp=e=>{if(!FP.ptrs.has(e.pointerId))return;FP.ptrs.delete(e.pointerId);if(!FP.ptrs.size)fpEnd();else if(FP.ptrs.size===1){FP.pinch=null;const q=[...FP.ptrs.values()][0];FP.drag={y0:q.y,v0:fpGet(FP.mode)}}};
-am.addEventListener("pointerup",fpUp);am.addEventListener("pointercancel",fpUp);
-am.addEventListener("wheel",e=>{const f=e.target.closest&&e.target.closest("#btnPrev .fab");if(!f)return;e.preventDefault();fpApply(fpGet(FP.mode)+(e.deltaY<0?2:-2));clearTimeout(FP.wt);FP.wt=setTimeout(saveSoon,300)},{passive:false});
-am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
-  if(b.dataset.fabmode){FP.mode=b.dataset.fabmode;document.querySelectorAll("[data-fabmode]").forEach(x=>x.setAttribute("aria-pressed",x.dataset.fabmode===FP.mode))}
-  else if(b.dataset.fabreset!==undefined){Object.assign(DB.settings,{fabSizePx:58,fabOpacity:100,fabImgSize:84});saveDB();toast("Reset");renderAdmin()}});
+am.addEventListener("input",e=>{const m=e.target.dataset&&e.target.dataset.fpk;if(!m||!FP_KEYS[m])return;
+  const [k,lo,hi]=FP_KEYS[m];DB.settings[k]=Math.round(Math.min(hi,Math.max(lo,+e.target.value||lo)));fpLive();clearTimeout(FP.t);FP.t=setTimeout(saveSoon,250)});
+const FP={};
+am.addEventListener("click",e=>{const b=e.target.closest("button");if(b&&b.dataset.fabreset!==undefined){Object.assign(DB.settings,{fabSizePx:58,fabOpacity:100,fabImgSize:84});saveDB();toast("Reset");renderAdmin()}});
 /* Boxes & extras: pictures for the two buttons */
 am.addEventListener("change",async e=>{const el=e.target,k=el.dataset&&el.dataset.btnimg;if(!k||!/^(rb|fab)Img2?$/.test(k))return;const f=el.files[0];if(!f)return;
   try{const data=await lpResize(f,k==="fabImg"?220:140,true),prev=DB.settings[k];DB.settings[k]=data;if(!saveDB()){DB.settings[k]=prev;toast("Not enough storage space. Remove another photo first.");return}renderAdmin();toast("Picture saved")}catch(err){toast(err.message)}});
