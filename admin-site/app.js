@@ -167,6 +167,9 @@ function migrate(db){
   if(db.settings.lowStockAt===undefined)db.settings.lowStockAt=10;
   if(db.settings.customOn===undefined)Object.assign(db.settings,{customOn:true,customMin:14,customStep:2,customMax:48,customPer:3.25});
   if(db.settings.fabGest===undefined)Object.assign(db.settings,{fabGest:true,fabBgType:"color",fabBg2:"#FF9F43",fabRing:"",fabImgSize:84,fabSizePx:58,fabOpacity:100,fabImg:"",rbImg:"",rbImg2:""});
+  if(db.settings.guardOn===undefined)Object.assign(db.settings,{guardOn:true,guardClear:true,guardShuf:true,guardIcon:"🛡️",
+    guardClearTitle:"Clear your box?",guardClearText:"You already picked a courier. This will empty your whole box. Your courier choice stays.",guardClearOk:"Yes, clear it",guardClearNo:"Keep my box",
+    guardShufTitle:"Shuffle your box?",guardShufText:"You already picked a courier. This swaps your flavors for a new random mix.",guardShufOk:"Yes, shuffle",guardShufNo:"Keep my box"});
   if(db.settings.rbOn===undefined)Object.assign(db.settings,{rbOn:true,rbIcon:"🎲",rbIcon2:"🔀",rbBg:"#FFD43B",rbFx:"wiggle",rbScroll:true,fabOn:true,fabIcon:"📦",fabText:"My box",fabTextOn:true,fabFx:"bounce",fabBg:"#FFD43B",fabInk:"#000096",fabHide:true});
   if(!Array.isArray(db.categories)){db.categories=DEFAULT_CATS.map(c=>({...c}));db.products.forEach(p=>{if(p.cat===undefined)p.cat=CAT_OF[p.id]||""})}
   db.products.forEach(p=>{if(p.cat===undefined)p.cat="";if(!Array.isArray(p.reviews))p.reviews=[]});
@@ -896,6 +899,23 @@ function renderFab(){
   addEventListener("resize",()=>{if(f.style.top)window.fabApply();moveTune()});
   const bp=$(".boxpanel");if(bp&&"IntersectionObserver" in window)new IntersectionObserver(es=>{boxSeen=es[0].intersectionRatio>0.35;renderFab()},{threshold:[0,.35,.7]}).observe(bp);
 })();
+/* a small "are you sure?" before Clear box or Shuffle once a courier is chosen (wording set in Boxes & extras) */
+function guardCardHTML(kind,t){
+  const k=kind==="clear"?"Clear":"Shuf",g=(f,d)=>String(t["guard"+k+f]||"").trim()||d;
+  return `<div class="cw-ring"><span class="cw-emo" aria-hidden="true">${esc(String(t.guardIcon||"").trim()||"🛡️")}</span></div><h3 id="gdTitle">${esc(g("Title","Are you sure?"))}</h3>${g("Text","")?`<p>${esc(g("Text",""))}</p>`:""}<div class="cw-act"><button class="btn btn-blue" type="button" data-gdok>${esc(g("Ok","Yes"))}</button><button class="btn btn-ghost-blue" type="button" data-gdno>${esc(g("No","Keep my box"))}</button></div>`;
+}
+let gdFn=null;
+function guardBox(kind,fn){
+  const t=DB.settings,on=t.guardOn!==false&&(kind==="clear"?t.guardClear!==false:t.guardShuf!==false);
+  if(!on||!bsOn()||S.mode!=="delivery"||!S.ship||!S.box.length||(kind!=="clear"&&!full())){fn();return}
+  gdFn=fn;$("#gdCard").innerHTML=guardCardHTML(kind,t);$("#gdSheet").hidden=false;
+  setTimeout(()=>{const b=$("#gdCard [data-gdno]");b&&b.focus()},60);
+}
+function closeGuard(){$("#gdSheet").hidden=true;gdFn=null}
+$("#gdSheet").addEventListener("click",e=>{
+  if(e.target.closest("[data-gdok]")){const f=gdFn;closeGuard();if(f)f();return}
+  if(e.target.closest("[data-gdno]")||e.target.id==="gdSheet")closeGuard()});
+addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("#gdSheet").hidden)closeGuard()});
 function clearBox(){if(!S.box.length)return;S.shuf=0;S.box.forEach((_,i)=>ghostOut(i));S.box=[];S.step=1;renderStore()}
 function scrollToEl(el){
   const go=()=>{const fl=$("#flash"),head=$(".top").getBoundingClientRect().height+(fl.hidden||fl.parentNode===$(".top")?0:fl.getBoundingClientRect().height);
@@ -1141,9 +1161,9 @@ $("#sizes").addEventListener("click",e=>{const b=e.target.closest("[data-size]")
 $("#menuGrid").addEventListener("click",e=>{const b=e.target.closest("[data-act]");if(!b)return;const card=b.closest(".card"),id=card.dataset.id;b.dataset.act==="inc"?add(id,card):removeOne(id,card)});
 $("#slots").addEventListener("click",e=>{const b=e.target.closest("[data-slot]");if(b)removeAt(+b.dataset.slot)});
 $("#fillRest").addEventListener("click",fillRest);
-$("#randBtn").addEventListener("click",randomFill);
-$("#barRand").addEventListener("click",()=>{randomFill();if(DB.settings.rbScroll!==false)setTimeout(showMyBox,260)});
-$("#clearBtn").addEventListener("click",clearBox);
+$("#randBtn").addEventListener("click",()=>guardBox("shuf",randomFill));
+$("#barRand").addEventListener("click",()=>guardBox("shuf",()=>{randomFill();if(DB.settings.rbScroll!==false)setTimeout(showMyBox,260)}));
+$("#clearBtn").addEventListener("click",()=>guardBox("clear",clearBox));
 $("#tab1").addEventListener("click",()=>goStep(1));
 $("#tab2").addEventListener("click",()=>goStep(2));
 $("#backBtn").addEventListener("click",()=>goStep(1));
@@ -3053,8 +3073,27 @@ function viewBoxes(){
       </tbody></table></div>`:`<div class="empty">No extras yet.</div>`}
     </section>
     ${btnPanels()}
+    ${guardPanel()}
   </div>`;
 }
+/* Boxes & extras: the "are you sure?" pop-up before Clear box and Shuffle */
+function guardPanel(){
+  const t=DB.settings,sw=(k,label)=>`<label class="chk"><span class="sw"><input type="checkbox" data-k="settings::${k}" ${t[k]!==false?"checked":""}><span></span></span><span>${label}</span></label>`,
+    tx=(k,l,max,ph)=>`<label class="af">${l}<input class="in" data-k="settings::${k}" maxlength="${max}" value="${esc(t[k]||"")}" placeholder="${esc(ph||"")}"></label>`,
+    area=(k,l)=>`<label class="af">${l}<textarea class="in" rows="2" maxlength="200" data-k="settings::${k}">${esc(t[k]||"")}</textarea></label>`,
+    grp=(k,name)=>`<h3 style="margin:6px 0 0;font-size:15px">${name}</h3>${sw("guard"+k,"Ask before it happens")}
+      ${tx("guard"+k+"Title","Title",60)}${area("guard"+k+"Text","Message")}<div class="grid2">${tx("guard"+k+"Ok","Confirm button",24)}${tx("guard"+k+"No","Cancel button",24)}</div>`;
+  return `<section class="panel">
+    <h2>"Are you sure?" pop-up for Clear box and Shuffle</h2>
+    <p class="sub">After a customer has chosen a courier, a small pop-up asks before the box is cleared or shuffled, so it can't happen by accident. Press <b>Publish</b> after changing the wording.</p>
+    <div class="stack" style="gap:12px">
+      ${sw("guardOn","Show the pop-up")}
+      <label class="af">Icon<input class="in" data-k="settings::guardIcon" maxlength="4" value="${esc(t.guardIcon||"")}" placeholder="🛡️" style="max-width:120px"></label>
+      ${grp("Clear","Clear box")}${grp("Shuf","Shuffle")}
+      <div class="af">Preview<div class="grid2" id="gdPrev">${guardPrevHTML()}</div></div>
+    </div></section>`;
+}
+const guardPrevHTML=()=>["clear","shuf"].map(k=>`<div class="sheet-card cw-card cw-prev" style="position:static;max-width:none;box-shadow:0 2px 12px rgba(0,0,60,.12);animation:none">${guardCardHTML(k,DB.settings)}</div>`).join("");
 /* Boxes & extras: the phone bar random button and the floating "show my box" circle */
 const BTN_FX_RB=[["wiggle","Wiggle now and then"],["pulse","Gentle pulse"],["none","No movement"]],BTN_FX_FAB=[["bounce","Bounce"],["pulse","Gentle pulse"],["glow","Glowing ring"],["none","No movement"]];
 function fpInit(){document.querySelectorAll("[data-fpk]").forEach(r=>{const [,lo,hi]=FP_KEYS[r.dataset.fpk];r.style.setProperty("--p",((+r.value-lo)/(hi-lo)*100)+"%")})}
@@ -4466,7 +4505,8 @@ am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
   if(b.dataset.btnimgrm&&/^(rb|fab)Img2?$/.test(b.dataset.btnimgrm)){DB.settings[b.dataset.btnimgrm]="";delete DB.settings[b.dataset.btnimgrm+"Cut"];saveDB();renderAdmin();toast("Using the icon")}
   else if(b.dataset.fabringoff!==undefined){DB.settings.fabRing="";saveDB();renderAdmin()}});
 /* Boxes & extras: keep the little preview of the two buttons in step with the settings */
-["input","change"].forEach(ev=>am.addEventListener(ev,e=>{const k=e.target.dataset&&e.target.dataset.k;if(k&&/^settings::(rb|fab)/.test(k)){const pv=$("#btnPrev");if(pv)pv.innerHTML=btnPreviewHTML()}}));
+["input","change"].forEach(ev=>am.addEventListener(ev,e=>{const k=e.target.dataset&&e.target.dataset.k;if(k&&/^settings::(rb|fab)/.test(k)){const pv=$("#btnPrev");if(pv)pv.innerHTML=btnPreviewHTML()}
+  if(k&&/^settings::guard/.test(k)){const g=$("#gdPrev");if(g)g.innerHTML=guardPrevHTML()}}));
 /* --- gift editor (Flash sales tab, Gifts promo) --- */
 am.addEventListener("input",e=>{const el=e.target,D=A.draft;
   if(el.dataset.gname!==undefined){D.gifts[+el.dataset.gname].name=el.value;document.querySelectorAll("[data-rchips]").forEach(c=>{c.innerHTML=giftChipsHTML(D,D.rules[+c.dataset.rchips],+c.dataset.rchips)});updatePreview()}

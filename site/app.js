@@ -164,6 +164,9 @@ function migrate(db){
   if(db.settings.lowStockAt===undefined)db.settings.lowStockAt=10;
   if(db.settings.customOn===undefined)Object.assign(db.settings,{customOn:true,customMin:14,customStep:2,customMax:48,customPer:3.25});
   if(db.settings.fabGest===undefined)Object.assign(db.settings,{fabGest:true,fabBgType:"color",fabBg2:"#FF9F43",fabRing:"",fabImgSize:84,fabSizePx:58,fabOpacity:100,fabImg:"",rbImg:"",rbImg2:""});
+  if(db.settings.guardOn===undefined)Object.assign(db.settings,{guardOn:true,guardClear:true,guardShuf:true,guardIcon:"🛡️",
+    guardClearTitle:"Clear your box?",guardClearText:"You already picked a courier. This will empty your whole box. Your courier choice stays.",guardClearOk:"Yes, clear it",guardClearNo:"Keep my box",
+    guardShufTitle:"Shuffle your box?",guardShufText:"You already picked a courier. This swaps your flavors for a new random mix.",guardShufOk:"Yes, shuffle",guardShufNo:"Keep my box"});
   if(db.settings.rbOn===undefined)Object.assign(db.settings,{rbOn:true,rbIcon:"🎲",rbIcon2:"🔀",rbBg:"#FFD43B",rbFx:"wiggle",rbScroll:true,fabOn:true,fabIcon:"📦",fabText:"My box",fabTextOn:true,fabFx:"bounce",fabBg:"#FFD43B",fabInk:"#000096",fabHide:true});
   if(!Array.isArray(db.categories)){db.categories=DEFAULT_CATS.map(c=>({...c}));db.products.forEach(p=>{if(p.cat===undefined)p.cat=CAT_OF[p.id]||""})}
   db.products.forEach(p=>{if(p.cat===undefined)p.cat="";if(!Array.isArray(p.reviews))p.reviews=[]});
@@ -883,6 +886,23 @@ function renderFab(){
   addEventListener("resize",()=>{if(f.style.top)window.fabApply();moveTune()});
   const bp=$(".boxpanel");if(bp&&"IntersectionObserver" in window)new IntersectionObserver(es=>{boxSeen=es[0].intersectionRatio>0.35;renderFab()},{threshold:[0,.35,.7]}).observe(bp);
 })();
+/* a small "are you sure?" before Clear box or Shuffle once a courier is chosen (wording set in Boxes & extras) */
+function guardCardHTML(kind,t){
+  const k=kind==="clear"?"Clear":"Shuf",g=(f,d)=>String(t["guard"+k+f]||"").trim()||d;
+  return `<div class="cw-ring"><span class="cw-emo" aria-hidden="true">${esc(String(t.guardIcon||"").trim()||"🛡️")}</span></div><h3 id="gdTitle">${esc(g("Title","Are you sure?"))}</h3>${g("Text","")?`<p>${esc(g("Text",""))}</p>`:""}<div class="cw-act"><button class="btn btn-blue" type="button" data-gdok>${esc(g("Ok","Yes"))}</button><button class="btn btn-ghost-blue" type="button" data-gdno>${esc(g("No","Keep my box"))}</button></div>`;
+}
+let gdFn=null;
+function guardBox(kind,fn){
+  const t=DB.settings,on=t.guardOn!==false&&(kind==="clear"?t.guardClear!==false:t.guardShuf!==false);
+  if(!on||!bsOn()||S.mode!=="delivery"||!S.ship||!S.box.length||(kind!=="clear"&&!full())){fn();return}
+  gdFn=fn;$("#gdCard").innerHTML=guardCardHTML(kind,t);$("#gdSheet").hidden=false;
+  setTimeout(()=>{const b=$("#gdCard [data-gdno]");b&&b.focus()},60);
+}
+function closeGuard(){$("#gdSheet").hidden=true;gdFn=null}
+$("#gdSheet").addEventListener("click",e=>{
+  if(e.target.closest("[data-gdok]")){const f=gdFn;closeGuard();if(f)f();return}
+  if(e.target.closest("[data-gdno]")||e.target.id==="gdSheet")closeGuard()});
+addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("#gdSheet").hidden)closeGuard()});
 function clearBox(){if(!S.box.length)return;S.shuf=0;S.box.forEach((_,i)=>ghostOut(i));S.box=[];S.step=1;renderStore()}
 function scrollToEl(el){
   const go=()=>{const fl=$("#flash"),head=$(".top").getBoundingClientRect().height+(fl.hidden||fl.parentNode===$(".top")?0:fl.getBoundingClientRect().height);
@@ -1126,9 +1146,9 @@ $("#sizes").addEventListener("click",e=>{const b=e.target.closest("[data-size]")
 $("#menuGrid").addEventListener("click",e=>{const b=e.target.closest("[data-act]");if(!b)return;const card=b.closest(".card"),id=card.dataset.id;b.dataset.act==="inc"?add(id,card):removeOne(id,card)});
 $("#slots").addEventListener("click",e=>{const b=e.target.closest("[data-slot]");if(b)removeAt(+b.dataset.slot)});
 $("#fillRest").addEventListener("click",fillRest);
-$("#randBtn").addEventListener("click",randomFill);
-$("#barRand").addEventListener("click",()=>{randomFill();if(DB.settings.rbScroll!==false)setTimeout(showMyBox,260)});
-$("#clearBtn").addEventListener("click",clearBox);
+$("#randBtn").addEventListener("click",()=>guardBox("shuf",randomFill));
+$("#barRand").addEventListener("click",()=>guardBox("shuf",()=>{randomFill();if(DB.settings.rbScroll!==false)setTimeout(showMyBox,260)}));
+$("#clearBtn").addEventListener("click",()=>guardBox("clear",clearBox));
 $("#tab1").addEventListener("click",()=>goStep(1));
 $("#tab2").addEventListener("click",()=>goStep(2));
 $("#backBtn").addEventListener("click",()=>goStep(1));
