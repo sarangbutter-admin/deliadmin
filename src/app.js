@@ -902,7 +902,7 @@ function renderFab(){
 /* a small "are you sure?" before Clear box or Shuffle once a courier is chosen (wording set in Boxes & extras) */
 function guardCardHTML(kind,t){
   const k=kind==="clear"?"Clear":"Shuf",g=(f,d)=>String(t["guard"+k+f]||"").trim()||d;
-  return `<div class="cw-ring"><span class="cw-emo" aria-hidden="true">${esc(String(t.guardIcon||"").trim()||"🛡️")}</span></div><h3 id="gdTitle">${esc(g("Title","Are you sure?"))}</h3>${g("Text","")?`<p>${esc(g("Text",""))}</p>`:""}<div class="cw-act"><button class="btn btn-blue" type="button" data-gdok>${esc(g("Ok","Yes"))}</button><button class="btn btn-ghost-blue" type="button" data-gdno>${esc(g("No","Keep my box"))}</button></div>`;
+  return `<div class="cw-ring"><span class="cw-emo" aria-hidden="true">${esc(String(t.guardIcon||"").trim()||"🛡️")}</span></div><h3 id="gdTitle">${esc(g("Title","Are you sure?"))}</h3>${g("Text","")?`<p>${esc(g("Text",""))}</p>`:""}<div class="cw-act"><button class="btn btn-blue" type="button" data-gdno>${esc(g("No","Keep my box"))}</button><button class="btn btn-ghost-blue" type="button" data-gdok>${esc(g("Ok","Yes"))}</button></div>`;
 }
 let gdFn=null;
 function guardBox(kind,fn){
@@ -3082,7 +3082,7 @@ function guardPanel(){
     tx=(k,l,max,ph)=>`<label class="af">${l}<input class="in" data-k="settings::${k}" maxlength="${max}" value="${esc(t[k]||"")}" placeholder="${esc(ph||"")}"></label>`,
     area=(k,l)=>`<label class="af">${l}<textarea class="in" rows="2" maxlength="200" data-k="settings::${k}">${esc(t[k]||"")}</textarea></label>`,
     grp=(k,name)=>`<h3 style="margin:6px 0 0;font-size:15px">${name}</h3>${sw("guard"+k,"Ask before it happens")}
-      ${tx("guard"+k+"Title","Title",60)}${area("guard"+k+"Text","Message")}<div class="grid2">${tx("guard"+k+"Ok","Confirm button",24)}${tx("guard"+k+"No","Cancel button",24)}</div>`;
+      ${tx("guard"+k+"Title","Title",60)}${area("guard"+k+"Text","Message")}<div class="grid2">${tx("guard"+k+"No","Cancel button (shown first, on top)",24)}${tx("guard"+k+"Ok","Confirm button (shown below)",24)}</div>`;
   return `<section class="panel">
     <h2>"Are you sure?" pop-up for Clear box and Shuffle</h2>
     <p class="sub">After a customer has chosen a courier, a small pop-up asks before the box is cleared or shuffled, so it can't happen by accident. Press <b>Publish</b> after changing the wording.</p>

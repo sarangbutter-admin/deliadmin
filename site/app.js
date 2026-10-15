@@ -889,7 +889,7 @@ function renderFab(){
 /* a small "are you sure?" before Clear box or Shuffle once a courier is chosen (wording set in Boxes & extras) */
 function guardCardHTML(kind,t){
   const k=kind==="clear"?"Clear":"Shuf",g=(f,d)=>String(t["guard"+k+f]||"").trim()||d;
-  return `<div class="cw-ring"><span class="cw-emo" aria-hidden="true">${esc(String(t.guardIcon||"").trim()||"🛡️")}</span></div><h3 id="gdTitle">${esc(g("Title","Are you sure?"))}</h3>${g("Text","")?`<p>${esc(g("Text",""))}</p>`:""}<div class="cw-act"><button class="btn btn-blue" type="button" data-gdok>${esc(g("Ok","Yes"))}</button><button class="btn btn-ghost-blue" type="button" data-gdno>${esc(g("No","Keep my box"))}</button></div>`;
+  return `<div class="cw-ring"><span class="cw-emo" aria-hidden="true">${esc(String(t.guardIcon||"").trim()||"🛡️")}</span></div><h3 id="gdTitle">${esc(g("Title","Are you sure?"))}</h3>${g("Text","")?`<p>${esc(g("Text",""))}</p>`:""}<div class="cw-act"><button class="btn btn-blue" type="button" data-gdno>${esc(g("No","Keep my box"))}</button><button class="btn btn-ghost-blue" type="button" data-gdok>${esc(g("Ok","Yes"))}</button></div>`;
 }
 let gdFn=null;
 function guardBox(kind,fn){
