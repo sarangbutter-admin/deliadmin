@@ -806,13 +806,13 @@ function renderBarExtras(){
 }
 let boxSeen=false;
 const fabNum=(v,lo,hi,d)=>{v=parseFloat(v);return Number.isFinite(v)?Math.min(hi,Math.max(lo,v)):d};
-const imgIsCut=u=>!/^data:image\/jpe?g/i.test(u||"");
+const imgIsCut=(u,flag)=>flag===undefined?!/^data:image\/jpe?g/i.test(u||""):!!flag;
 /* the round background behind the circle's icon: same choices as the flavor plates (solid, gradient, none, ring, picture size) */
 function fabPlateCss(t){
   const type=["color","gradient","none"].includes(t.fabBgType)?t.fabBgType:"color",ring=/^#[0-9a-f]{6}$/i.test(t.fabRing||"")?t.fabRing:"";
   return plateBg({},{type,c1:hexOk(t.fabBg,"#FFD43B"),c2:hexOk(t.fabBg2,"#FF9F43"),dir:"diag",ring,size:fabNum(t.fabImgSize,40,100,84)}).css;
 }
-const fabIconHTML=(img,emoji,dflt)=>imgOk(img)?`<img class="fab-img${imgIsCut(img)?" cut":""}" src="${esc(imgOk(img))}" alt="" draggable="false">`:esc(String(emoji||"").trim()||dflt);
+const fabIconHTML=(img,emoji,dflt,cut)=>imgOk(img)?`<img class="fab-img${imgIsCut(img,cut)?" cut":""}" src="${esc(imgOk(img))}" alt="" draggable="false">`:esc(String(emoji||"").trim()||dflt);
 function fabPillCss(t){const ink=hexOk(t.fabInk,"#000096");return `background:${ink};color:${lumOf(ink)<.5?"#fff":"#000"}`}
 const FAB_KEY="delidome-fab-v1";
 const fabPrefs=()=>{try{return JSON.parse(localStorage.getItem(FAB_KEY)||"null")||{}}catch(e){return {}}};
@@ -825,7 +825,7 @@ function fabDims(){
 function renderBarExtras(){
   const t=DB.settings,rb=$("#barRand");if(!rb)return;
   const on=t.rbOn!==false;rb.hidden=!on;if(!on)return;
-  const shuf=full(),im=shuf?t.rbImg2:t.rbImg,html=fabIconHTML(im,shuf?t.rbIcon2:t.rbIcon,shuf?"🔀":"🎲");
+  const shuf=full(),im=shuf?t.rbImg2:t.rbImg,html=fabIconHTML(im,shuf?t.rbIcon2:t.rbIcon,shuf?"🔀":"🎲",shuf?t.rbImg2Cut:t.rbImgCut);
   if(rb.dataset.ic!==html){rb.dataset.ic=html;rb.innerHTML=html}
   rb.className="barrand fx-"+fxOk(t.rbFx,["wiggle","pulse","none"],"wiggle");
   rb.style.setProperty("--rb-bg",hexOk(t.rbBg,"#FFD43B"));
@@ -835,7 +835,7 @@ function renderBarExtras(){
 function renderFab(){
   const t=DB.settings,f=$("#fab");if(!f)return;
   const on=t.fabOn!==false;f.hidden=!on;if(!on)return;
-  const tx=t.fabTextOn!==false?String(t.fabText||"").trim().slice(0,14):"",ic=fabIconHTML(t.fabImg,t.fabIcon,"📦"),ics=$("#fabIc");
+  const tx=t.fabTextOn!==false?String(t.fabText||"").trim().slice(0,14):"",ic=fabIconHTML(t.fabImg,t.fabIcon,"📦",t.fabImgCut),ics=$("#fabIc");
   if(ics.dataset.h!==ic){ics.dataset.h=ic;ics.innerHTML=ic}
   const pl=$("#fabPl"),css=fabPlateCss(t);if(pl.dataset.c!==css){pl.dataset.c=css;pl.style.cssText=css}
   const tt=$("#fabTx");if(tt.textContent!==tx)tt.textContent=tx;tt.hidden=!tx;tt.style.cssText=fabPillCss(t);

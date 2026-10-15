@@ -819,13 +819,13 @@ function renderBarExtras(){
 }
 let boxSeen=false;
 const fabNum=(v,lo,hi,d)=>{v=parseFloat(v);return Number.isFinite(v)?Math.min(hi,Math.max(lo,v)):d};
-const imgIsCut=u=>!/^data:image\/jpe?g/i.test(u||"");
+const imgIsCut=(u,flag)=>flag===undefined?!/^data:image\/jpe?g/i.test(u||""):!!flag;
 /* the round background behind the circle's icon: same choices as the flavor plates (solid, gradient, none, ring, picture size) */
 function fabPlateCss(t){
   const type=["color","gradient","none"].includes(t.fabBgType)?t.fabBgType:"color",ring=/^#[0-9a-f]{6}$/i.test(t.fabRing||"")?t.fabRing:"";
   return plateBg({},{type,c1:hexOk(t.fabBg,"#FFD43B"),c2:hexOk(t.fabBg2,"#FF9F43"),dir:"diag",ring,size:fabNum(t.fabImgSize,40,100,84)}).css;
 }
-const fabIconHTML=(img,emoji,dflt)=>imgOk(img)?`<img class="fab-img${imgIsCut(img)?" cut":""}" src="${esc(imgOk(img))}" alt="" draggable="false">`:esc(String(emoji||"").trim()||dflt);
+const fabIconHTML=(img,emoji,dflt,cut)=>imgOk(img)?`<img class="fab-img${imgIsCut(img,cut)?" cut":""}" src="${esc(imgOk(img))}" alt="" draggable="false">`:esc(String(emoji||"").trim()||dflt);
 function fabPillCss(t){const ink=hexOk(t.fabInk,"#000096");return `background:${ink};color:${lumOf(ink)<.5?"#fff":"#000"}`}
 const FAB_KEY="delidome-fab-v1";
 const fabPrefs=()=>{try{return JSON.parse(localStorage.getItem(FAB_KEY)||"null")||{}}catch(e){return {}}};
@@ -838,7 +838,7 @@ function fabDims(){
 function renderBarExtras(){
   const t=DB.settings,rb=$("#barRand");if(!rb)return;
   const on=t.rbOn!==false;rb.hidden=!on;if(!on)return;
-  const shuf=full(),im=shuf?t.rbImg2:t.rbImg,html=fabIconHTML(im,shuf?t.rbIcon2:t.rbIcon,shuf?"🔀":"🎲");
+  const shuf=full(),im=shuf?t.rbImg2:t.rbImg,html=fabIconHTML(im,shuf?t.rbIcon2:t.rbIcon,shuf?"🔀":"🎲",shuf?t.rbImg2Cut:t.rbImgCut);
   if(rb.dataset.ic!==html){rb.dataset.ic=html;rb.innerHTML=html}
   rb.className="barrand fx-"+fxOk(t.rbFx,["wiggle","pulse","none"],"wiggle");
   rb.style.setProperty("--rb-bg",hexOk(t.rbBg,"#FFD43B"));
@@ -848,7 +848,7 @@ function renderBarExtras(){
 function renderFab(){
   const t=DB.settings,f=$("#fab");if(!f)return;
   const on=t.fabOn!==false;f.hidden=!on;if(!on)return;
-  const tx=t.fabTextOn!==false?String(t.fabText||"").trim().slice(0,14):"",ic=fabIconHTML(t.fabImg,t.fabIcon,"📦"),ics=$("#fabIc");
+  const tx=t.fabTextOn!==false?String(t.fabText||"").trim().slice(0,14):"",ic=fabIconHTML(t.fabImg,t.fabIcon,"📦",t.fabImgCut),ics=$("#fabIc");
   if(ics.dataset.h!==ic){ics.dataset.h=ic;ics.innerHTML=ic}
   const pl=$("#fabPl"),css=fabPlateCss(t);if(pl.dataset.c!==css){pl.dataset.c=css;pl.style.cssText=css}
   const tt=$("#fabTx");if(tt.textContent!==tx)tt.textContent=tx;tt.hidden=!tx;tt.style.cssText=fabPillCss(t);
@@ -3060,9 +3060,9 @@ const BTN_FX_RB=[["wiggle","Wiggle now and then"],["pulse","Gentle pulse"],["non
 function fpInit(){document.querySelectorAll("[data-fpk]").forEach(r=>{const [,lo,hi]=FP_KEYS[r.dataset.fpk];r.style.setProperty("--p",((+r.value-lo)/(hi-lo)*100)+"%")})}
 function btnPreviewHTML(){
   const t=DB.settings,d=fabDims(),tx=t.fabTextOn!==false?String(t.fabText||"").trim().slice(0,14):"",bg=hexOk(t.rbBg,"#FFD43B");
-  return `<span class="barrand fx-${fxOk(t.rbFx,["wiggle","pulse","none"],"wiggle")}" style="--rb-bg:${bg}" title="Random fill">${fabIconHTML(t.rbImg,t.rbIcon,"🎲")}</span>
-    <span class="barrand fx-none" style="--rb-bg:${bg}" title="After the box is full (shuffle)">${fabIconHTML(t.rbImg2,t.rbIcon2,"🔀")}</span>
-    <span class="fab fx-${fxOk(t.fabFx,["bounce","pulse","glow","none"],"bounce")}" style="--fab-ink:${hexOk(t.fabInk,"#000096")};--fab-s:${d.ds}px;--fab-o:${d.dopa/100}"><span class="fab-pl" style="${esc(fabPlateCss(t))}"><span>${fabIconHTML(t.fabImg,t.fabIcon,"📦")}</span></span>${tx?`<small class="fab-tx" style="${esc(fabPillCss(t))}">${esc(tx)}</small>`:""}</span>`;
+  return `<span class="barrand fx-${fxOk(t.rbFx,["wiggle","pulse","none"],"wiggle")}" style="--rb-bg:${bg}" title="Random fill">${fabIconHTML(t.rbImg,t.rbIcon,"🎲",t.rbImgCut)}</span>
+    <span class="barrand fx-none" style="--rb-bg:${bg}" title="After the box is full (shuffle)">${fabIconHTML(t.rbImg2,t.rbIcon2,"🔀",t.rbImg2Cut)}</span>
+    <span class="fab fx-${fxOk(t.fabFx,["bounce","pulse","glow","none"],"bounce")}" style="--fab-ink:${hexOk(t.fabInk,"#000096")};--fab-s:${d.ds}px;--fab-o:${d.dopa/100}"><span class="fab-pl" style="${esc(fabPlateCss(t))}"><span>${fabIconHTML(t.fabImg,t.fabIcon,"📦",t.fabImgCut)}</span></span>${tx?`<small class="fab-tx" style="${esc(fabPillCss(t))}">${esc(tx)}</small>`:""}</span>`;
 }
 function btnPanels(){
   const t=DB.settings,sw=(k,label)=>`<label class="chk"><span class="sw"><input type="checkbox" data-k="settings::${k}" ${t[k]!==false?"checked":""}><span></span></span><span>${label}</span></label>`,
@@ -3938,6 +3938,14 @@ async function lpResize(file,MAX,webp){
     return c.toDataURL("image/jpeg",.82);
   }finally{URL.revokeObjectURL(url)}
 }
+/* does the picture have see-through parts (a cut-out)? a normal photo is cropped round instead */
+async function imgHasAlpha(file){
+  const url=URL.createObjectURL(file);
+  try{const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>rej(new Error("x"));i.src=url});
+    const c=document.createElement("canvas");c.width=c.height=64;const x=c.getContext("2d",{willReadFrequently:true});x.drawImage(img,0,0,64,64);
+    const d=x.getImageData(0,0,64,64).data;let n=0;for(let i=3;i<d.length;i+=4)if(d[i]<200)n++;return n>64*64*.02}
+  catch(e){return false}finally{URL.revokeObjectURL(url)}
+}
 const readData=f=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(new Error("Couldn't read that file."));r.readAsDataURL(f)});
 function lpTry(path,val,okMsg){const prev=lpGet(path);lpSet(path,val);if(!saveDB()){lpSet(path,prev);toast("Not enough storage space. Remove another photo, video or font first.");return false}if(okMsg)toast(okMsg);return true}
 am.addEventListener("input",e=>{
@@ -4452,9 +4460,10 @@ const FP={};
 am.addEventListener("click",e=>{const b=e.target.closest("button");if(b&&b.dataset.fabreset!==undefined){Object.assign(DB.settings,{fabSizePx:58,fabOpacity:100,fabImgSize:84});saveDB();toast("Reset");renderAdmin()}});
 /* Boxes & extras: pictures for the two buttons */
 am.addEventListener("change",async e=>{const el=e.target,k=el.dataset&&el.dataset.btnimg;if(!k||!/^(rb|fab)Img2?$/.test(k))return;const f=el.files[0];if(!f)return;
-  try{const data=await lpResize(f,k==="fabImg"?220:140,true),prev=DB.settings[k];DB.settings[k]=data;if(!saveDB()){DB.settings[k]=prev;toast("Not enough storage space. Remove another photo first.");return}renderAdmin();toast("Picture saved")}catch(err){toast(err.message)}});
+  try{const data=await lpResize(f,k==="fabImg"?220:140,true),cut=await imgHasAlpha(f),prev=DB.settings[k],prevC=DB.settings[k+"Cut"];DB.settings[k]=data;DB.settings[k+"Cut"]=cut;
+    if(!saveDB()){DB.settings[k]=prev;DB.settings[k+"Cut"]=prevC;toast("Not enough storage space. Remove another photo first.");return}renderAdmin();toast(cut?"Picture saved (see-through background kept)":"Picture saved (cropped round)")}catch(err){toast(err.message)}});
 am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
-  if(b.dataset.btnimgrm&&/^(rb|fab)Img2?$/.test(b.dataset.btnimgrm)){DB.settings[b.dataset.btnimgrm]="";saveDB();renderAdmin();toast("Using the icon")}
+  if(b.dataset.btnimgrm&&/^(rb|fab)Img2?$/.test(b.dataset.btnimgrm)){DB.settings[b.dataset.btnimgrm]="";delete DB.settings[b.dataset.btnimgrm+"Cut"];saveDB();renderAdmin();toast("Using the icon")}
   else if(b.dataset.fabringoff!==undefined){DB.settings.fabRing="";saveDB();renderAdmin()}});
 /* Boxes & extras: keep the little preview of the two buttons in step with the settings */
 ["input","change"].forEach(ev=>am.addEventListener(ev,e=>{const k=e.target.dataset&&e.target.dataset.k;if(k&&/^settings::(rb|fab)/.test(k)){const pv=$("#btnPrev");if(pv)pv.innerHTML=btnPreviewHTML()}}));
