@@ -1755,7 +1755,26 @@ function defaultPage(){return {name:"delidome",logo:"",brand:"#000096",bg:"#ffff
        {q:"How long do the cookies stay fresh?",a:"They're best on the day you get them. Keep them in an airtight container for up to three days, and give them 5 minutes in a warm oven to bring them back."},
        {q:"Can I order for an event?",a:"Yes. For more than five boxes, message us at least three days ahead so we can set aside oven time."},
        {q:"What about allergies?",a:"Every cookie contains wheat, dairy and egg, and our kitchen handles nuts. We can't promise any box is allergen free."}],
-  footer:{text:"Fresh cookie boxes, baked to order.",bg:"",color:"#ffffff"}}}
+  footer:{text:"Fresh cookie boxes, baked to order.",bg:"",color:"#ffffff",socials:[{id:"instagram",kind:"instagram",name:"Instagram",url:"",img:""},{id:"threads",kind:"threads",name:"Threads",url:"",img:""},{id:"whatsapp",kind:"whatsapp",name:"WhatsApp",url:"",img:""}]}}}
+const SOC_KINDS=[["instagram","Instagram"],["threads","Threads"],["whatsapp","WhatsApp"],["tiktok","TikTok"],["facebook","Facebook"],["youtube","YouTube"],["x","X"],["custom","Other link"]];
+const SOC_SVG={
+  instagram:'<rect x="3.5" y="3.5" width="17" height="17" rx="5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17.2" cy="6.8" r="1.2" fill="currentColor"/>',
+  threads:'<path d="M12 3.5c-5 0-8.5 3.4-8.5 8.5s3.5 8.5 8.5 8.5c3.9 0 6.5-1.9 6.5-4.8 0-2.3-1.8-3.7-4.4-3.7-2.1 0-3.3 1-3.3 2.4 0 1.2.9 2 2.2 2 1.9 0 2.8-1.4 2.8-3.7V11c0-3.3-1.9-4.8-4.5-4.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+  whatsapp:'<path d="M4 20l1.2-4A8.5 8.5 0 1 1 8 18.8L4 20Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9 8.5c0 3.5 3 6.5 6.5 6.5l1-1.6-2.2-1-.9.9c-1-.4-2-1.4-2.4-2.4l.9-.9-1-2.2L9 8.5Z" fill="currentColor"/>',
+  tiktok:'<path d="M14 4v10.5a3.5 3.5 0 1 1-3.5-3.5M14 4c.4 2.4 2 4 4.5 4.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+  facebook:'<path d="M14 20v-7h2.5l.5-3H14V8.5c0-.9.4-1.5 1.6-1.5H17V4.2C16.6 4.1 15.8 4 15 4c-2.3 0-3.7 1.4-3.7 3.8V10H9v3h2.3v7H14Z" fill="currentColor"/>',
+  youtube:'<rect x="3" y="6" width="18" height="12" rx="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M10.5 9.5v5l4.5-2.5-4.5-2.5Z" fill="currentColor"/>',
+  x:'<path d="M5 5l14 14M19 5L5 19" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>',
+  custom:'<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'};
+const SOC_NAME=Object.fromEntries(SOC_KINDS);
+function socialUrl(u,kind){u=String(u||"").trim();if(!u)return "";
+  if(/^\+?[\d\s().-]{7,}$/.test(u)){let d=u.replace(/\D/g,"");if(d.startsWith("0"))d=String(DB.settings.waCountry||"62")+d.slice(1);return "https://wa.me/"+d}
+  return /^https:\/\/[^\s"'<>\\]+$/i.test(u)?u:""}
+function socialsHTML(list){
+  return (list||[]).map(x=>({x,u:socialUrl(x.url,x.kind)})).filter(o=>o.u).map(({x,u})=>{
+    const nm=String(x.name||"").trim()||SOC_NAME[x.kind]||"Link",img=imgOk(x.img);
+    return `<a class="soc" href="${esc(u)}" target="_blank" rel="noopener noreferrer" aria-label="${esc(nm)}"><span class="soc-i${img?" img":""}">${img?`<img class="${imgIsCut(img,x.imgCut)?"":"crop"}" src="${esc(img)}" alt="" draggable="false">`:`<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">${SOC_SVG[x.kind]||SOC_SVG.custom}</svg>`}</span><span class="soc-n">${esc(nm)}</span></a>`}).join("");
+}
 function deepFill(d,o){if(o===undefined||o===null)return d;if(Array.isArray(d)||typeof d!=="object")return o;const r={...o};for(const k in d)r[k]=deepFill(d[k],o[k]);return r}
 const safeUrl=u=>{u=String(u||"").trim();return /^(https:\/\/|#(build|menu|visit|shop)$)/i.test(u)?u:""};
 const safeMedia=u=>{u=String(u||"").trim();return /^(https:\/\/|data:(image|video)\/)/i.test(u)?u:""};
@@ -1841,6 +1860,7 @@ function renderLanding(){
   $("#faqTitle").hidden=!pg.faq.some(f=>f.q);
   const f=pg.footer,ft=$("#siteFoot");$("#ftText").textContent=f.text;ft.style.background=f.bg||"";ft.style.color=f.color||"";
   ft.querySelectorAll("a,.logo").forEach(a=>a.style.color=f.color||"");
+  {const so=$("#ftSocial");if(so){const h=socialsHTML(f.socials);so.innerHTML=h;so.hidden=!h;so.style.color=f.color||""}}
   // custom sections
   const blk=b=>{
     const lay=b.layout||"right",sm=safeMedia(b.src);let media="";

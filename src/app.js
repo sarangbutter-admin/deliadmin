@@ -3877,7 +3877,28 @@ function defaultPage(){return {name:"delidome",logo:"",brand:"#000096",bg:"#ffff
        {q:"How long do the cookies stay fresh?",a:"They're best on the day you get them. Keep them in an airtight container for up to three days, and give them 5 minutes in a warm oven to bring them back."},
        {q:"Can I order for an event?",a:"Yes. For more than five boxes, message us at least three days ahead so we can set aside oven time."},
        {q:"What about allergies?",a:"Every cookie contains wheat, dairy and egg, and our kitchen handles nuts. We can't promise any box is allergen free."}],
-  footer:{text:"Fresh cookie boxes, baked to order.",bg:"",color:"#ffffff"}}}
+  footer:{text:"Fresh cookie boxes, baked to order.",bg:"",color:"#ffffff",socials:[{id:"instagram",kind:"instagram",name:"Instagram",url:"",img:""},{id:"threads",kind:"threads",name:"Threads",url:"",img:""},{id:"whatsapp",kind:"whatsapp",name:"WhatsApp",url:"",img:""}]}}}
+/* social buttons in the footer (set in Landing page > Footer): a built-in icon or the owner's own picture, and a link */
+const SOC_KINDS=[["instagram","Instagram"],["threads","Threads"],["whatsapp","WhatsApp"],["tiktok","TikTok"],["facebook","Facebook"],["youtube","YouTube"],["x","X"],["custom","Other link"]];
+const SOC_SVG={
+  instagram:'<rect x="3.5" y="3.5" width="17" height="17" rx="5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17.2" cy="6.8" r="1.2" fill="currentColor"/>',
+  threads:'<path d="M12 3.5c-5 0-8.5 3.4-8.5 8.5s3.5 8.5 8.5 8.5c3.9 0 6.5-1.9 6.5-4.8 0-2.3-1.8-3.7-4.4-3.7-2.1 0-3.3 1-3.3 2.4 0 1.2.9 2 2.2 2 1.9 0 2.8-1.4 2.8-3.7V11c0-3.3-1.9-4.8-4.5-4.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+  whatsapp:'<path d="M4 20l1.2-4A8.5 8.5 0 1 1 8 18.8L4 20Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9 8.5c0 3.5 3 6.5 6.5 6.5l1-1.6-2.2-1-.9.9c-1-.4-2-1.4-2.4-2.4l.9-.9-1-2.2L9 8.5Z" fill="currentColor"/>',
+  tiktok:'<path d="M14 4v10.5a3.5 3.5 0 1 1-3.5-3.5M14 4c.4 2.4 2 4 4.5 4.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+  facebook:'<path d="M14 20v-7h2.5l.5-3H14V8.5c0-.9.4-1.5 1.6-1.5H17V4.2C16.6 4.1 15.8 4 15 4c-2.3 0-3.7 1.4-3.7 3.8V10H9v3h2.3v7H14Z" fill="currentColor"/>',
+  youtube:'<rect x="3" y="6" width="18" height="12" rx="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M10.5 9.5v5l4.5-2.5-4.5-2.5Z" fill="currentColor"/>',
+  x:'<path d="M5 5l14 14M19 5L5 19" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>',
+  custom:'<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'};
+const SOC_NAME=Object.fromEntries(SOC_KINDS);
+// a full link (https://...), or for WhatsApp just the phone number
+function socialUrl(u,kind){u=String(u||"").trim();if(!u)return "";
+  if(/^\+?[\d\s().-]{7,}$/.test(u)){let d=u.replace(/\D/g,"");if(d.startsWith("0"))d=String(DB.settings.waCountry||"62")+d.slice(1);return "https://wa.me/"+d}
+  return /^https:\/\/[^\s"'<>\\]+$/i.test(u)?u:""}
+function socialsHTML(list){
+  return (list||[]).map(x=>({x,u:socialUrl(x.url,x.kind)})).filter(o=>o.u).map(({x,u})=>{
+    const nm=String(x.name||"").trim()||SOC_NAME[x.kind]||"Link",img=imgOk(x.img);
+    return `<a class="soc" href="${esc(u)}" target="_blank" rel="noopener noreferrer" aria-label="${esc(nm)}"><span class="soc-i${img?" img":""}">${img?`<img class="${imgIsCut(img,x.imgCut)?"":"crop"}" src="${esc(img)}" alt="" draggable="false">`:`<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">${SOC_SVG[x.kind]||SOC_SVG.custom}</svg>`}</span><span class="soc-n">${esc(nm)}</span></a>`}).join("");
+}
 function deepFill(d,o){if(o===undefined||o===null)return d;if(Array.isArray(d)||typeof d!=="object")return o;const r={...o};for(const k in d)r[k]=deepFill(d[k],o[k]);return r}
 const safeUrl=u=>{u=String(u||"").trim();return /^(https:\/\/|#(build|menu|visit|shop)$)/i.test(u)?u:""};
 const safeMedia=u=>{u=String(u||"").trim();return /^(https:\/\/|data:(image|video)\/)/i.test(u)?u:""};
@@ -3964,6 +3985,7 @@ function renderLanding(){
   $("#faqTitle").hidden=!pg.faq.some(f=>f.q);
   const f=pg.footer,ft=$("#siteFoot");$("#ftText").textContent=f.text;ft.style.background=f.bg||"";ft.style.color=f.color||"";
   ft.querySelectorAll("a,.logo").forEach(a=>a.style.color=f.color||"");
+  {const so=$("#ftSocial");if(so){const h=socialsHTML(f.socials);so.innerHTML=h;so.hidden=!h;so.style.color=f.color||""}}
   // custom sections
   const blk=b=>{
     const lay=b.layout||"right",sm=safeMedia(b.src);let media="";
@@ -4039,10 +4061,26 @@ function viewLanding(){
     <p class="note">Opening hours and the address are edited in Shop settings. In an answer, <b>{cutoff}</b> becomes your order cutoff time.</p>
     ${pg.faq.map((f,i)=>`<div class="lpblock">${lpIn("Question",`faq.${i}.q`,{max:120})}${lpIn("Answer",`faq.${i}.a`,{rows:3,max:500})}<button class="danger" type="button" data-lpfdel="${i}" style="justify-self:start">Delete question</button></div>`).join("")}
     ${pg.faq.length<8?`<button class="btn btn-blue btn-sm" type="button" data-lpfadd style="justify-self:start">+ Add question</button>`:""}`)}
-  ${sec("Footer",`${lpIn("Footer text","footer.text",{max:120})}<div class="grid2">${lpCol("Footer background","footer.bg",pg.brand,true)}${lpCol("Footer text color","footer.color","#ffffff")}</div>`)}
+  ${sec("Footer",`${lpIn("Footer text","footer.text",{max:120})}<div class="grid2">${lpCol("Footer background","footer.bg",pg.brand,true)}${lpCol("Footer text color","footer.color","#ffffff")}</div>
+    <h3 style="margin:14px 0 2px;font-size:15px">Social buttons</h3>
+    <p class="note" style="margin:0 0 8px">Shown in the footer, under the questions. A button only appears once it has a link. Paste a full link (https://…). For WhatsApp you can type just your number, like 0812…</p>
+    ${(pg.footer.socials||[]).map((x,i)=>{const u=imgOk(x.img),ok=socialUrl(x.url,x.kind);return `<div class="lpblock soced">
+      <div class="socrow"><span class="soc-i prev${u?" img":""}">${u?`<img class="${imgIsCut(u,x.imgCut)?"":"crop"}" src="${esc(u)}" alt="">`:`<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">${SOC_SVG[x.kind]||SOC_SVG.custom}</svg>`}</span>
+        <div class="grid2" style="flex:1;min-width:0">${lpIn("Name",`footer.socials.${i}.name`,{max:24})}${lpIn("Link",`footer.socials.${i}.url`,{max:300,ph:x.kind==="whatsapp"?"0812… or https://wa.me/62812…":"https://"})}</div></div>
+      <small class="note">${ok?`Opens: ${esc(ok)}`:x.url?`<span style="color:var(--red)">That link isn't valid. It must start with https://</span>`:"No link yet, so this button is hidden in the shop."}</small>
+      <div class="colin" style="flex-wrap:wrap;gap:8px"><label class="ghost mqbtn">${u?"Replace icon picture":"Upload own icon"}<input type="file" accept="image/*" hidden data-socimg="${i}"></label>${u?`<button class="ghost" type="button" data-socimgrm="${i}">Use the built-in icon</button>`:""}<button class="danger" type="button" data-socdel="${i}">Delete</button></div></div>`}).join("")}
+    ${(pg.footer.socials||[]).length<10?`<div class="colin" style="flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px"><select class="in" id="socKind" style="width:auto">${SOC_KINDS.map(([k,n])=>`<option value="${k}">${n}</option>`).join("")}</select><button class="btn btn-blue btn-sm" type="button" data-socadd>+ Add button</button></div>`:`<p class="note">Maximum of 10 buttons.</p>`}`)}
   <div><button class="ghost" type="button" data-lpreset>Reset landing page to default</button></div>
   </div>`;
 }
+am.addEventListener("change",async e=>{const el=e.target;if(el.dataset.socimg===undefined)return;const f=el.files[0];if(!f)return;
+  const x=DB.page.footer.socials[+el.dataset.socimg];if(!x)return;
+  try{const data=await lpResize(f,96,true),cut=await imgHasAlpha(f),prev=x.img,prevC=x.imgCut;x.img=data;x.imgCut=cut;
+    if(!saveDB()){x.img=prev;x.imgCut=prevC;toast("Not enough storage space. Remove another photo first.");return}toast("Icon saved")}catch(err){toast(err.message)}lpRender()});
+am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b||A.tab!=="landing")return;const d=b.dataset,so=DB.page.footer.socials=DB.page.footer.socials||[];
+  if(d.socadd!==undefined){const k=($("#socKind")||{}).value||"custom";so.push({id:uid(),kind:k,name:SOC_NAME[k]||"Link",url:"",img:""});saveDB();toast("Button added. Add its link.");lpRender()}
+  else if(d.socdel!==undefined){armed(b,()=>{so.splice(+d.socdel,1);saveDB();toast("Button deleted");lpRender()})}
+  else if(d.socimgrm!==undefined){const x=so[+d.socimgrm];if(x){x.img="";delete x.imgCut;saveDB();toast("Using the built-in icon");lpRender()}}});
 let lpT;function lpSave(){clearTimeout(lpT);lpT=setTimeout(()=>{if(saveDB())toast("Saved");else toast("Not enough storage space. Remove a photo, video or font.")},400)}
 async function lpResize(file,MAX,webp){
   if(!/^image\//.test(file.type))throw new Error("That file isn't an image. Use JPG, PNG or WebP.");
