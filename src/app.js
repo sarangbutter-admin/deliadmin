@@ -1734,30 +1734,52 @@ function renderAdmin(){
 
 
 /* --- drafts: shop settings, marquee banner and landing page go live only when the owner presses Publish --- */
-const DRAFT_NAMES={settings:"Shop settings",marquee:"Marquee banner",page:"Landing page and top banner"};
+/* drafts: each screen publishes (or discards) only the changes made on that screen.
+   Shop settings, Boxes & extras, Delivery & courier and Security share one settings document, and Landing page and
+   Top banner share the page document, so every changed field remembers the screen it was changed on. */
+const DRAFT_TABS={settings:["settings","boxes","delivery","security"],marquee:["marquee"],page:["landing","hero"]};
+const DRAFT_TAB_NAME={settings:"Shop settings",boxes:"Boxes & extras",delivery:"Delivery & courier",security:"Security",marquee:"Marquee banner",landing:"Landing page",hero:"Top banner"};
+const DRAFT_ALL=Object.values(DRAFT_TABS).flat();
+const DTAG={};   // doc -> {field: screen}
+function draftScan(tab){
+  if(!SBH.changed)return;
+  for(const k in DRAFT_TABS){const ch=SBH.changed(k),t=DTAG[k]||(DTAG[k]={});
+    for(const f in t)if(!ch.includes(f))delete t[f];
+    ch.forEach(f=>{if(!t[f])t[f]=DRAFT_TABS[k].includes(tab)?tab:k==="page"&&f==="hero"?"hero":DRAFT_TABS[k][0]})}
+}
+const draftMine=tab=>{const out=[];for(const k in DRAFT_TABS){const t=DTAG[k]||{},f=Object.keys(t).filter(x=>t[x]===tab);if(f.length)out.push([k,f])}return out};
+const draftPendTabs=()=>{const s=new Set();for(const k in DTAG)for(const f in DTAG[k])s.add(DTAG[k][f]);return DRAFT_ALL.filter(t=>s.has(t))};
+// a change is tagged with the screen it was made on (right after the screen's own handlers ran)
+["input","change","click"].forEach(ev=>document.addEventListener(ev,()=>{if(!SBH.on||!SBH.admin||!SBH.changed)return;const t=A.tab;setTimeout(()=>{draftScan(t);drawDraftBar()},0)}));
 function drawDraftBar(){
-  const am=$("#amain");if(!am||!SBH.pending)return;
-  const keys=SBH.pending();let bar=$("#draftBar");
-  {const tabs={settings:["settings","boxes","delivery","security"],marquee:["marquee"],page:["landing","hero"]};document.querySelectorAll("[data-tab]").forEach(b=>b.classList.toggle("pend",keys.some(k=>(tabs[k]||[]).includes(b.dataset.tab))))}
-  const onTab=SBH.admin&&["settings","delivery","boxes","security","marquee","landing","hero"].includes(A.tab);
-  if(!keys.length&&!onTab){if(bar)bar.remove();return}
-  const busy=keys.length>0,sig=(busy?keys.join():"idle")+"|"+A.tab;
-  const html=busy?`<div class="db-tx"><b>Not published yet</b><span>${keys.map(k=>esc(DRAFT_NAMES[k])).join(", ")}. Customers still see the old version.</span></div><div class="db-act"><button class="btn btn-blue" type="button" data-dbpub>Save &amp; publish</button><button class="ghost" type="button" data-dbdisc>Discard changes</button></div>`
-    :`<div class="db-tx"><b>✓ Everything here is published</b><span>Changes you make on this page go live only after you press Save &amp; publish.</span></div><div class="db-act"><button class="btn btn-blue" type="button" disabled>Save &amp; publish</button><button class="ghost" type="button" disabled>Discard changes</button></div>`;
+  const am=$("#amain");if(!am||!SBH.pending||!SBH.changed)return;
+  draftScan(A.tab);
+  const pend=draftPendTabs(),onTab=SBH.admin&&DRAFT_ALL.includes(A.tab),mine=onTab?draftMine(A.tab):[],busy=mine.length>0,others=pend.filter(t=>t!==A.tab);
+  document.querySelectorAll("[data-tab]").forEach(b=>b.classList.toggle("pend",pend.includes(b.dataset.tab)));
+  let bar=$("#draftBar");
+  if(!onTab&&!others.length){if(bar)bar.remove();return}
+  const oth=others.length?`<span class="db-oth">Not published yet on other pages: ${others.map(t=>`<button class="linkbtn sm" type="button" data-dbgo="${t}">${esc(DRAFT_TAB_NAME[t])}</button>`).join(", ")} (each page is published on its own)</span>`:"";
+  const html=busy?`<div class="db-tx"><b>Not published yet</b><span>Your changes on ${esc(DRAFT_TAB_NAME[A.tab])}. Customers still see the old version.</span>${oth}</div><div class="db-act"><button class="btn btn-blue" type="button" data-dbpub>Save &amp; publish</button><button class="ghost" type="button" data-dbdisc>Discard changes</button></div>`
+    :onTab?`<div class="db-tx"><b>✓ Everything on this page is published</b><span>Changes you make here go live only after you press Save &amp; publish.</span>${oth}</div><div class="db-act"><button class="btn btn-blue" type="button" disabled>Save &amp; publish</button><button class="ghost" type="button" disabled>Discard changes</button></div>`
+    :`<div class="db-tx">${oth}</div>`;
   if(!bar){bar=document.createElement("div");bar.id="draftBar";bar.setAttribute("role","status");am.prepend(bar)}
   bar.className="draftbar"+(busy?"":" idle");
-  if(bar.dataset.sig!==sig){bar.dataset.sig=sig;bar.innerHTML=html}
+  if(bar.dataset.sig!==html){bar.dataset.sig=html;bar.innerHTML=html}
 }
 function afterSave(){if(SBH.on&&SBH.admin)requestAnimationFrame(()=>{try{drawDraftBar()}catch(e){}})}
-function toastHook(msg){return msg==="Saved"&&SBH.admin&&SBH.pending&&["settings","delivery","boxes","security","marquee","landing","hero"].includes(A.tab)&&SBH.pending().length?"Draft kept. Press Publish changes to show it in the shop.":msg}
+function toastHook(msg){return msg==="Saved"&&SBH.admin&&SBH.changed&&DRAFT_ALL.includes(A.tab)&&(draftScan(A.tab),draftMine(A.tab).length)?"Draft kept. Press Save & publish to show it in the shop.":msg}
+// publish only some fields of a draft document (falls back to publishing the whole document on older backends)
+const draftPublish=(k,f)=>SBH.publishFields?SBH.publishFields(k,f):SBH.publish([k]);
 document.addEventListener("click",async e=>{
-  const b=e.target.closest("[data-dbpub],[data-dbdisc]");if(!b||!SBH.pending)return;
-  const keys=SBH.pending();if(!keys.length)return;
+  const g=e.target.closest("[data-dbgo]");if(g){A.tab=g.dataset.dbgo;closeDrawer();renderAdmin();scrollTo(0,0);return}
+  const b=e.target.closest("[data-dbpub],[data-dbdisc]");if(!b||!SBH.changed)return;
+  draftScan(A.tab);const mine=draftMine(A.tab);if(!mine.length)return;
   if(b.dataset.dbdisc!==undefined){
     if(b.dataset.arm!=="1"){b.dataset.arm="1";b.textContent="Tap again to discard";setTimeout(()=>{if(b.isConnected){b.dataset.arm="";b.textContent="Discard changes"}},3500);return}
-    SBH.discard(keys);A.hr=null;try{applyCdLook()}catch(er){}renderAdmin();toast("Changes discarded. Back to the published version.");return}
+    mine.forEach(([k,f])=>SBH.discardFields(k,f));if(A.tab==="hero")A.hr=null;try{applyCdLook()}catch(er){}draftScan(A.tab);renderAdmin();toast("Changes on this page discarded. Back to the published version.");return}
   b.disabled=true;b.textContent="Publishing…";
-  const ok=await SBH.publish(keys);
+  let ok=true;for(const [k,f] of mine)ok=(await draftPublish(k,f))&&ok;
+  draftScan(A.tab);
   if(ok){toast("Published to the shop");renderAdmin()}else{b.disabled=false;b.textContent="Save & publish"}
 });
 /* --- Announcer (owner) --- */
@@ -3469,7 +3491,7 @@ am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
   else if(d.hrmup!==undefined||d.hrmdn!==undefined){const m=hrDraft().media,i=+(d.hrmup??d.hrmdn),j=d.hrmup!==undefined?i-1:i+1;if(m[j]){[m[i],m[j]]=[m[j],m[i]];renderAdmin()}}
   else if(d.hrlink!==undefined){const v=($("#hrLink")||{}).value||"",u=safeMedia(v.trim()),h=hrDraft();if(!u||!/^https:\/\//i.test(u)){toast("Paste a link that starts with https://");return}if(h.media.length>=8){toast("Up to 8 pictures and videos.");return}
     const ty=/\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(u)?"video":"image";h.media.push({type:ty,src:u});renderAdmin();toast("Added to the preview. Press Save to publish.")}
-  else if(d.hrsave!==undefined){const prev=DB.page.hero;DB.page.hero=heroNorm(A.hr);if(saveDB()){if(SBH.publish)SBH.publish(["page"]);toast("Top banner published to the shop");A.hr=null;renderAdmin()}else{DB.page.hero=prev;toast("Not enough storage space. Try smaller pictures.")}}
+  else if(d.hrsave!==undefined){const prev=DB.page.hero;DB.page.hero=heroNorm(A.hr);if(saveDB()){if(SBH.publish)draftPublish("page",["hero"]);toast("Top banner published to the shop");A.hr=null;renderAdmin()}else{DB.page.hero=prev;toast("Not enough storage space. Try smaller pictures.")}}
   else if(d.hrdisc!==undefined){A.hr=null;renderAdmin();toast("Changes discarded")}
   else if(d.hrreset!==undefined){armed(b,()=>{A.hr=heroNorm(defaultPage().hero);renderAdmin();toast("Reset in the preview. Press Save to publish.")})}
 });
@@ -4466,7 +4488,7 @@ am.addEventListener("change",e=>{const el=e.target;if(A.tab!=="badges")return;if
   const k=el.dataset.bdset;if(!k)return;
   if(k==="autoBest")DB.badges.autoBest=el.checked;
   else if(k==="bestTop")DB.badges.bestTop=Math.max(1,Math.min(10,Math.round(+el.value)||3));
-  else if(k==="menuSort")DB.settings.menuSort=el.value==="manual"?"manual":"popular";
+  else if(k==="menuSort"){DB.settings.menuSort=el.value==="manual"?"manual":"popular";if(SBH.on&&SBH.changed)setTimeout(()=>draftPublish("settings",["menuSort"]),0)}   // the Badges page has no publish bar: the flavor order goes live straight away
   saveDB();toast("Saved");renderAdmin()});
 am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b||A.tab!=="badges")return;const d=b.dataset;
   if(d.bdnew!==undefined){BD.edit={isNew:true,id:"b"+uid().slice(0,6),text:"⭐ Chef's pick",font:"display",color:"#FFFFFF",bg:"#000096",fx:"shine"};renderAdmin();scrollTo(0,0)}

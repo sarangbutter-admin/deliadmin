@@ -1015,3 +1015,5 @@ body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
 /* courier note under Sameday shipment and Scheduled delivery */
 .hint.cnote{margin-top:8px;padding:8px 12px;border-radius:12px;background:#FFF4D6;color:#5A4500;font-size:13px;line-height:1.45}
 .hint.cnote::before{content:"ℹ️ "}
+
+/* draft bar: changes waiting on other pages */

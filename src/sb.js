@@ -493,7 +493,46 @@
     return d;
   };
   /* drafts: these screens only go live when the owner presses Publish */
-  H.pending = function () { return H.admin ? Object.keys(HELD).filter(function (k) { return DB[k] !== undefined && SN.docs[k] !== undefined && J(DB[k]) !== SN.docs[k]; }) : []; };
+  // which top-level fields of a draft differ from the published version ("*" = the whole document is new)
+  function changedFields(k) {
+    if (!HELD[k] || DB[k] === undefined || SN.docs[k] === undefined) return [];
+    if (SN.docs[k] === null) return ["*"];
+    var cur = DB[k], pub = JSON.parse(SN.docs[k]);
+    if (!cur || typeof cur !== "object" || Array.isArray(cur) || !pub || typeof pub !== "object" || Array.isArray(pub)) return J(cur) === SN.docs[k] ? [] : ["*"];
+    var out = [], seen = {};
+    Object.keys(cur).concat(Object.keys(pub)).forEach(function (f) { if (seen[f]) return; seen[f] = 1; if (J(cur[f]) !== J(pub[f])) out.push(f); });
+    return out;
+  }
+  H.changed = function (k) { return H.admin ? changedFields(k) : []; };
+  H.pending = function () { return H.admin ? Object.keys(HELD).filter(function (k) { return changedFields(k).length > 0; }) : []; };
+  // publish only some fields of a draft (the ones changed on the screen the owner is on); the rest stays a draft
+  H.publishFields = function (k, fields) {
+    return new Promise(function (res) {
+      (function go() {
+        if (flushing) return setTimeout(go, 150);
+        flushing = true; setSync("saving");
+        (async function () {
+          try {
+            var cur = DB[k];
+            await walk(cur);   // big pictures go to storage first, like a normal save
+            var all = fields.indexOf("*") >= 0 || SN.docs[k] == null, pub = all ? JSON.parse(J(cur)) : JSON.parse(SN.docs[k]);
+            if (!all) fields.forEach(function (f) { if (Object.prototype.hasOwnProperty.call(cur, f) && cur[f] !== undefined) pub[f] = JSON.parse(J(cur[f])); else delete pub[f]; });
+            await K.rpc("admin_put_doc", { p_key: k, p_data: pub }, true);
+            SN.docs[k] = J(pub); delete FORCE[k];
+            setSync("saved"); res(true);
+          } catch (e) { setSync("error", e.message); toast(e.message || "Couldn't publish. Please try again."); res(false); }
+          finally { flushing = false; if (again && H.admin) schedule(2000); }
+        })();
+      })();
+    });
+  };
+  // put some fields of a draft back to the published version
+  H.discardFields = function (k, fields) {
+    if (!HELD[k] || SN.docs[k] == null) return;
+    var pub = JSON.parse(SN.docs[k]);
+    if (fields.indexOf("*") >= 0) { DB[k] = pub; return; }
+    fields.forEach(function (f) { if (Object.prototype.hasOwnProperty.call(pub, f)) DB[k][f] = pub[f]; else delete DB[k][f]; });
+  };
   H.publish = function (keys) {
     keys = (keys || H.pending()).filter(function (k) { return HELD[k]; });
     keys.forEach(function (k) { FORCE[k] = 1; });
