@@ -464,7 +464,7 @@
 
   // payment-proof and complaint pictures are fetched when the owner opens them
   H.adminFiles = async function (o) {
-    var need = (o.proof && !o.proof.img) || (o.complaint && o.complaint.photoCount > 0 && !(o.complaint.photos || []).length) || (o.place && o.place.photo && !o.place.img) || (o.refund && o.refund.proof && !o.refund.img);
+    var need = (o.proof && !o.proof.img) || (o.complaint && o.complaint.photoCount > 0 && !(o.complaint.photos || []).length) || (o.place && o.place.photo && !o.place.img) || (o.refund && o.refund.proof && !o.refund.img) || (o.bship && o.bship.biteshipId && !o._clinkTried);
     if (!need) return;
     try {
       var f = await K.rpc("admin_order_files", { p_id: o.id }, true);
@@ -472,6 +472,7 @@
       if (o.complaint && f.photos) o.complaint.photos = f.photos;
       if (o.place && f.place) o.place.img = f.place;
       if (o.refund && f.refund) o.refund.img = f.refund;
+      if (o.bship) { o._clinkTried = 1; if (f.courier && f.courier.link) o._clink = f.courier.link; }
     } catch (e) { toast("Couldn't load the picture: " + e.message); }
   };
   // change one order right away (used for staff payment checks and owner approvals)

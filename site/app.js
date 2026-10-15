@@ -247,7 +247,7 @@ const bsHTML=(o,adm)=>{const b=o.bship;if(!b||!b.courier||o.mode!=="delivery")re
   const fail=adm&&b.failed?`<div class="oc-alert cmp" style="margin:0 0 8px">🛵 ${esc(st||"Courier failed")}. Book again below${b.retries?" (already retried once)":""}</div>`:"";
   const lines=!adm?`<dt>Courier</dt><dd>${nm}${b.eta?` · ${esc(b.eta)}`:""}</dd>${b.waybill?`<dt>Waybill</dt><dd>${esc(b.waybill)}</dd>`:""}`:`<dt>Courier</dt><dd>${nm}${b.eta?` · ${esc(b.eta)}`:""}</dd>${st?`<dt>Status</dt><dd><b>${esc(st)}</b>${b.statusAt?` <small class="note">${fmtAgo(b.statusAt)}</small>`:""}</dd>`:booked?"":`<dt>Status</dt><dd>${adm?"Not booked yet":"We'll call the courier when your cookies are ready"}</dd>`}
     ${dr&&(dr.name||dr.plate)?`<dt>Driver</dt><dd>${esc(dr.name||"")}${dr.plate?` · ${esc(dr.plate)}`:""}${dr.phone?` · <a href="tel:${esc(dr.phone)}">${esc(dr.phone)}</a>`:""}</dd>`:""}
-    ${b.waybill?`<dt>Waybill</dt><dd>${esc(b.waybill)}</dd>`:""}${b.link&&booked?`<dt>Tracking</dt><dd><a href="${esc(safeUrl(b.link))}" target="_blank" rel="noopener">Track the courier live</a></dd>`:""}
+    ${b.waybill?`<dt>Waybill</dt><dd>${esc(b.waybill)}</dd>`:""}${(adm?o._clink||b.link:b.link)&&booked?`<dt>Tracking</dt><dd><a href="${esc(safeUrl(adm?o._clink||b.link:b.link))}" target="_blank" rel="noopener">${adm?"Track the courier live (team only)":"Track the courier live"}</a></dd>`:""}
     ${adm&&b.price!==undefined?`<dt>Price</dt><dd>${money(b.price)} quoted${b.bookedPrice!==undefined&&b.bookedAt?` · ${money(b.bookedPrice)} booked`:""}</dd>`:""}`;
   const hist=(b.history||[]).length?`<ol class="bshist">${b.history.slice().reverse().map(h=>`<li><b>${esc(BS_ST[h.s]||h.s)}</b><small>${fmtDT(h.at)}${h.by==="shop"?" · by the shop":""}</small></li>`).join("")}</ol>`:"";
   const pf=k=>{const p=bsProof(b,k),lab=k==="pickup"?"Pickup proof":"Delivery proof";if(!p&&!adm)return "";
@@ -1399,7 +1399,7 @@ async function processProof(file){
   }finally{URL.revokeObjectURL(url)}
 }
 const bsDriverLine=b=>{const d=b.driver;return d&&(d.name||d.plate||d.phone)?`Driver: <b>${esc(d.name||"Your driver")}</b>${d.plate?` · ${esc(d.plate)}`:""}${d.phone?` · <a href="tel:${esc(d.phone)}">${esc(d.phone)}</a>`:""}`:""};
-const bsLiveLink=b=>b.link&&b.biteshipId?`<a href="${esc(safeUrl(b.link))}" target="_blank" rel="noopener">Track the courier live</a>`:"";
+const bsLiveLink=b=>DB.settings.biteship&&DB.settings.biteship.showLink===true&&b.link&&b.biteshipId?`<a href="${esc(safeUrl(b.link))}" target="_blank" rel="noopener">Track the courier live</a>`:"";
 /* the "Courier pickup" step of the customer tracker: what the booking is doing right now */
 function courierStep(o,b){
   const dl=bsDriverLine(b),lk=bsLiveLink(b),both=[dl,lk].filter(Boolean).join("<br>");

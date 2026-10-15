@@ -111,14 +111,25 @@ const CUST_TXT: Record<string, (sh: any) => string> = {
   returned: () => "Your order is being returned to the shop. We'll contact you.",
 };
 
+// the courier's live tracking page can show a map with the pickup point, so the link is kept private unless the owner allows customers to see it
+export const showLinkOn = async (db: any) => !!((await settings(db))?.biteship?.showLink);
+async function keepPrivate(db: any, orderId: string, link: string, trackingId: string) {
+  const row: any = { order_id: orderId, at: Date.now() };
+  if (link) row.link = link;
+  if (trackingId) row.tracking_id = trackingId;
+  if (row.link || row.tracking_id) await db.from("courier_private").upsert(row);
+}
 // merges a courier update into the order: courier details, proofs, main order status (forward only), a customer message
 export async function applyUpdate(db: any, row: { id: string; data: any }, up: { status?: string; waybill?: string; link?: string; trackingId?: string; price?: number; driver?: any; proofs?: string[] }, fromCourier: boolean) {
   const o: any = row.data, sh: any = { ...(o.bship || {}) }, now = Date.now(), prevSt = sh.status;
+  const showLink = await showLinkOn(db);
   const s = up.status ? cl(up.status, 30).toLowerCase() : "";
   if (s && s !== prevSt) { sh.status = s; sh.statusAt = now; sh.history = [...(sh.history || []), { s, at: now }].slice(-25); }
   if (up.waybill) sh.waybill = cl(up.waybill, 60);
-  if (up.link) sh.link = cl(up.link, 300);
-  if (up.trackingId) sh.trackingId = cl(up.trackingId, 60);
+  let privLink = "", privTrack = "";
+  if (up.link) { if (showLink) sh.link = cl(up.link, 300); else privLink = cl(up.link, 300); }
+  if (up.trackingId) { if (showLink) sh.trackingId = cl(up.trackingId, 60); else privTrack = cl(up.trackingId, 60); }
+  if (!showLink) { delete sh.link; delete sh.trackingId; }
   if (up.price !== undefined && Number.isFinite(+up.price) && +up.price > 0) sh.bookedPrice = +up.price;
   if (up.driver) sh.driver = up.driver;
   if (up.proofs && up.proofs.length) {
@@ -141,6 +152,7 @@ export async function applyUpdate(db: any, row: { id: string; data: any }, up: {
     next.msgs = [...(o.msgs || []), { at: now, channel: ch, status: next.status, text: CUST_TXT[s](sh), by: "system", courier: true }].slice(-80);
   }
   await db.from("orders").update({ data: next, updated_at: now }).eq("id", row.id);
+  await keepPrivate(db, row.id, privLink, privTrack);
   return next;
 }
 
@@ -192,9 +204,9 @@ export async function bookOrder(db: any, key: string, cfg: any, row: { id: strin
   const r = await bs(key, "POST", "/v1/orders", payload);
   console.log("book", o.code, r.status, r.ok ? cl(r.body?.status, 30) : bsErr(r));
   if (!r.ok || !r.body) return { error: bsErr(r) };
-  const b = r.body, cr = b.courier || {}, now = Date.now();
-  const nsh = {
-    ...sh, biteshipId: cl(b.id, 60), trackingId: cl(cr.tracking_id, 60), waybill: cl(cr.waybill_id, 60), link: cl(cr.link, 300),
+  const b = r.body, cr = b.courier || {}, now = Date.now(), showLink = await showLinkOn(db);
+  const nsh: any = {
+    ...sh, biteshipId: cl(b.id, 60), trackingId: showLink ? cl(cr.tracking_id, 60) : "", waybill: cl(cr.waybill_id, 60), link: showLink ? cl(cr.link, 300) : "",
     status: cl(b.status, 30) || "confirmed", statusAt: now, bookedAt: now, bookedPrice: nm(b.price, nm(sh.price)), failed: false,
     retries: sh.failed ? (sh.retries || 0) + 1 : (sh.retries || 0),
     history: [...(sh.history || []), { s: cl(b.status, 30) || "confirmed", at: now }].slice(-25),
@@ -206,5 +218,6 @@ export async function bookOrder(db: any, key: string, cfg: any, row: { id: strin
     text: sh.failed ? "We booked another courier for your order. Searching for a driver now. Follow it in My orders." : "We're looking for a courier to pick up your order. You'll see the driver in My orders as soon as one accepts.",
   }].slice(-80);
   await db.from("orders").update({ data: next, updated_at: now }).eq("id", row.id);
+  await keepPrivate(db, row.id, showLink ? "" : cl(cr.link, 300), showLink ? "" : cl(cr.tracking_id, 60));
   return { bship: nsh, order: next };
 }

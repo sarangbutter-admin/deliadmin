@@ -252,7 +252,7 @@ const bsHTML=(o,adm)=>{const b=o.bship;if(!b||!b.courier||o.mode!=="delivery")re
   const fail=adm&&b.failed?`<div class="oc-alert cmp" style="margin:0 0 8px">🛵 ${esc(st||"Courier failed")}. Book again below${b.retries?" (already retried once)":""}</div>`:"";
   const lines=!adm?`<dt>Courier</dt><dd>${nm}${b.eta?` · ${esc(b.eta)}`:""}</dd>${b.waybill?`<dt>Waybill</dt><dd>${esc(b.waybill)}</dd>`:""}`:`<dt>Courier</dt><dd>${nm}${b.eta?` · ${esc(b.eta)}`:""}</dd>${st?`<dt>Status</dt><dd><b>${esc(st)}</b>${b.statusAt?` <small class="note">${fmtAgo(b.statusAt)}</small>`:""}</dd>`:booked?"":`<dt>Status</dt><dd>${adm?"Not booked yet":"We'll call the courier when your cookies are ready"}</dd>`}
     ${dr&&(dr.name||dr.plate)?`<dt>Driver</dt><dd>${esc(dr.name||"")}${dr.plate?` · ${esc(dr.plate)}`:""}${dr.phone?` · <a href="tel:${esc(dr.phone)}">${esc(dr.phone)}</a>`:""}</dd>`:""}
-    ${b.waybill?`<dt>Waybill</dt><dd>${esc(b.waybill)}</dd>`:""}${b.link&&booked?`<dt>Tracking</dt><dd><a href="${esc(safeUrl(b.link))}" target="_blank" rel="noopener">Track the courier live</a></dd>`:""}
+    ${b.waybill?`<dt>Waybill</dt><dd>${esc(b.waybill)}</dd>`:""}${(adm?o._clink||b.link:b.link)&&booked?`<dt>Tracking</dt><dd><a href="${esc(safeUrl(adm?o._clink||b.link:b.link))}" target="_blank" rel="noopener">${adm?"Track the courier live (team only)":"Track the courier live"}</a></dd>`:""}
     ${adm&&b.price!==undefined?`<dt>Price</dt><dd>${money(b.price)} quoted${b.bookedPrice!==undefined&&b.bookedAt?` · ${money(b.bookedPrice)} booked`:""}</dd>`:""}`;
   const hist=(b.history||[]).length?`<ol class="bshist">${b.history.slice().reverse().map(h=>`<li><b>${esc(BS_ST[h.s]||h.s)}</b><small>${fmtDT(h.at)}${h.by==="shop"?" · by the shop":""}</small></li>`).join("")}</ol>`:"";
   const pf=k=>{const p=bsProof(b,k),lab=k==="pickup"?"Pickup proof":"Delivery proof";if(!p&&!adm)return "";
@@ -1416,7 +1416,7 @@ async function processProof(file){
   }finally{URL.revokeObjectURL(url)}
 }
 const bsDriverLine=b=>{const d=b.driver;return d&&(d.name||d.plate||d.phone)?`Driver: <b>${esc(d.name||"Your driver")}</b>${d.plate?` · ${esc(d.plate)}`:""}${d.phone?` · <a href="tel:${esc(d.phone)}">${esc(d.phone)}</a>`:""}`:""};
-const bsLiveLink=b=>b.link&&b.biteshipId?`<a href="${esc(safeUrl(b.link))}" target="_blank" rel="noopener">Track the courier live</a>`:"";
+const bsLiveLink=b=>DB.settings.biteship&&DB.settings.biteship.showLink===true&&b.link&&b.biteshipId?`<a href="${esc(safeUrl(b.link))}" target="_blank" rel="noopener">Track the courier live</a>`:"";
 /* the "Courier pickup" step of the customer tracker: what the booking is doing right now */
 function courierStep(o,b){
   const dl=bsDriverLine(b),lk=bsLiveLink(b),both=[dl,lk].filter(Boolean).join("<br>");
@@ -2200,7 +2200,7 @@ function viewOrders(){
 
 function openOrder(id){
   const o=DB.orders.find(x=>x.id===id);if(!o)return;A.openOrder=id;
-  if(SBH.on&&!o._ft&&((o.proof&&!o.proof.img)||(o.complaint&&o.complaint.photoCount>0&&!(o.complaint.photos||[]).length)||(o.place&&o.place.photo&&!o.place.img)||(o.refund&&o.refund.proof&&!o.refund.img))){o._ft=1;SBH.adminFiles(o).then(()=>{if(A.openOrder===id)openOrder(id)})}
+  if(SBH.on&&!o._ft&&((o.proof&&!o.proof.img)||(o.complaint&&o.complaint.photoCount>0&&!(o.complaint.photos||[]).length)||(o.place&&o.place.photo&&!o.place.img)||(o.refund&&o.refund.proof&&!o.refund.img)||(o.bship&&o.bship.biteshipId&&!o._clinkTried))){o._ft=1;SBH.adminFiles(o).then(()=>{if(A.openOrder===id)openOrder(id)})}
   const d=$("#drawer");
   d.innerHTML=`<div class="drawer-card" role="dialog" aria-modal="true" aria-label="Order ${esc(o.code)}">
     <div class="sheet-top"><div><h3>${esc(o.code)}</h3><span class="note">Placed ${fmtDT(o.createdAt)}${o.example?" · Example":""}</span></div><button class="x" type="button" data-close aria-label="Close">✕</button></div>
@@ -3172,6 +3172,8 @@ function bsPanel(){
   return `<section class="panel">${head}
     <p class="sub">Show live courier prices at checkout and book couriers from your orders. <b>Switch it off and nothing changes</b>: customers pay your normal delivery fee and you use your own courier.</p>
     <div style="display:flex;gap:10px;align-items:center;margin:10px 0"><label class="sw"><input type="checkbox" data-bsset="on" ${on?"checked":""} aria-label="Use Biteship courier prices"><span></span></label><span class="stlabel">Use Biteship courier prices at checkout</span></div>
+    <div style="display:flex;gap:10px;align-items:center;margin:0 0 6px"><label class="sw"><input type="checkbox" data-bsset="showLink" ${b.showLink===true?"checked":""} aria-label="Show the live tracking link to customers"><span></span></label><span class="stlabel">Show the courier's live tracking link to customers</span></div>
+    <p class="note" style="margin:0 0 12px">Off by default, for your privacy. Courier tracking pages (Gojek, Grab and others) can show a map with the pickup point, so with this off customers only see the courier, driver and status, never a map or your address. The link stays visible to your team. Turning it on only affects new bookings.</p>
     <div style="display:flex;gap:10px;align-items:center;margin:0 0 12px"><label class="sw"><input type="checkbox" data-bsset="fallback" ${b.fallback!==false?"checked":""} aria-label="Allow the normal delivery fee if prices cannot load"><span></span></label><span class="stlabel">If courier prices can't load, allow my normal delivery fee</span></div>
     ${BSA.msg?`<p class="note" style="color:var(--red)">${esc(BSA.msg)}</p>`:""}
     <h3 style="margin:14px 0 4px;font-size:15px">1. API key</h3>
