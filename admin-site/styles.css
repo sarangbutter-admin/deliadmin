@@ -1154,3 +1154,30 @@ body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
 @keyframes trksrch{0%,100%{box-shadow:0 0 0 4px var(--ice)}50%{box-shadow:0 0 0 9px rgba(0,0,150,.08)}}
 .track-l li small a{color:var(--blue);font-weight:700}
 @media (prefers-reduced-motion:reduce){.track-l li.srch .dot{animation:none}}
+
+/* phone bar: random / shuffle button, and the floating "show my box" circle */
+.barr{display:flex;align-items:center;gap:10px}
+.barrand{width:44px;height:44px;flex:none;border-radius:50%;border:0;padding:0;background:var(--rb-bg,#FFD43B);color:#000096;font-size:22px;line-height:1;display:grid;place-items:center;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.28)}
+.barrand[hidden]{display:none}
+.barrand[disabled]{opacity:.5}
+.barrand:active{transform:scale(.9)}
+.barrand.fx-wiggle{animation:rbwig 2.6s ease-in-out infinite}
+.barrand.fx-pulse{animation:rbpulse 1.6s ease-in-out infinite}
+@keyframes rbwig{0%,68%,100%{transform:rotate(0)}74%{transform:rotate(-16deg)}82%{transform:rotate(16deg)}90%{transform:rotate(-9deg)}}
+@keyframes rbpulse{0%,100%{transform:scale(1)}50%{transform:scale(1.13)}}
+.fab{position:fixed;left:14px;bottom:calc(88px + env(safe-area-inset-bottom,0px));z-index:45;width:58px;height:58px;border-radius:50%;border:0;padding:0;background:var(--fab-bg,#FFD43B);color:var(--fab-ink,#000096);display:none;place-items:center;align-content:center;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;box-shadow:0 6px 18px rgba(0,0,60,.35);font-size:22px;line-height:1;transition:opacity .25s,transform .25s}
+.fab:not([hidden]){display:grid}
+.fab .fab-tx{display:block;font-size:9.5px;font-weight:800;line-height:1;margin-top:2px;max-width:50px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fab.away{opacity:0;pointer-events:none;transform:scale(.7)}
+.fab.dragging{cursor:grabbing;transition:none;animation:none!important;transform:scale(1.08)}
+.fab.fx-bounce{animation:fabbounce 2.4s ease-in-out infinite}
+.fab.fx-pulse{animation:rbpulse 1.7s ease-in-out infinite}
+.fab.fx-glow{animation:fabglow 2s ease-in-out infinite}
+@keyframes fabbounce{0%,60%,100%{transform:translateY(0)}70%{transform:translateY(-10px)}80%{transform:translateY(0)}88%{transform:translateY(-5px)}}
+@keyframes fabglow{0%,100%{box-shadow:0 6px 18px rgba(0,0,60,.35),0 0 0 0 rgba(255,212,59,.7)}50%{box-shadow:0 6px 18px rgba(0,0,60,.35),0 0 0 12px rgba(255,212,59,0)}}
+@media (min-width:901px){.fab{bottom:24px}}
+.boxpanel.boxflash{animation:boxfl 1.3s ease-out}
+@keyframes boxfl{0%{box-shadow:0 0 0 0 rgba(255,212,59,.95)}100%{box-shadow:0 0 0 22px rgba(255,212,59,0)}}
+.fabprev{display:flex;gap:18px;align-items:center;flex-wrap:wrap;padding:12px;border-radius:14px;background:var(--blue);margin-top:8px}
+.fabprev .fab,.fabprev .barrand{position:static;display:grid;cursor:default}
+@media (prefers-reduced-motion:reduce){.barrand,.fab,.boxpanel.boxflash{animation:none!important}}

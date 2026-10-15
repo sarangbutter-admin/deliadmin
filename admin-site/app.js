@@ -166,6 +166,7 @@ function migrate(db){
   if(db.settings.payWindowH===undefined)Object.assign(db.settings,{payWindowH:24,payBank:"Example Bank\nAccount 123 456 7890\nName: Delidome Cookies"});
   if(db.settings.lowStockAt===undefined)db.settings.lowStockAt=10;
   if(db.settings.customOn===undefined)Object.assign(db.settings,{customOn:true,customMin:14,customStep:2,customMax:48,customPer:3.25});
+  if(db.settings.rbOn===undefined)Object.assign(db.settings,{rbOn:true,rbIcon:"🎲",rbIcon2:"🔀",rbBg:"#FFD43B",rbFx:"wiggle",rbScroll:true,fabOn:true,fabIcon:"📦",fabText:"My box",fabTextOn:true,fabFx:"bounce",fabBg:"#FFD43B",fabInk:"#000096",fabHide:true});
   if(!Array.isArray(db.categories)){db.categories=DEFAULT_CATS.map(c=>({...c}));db.products.forEach(p=>{if(p.cat===undefined)p.cat=CAT_OF[p.id]||""})}
   db.products.forEach(p=>{if(p.cat===undefined)p.cat="";if(!Array.isArray(p.reviews))p.reviews=[]});
   db.products.forEach(p=>{if(p.track===undefined){p.track=true;p.stock=p.status==="soldout"?0:40}if(typeof p.stock!=="number")p.stock=0});
@@ -544,7 +545,7 @@ function renderStore(){
   // sizes (with live sale prices)
   $("#sizes").innerHTML = activeSizes().map(s=>{const sale=bestSale(s.n),now=sale?r2(s.price-saleDiscount(sale,s.price)):s.price;
     return `<button class="size" type="button" data-size="${s.n}" aria-pressed="${s.n===S.size}">${sale?`<span class="saletag">${sale.type==="percent"?"−"+sale.value+"%":"Sale"}</span>`:""}${giftPlan(s.n).length?`<span class="saletag gifttag${sale?" l":""}">🎁 Gift</span>`:""}<strong>${s.n}</strong><small>COOKIES</small><span class="num">${sale?`<s>${money(s.price)}</s>`:""}${money(now)}</span></button>`}).join("");
-  renderGiftHint();
+  renderGiftHint();renderBarExtras();renderFab();
   document.querySelectorAll(".card").forEach(c=>{const st=c.querySelector(".stepper");if(!st)return;const n=countOf(c.dataset.id);st.querySelector("output").textContent=n;c.classList.toggle("has",n>0);
     st.querySelector('[data-act="dec"]').disabled=n===0;st.querySelector('[data-act="inc"]').disabled=full()||n>=stockLeft(prod(c.dataset.id))});
   $("#fillRest").disabled=full();
@@ -797,6 +798,49 @@ function randomFill(){
   renderStore();if(full())celebrate();
   if(!RM)$("#randBtn svg").animate([{transform:"rotate(0)"},{transform:"rotate(360deg)"}],{duration:500,easing:"ease-out"});
 }
+/* phone bar: random fill / shuffle button, and the floating "show my box" circle (both set in Boxes & extras) */
+function showMyBox(){
+  const el=$(".boxpanel");if(!el)return;
+  const fl=$("#flash"),head=$(".top").getBoundingClientRect().height+(fl.hidden||fl.parentNode===$(".top")?0:fl.getBoundingClientRect().height);
+  const go=()=>scrollTo({top:Math.max(0,el.getBoundingClientRect().top+scrollY-head-12),behavior:RM?"auto":"smooth"});
+  go();el.classList.remove("boxflash");void el.offsetWidth;el.classList.add("boxflash");setTimeout(()=>el.classList.remove("boxflash"),1500);
+}
+const fxOk=(v,a,d)=>a.includes(v)?v:d,hexOk=(v,d)=>/^#[0-9a-f]{6}$/i.test(v||"")?v:d;
+function renderBarExtras(){
+  const t=DB.settings,rb=$("#barRand");if(!rb)return;
+  const on=t.rbOn!==false;rb.hidden=!on;if(!on)return;
+  const shuf=full(),ic=String(shuf?t.rbIcon2:t.rbIcon).trim()||(shuf?"🔀":"🎲");
+  if(rb.dataset.ic!==ic){rb.dataset.ic=ic;rb.textContent=ic}
+  rb.className="barrand fx-"+fxOk(t.rbFx,["wiggle","pulse","none"],"wiggle");
+  rb.style.setProperty("--rb-bg",hexOk(t.rbBg,"#FFD43B"));
+  rb.setAttribute("aria-label",shuf?"Shuffle my box":"Random fill");rb.title=shuf?"Shuffle my box":"Random fill";
+  rb.disabled=!availProducts().length;
+}
+let boxSeen=false;
+function renderFab(){
+  const t=DB.settings,f=$("#fab");if(!f)return;
+  const on=t.fabOn!==false;f.hidden=!on;if(!on)return;
+  const ic=String(t.fabIcon).trim()||"📦",tx=t.fabTextOn!==false?String(t.fabText||"").trim().slice(0,14):"";
+  if($("#fabIc").textContent!==ic)$("#fabIc").textContent=ic;
+  const tt=$("#fabTx");if(tt.textContent!==tx)tt.textContent=tx;tt.hidden=!tx;
+  f.className="fab fx-"+fxOk(t.fabFx,["bounce","pulse","glow","none"],"bounce")+(f.classList.contains("dragging")?" dragging":"")+(t.fabHide!==false&&boxSeen?" away":"");
+  f.style.setProperty("--fab-bg",hexOk(t.fabBg,"#FFD43B"));f.style.setProperty("--fab-ink",hexOk(t.fabInk,"#000096"));
+  f.title=tx||"Show my box";
+  if(!f.dataset.placed){f.dataset.placed="1";if(window.fabApply)fabApply()}
+}
+(function(){
+  const f=$("#fab");if(!f)return;const KEY="delidome-fab-v1";let st=null;
+  const place=(x,y)=>{const w=f.offsetWidth||58,h=f.offsetHeight||58;x=Math.min(Math.max(6,x),innerWidth-w-6);y=Math.min(Math.max(6,y),innerHeight-h-6);f.style.left=x+"px";f.style.top=y+"px";f.style.bottom="auto"};
+  window.fabApply=()=>{try{const q=JSON.parse(localStorage.getItem(KEY)||"null");if(q&&typeof q.x==="number"&&typeof q.y==="number")place(q.x*innerWidth,q.y*innerHeight)}catch(e){}};
+  f.addEventListener("pointerdown",e=>{st={id:e.pointerId,sx:e.clientX,sy:e.clientY,ox:f.offsetLeft,oy:f.offsetTop,moved:false};try{f.setPointerCapture(e.pointerId)}catch(x){}});
+  f.addEventListener("pointermove",e=>{if(!st||e.pointerId!==st.id)return;const dx=e.clientX-st.sx,dy=e.clientY-st.sy;if(!st.moved&&Math.hypot(dx,dy)<7)return;st.moved=true;f.classList.add("dragging");place(st.ox+dx,st.oy+dy)});
+  const end=()=>{if(!st)return;const m=st.moved;st=null;f.classList.remove("dragging");
+    if(m){try{localStorage.setItem(KEY,JSON.stringify({x:f.offsetLeft/innerWidth,y:f.offsetTop/innerHeight}))}catch(x){}f.dataset.moved="1";setTimeout(()=>{delete f.dataset.moved},60)}};
+  f.addEventListener("pointerup",end);f.addEventListener("pointercancel",end);
+  f.addEventListener("click",()=>{if(f.dataset.moved)return;showMyBox()});
+  addEventListener("resize",()=>{if(f.style.top)window.fabApply()});
+  const bp=$(".boxpanel");if(bp&&"IntersectionObserver" in window)new IntersectionObserver(es=>{boxSeen=es[0].intersectionRatio>0.35;renderFab()},{threshold:[0,.35,.7]}).observe(bp);
+})();
 function clearBox(){if(!S.box.length)return;S.shuf=0;S.box.forEach((_,i)=>ghostOut(i));S.box=[];S.step=1;renderStore()}
 function scrollToEl(el){
   const go=()=>{const fl=$("#flash"),head=$(".top").getBoundingClientRect().height+(fl.hidden||fl.parentNode===$(".top")?0:fl.getBoundingClientRect().height);
@@ -1043,6 +1087,7 @@ $("#menuGrid").addEventListener("click",e=>{const b=e.target.closest("[data-act]
 $("#slots").addEventListener("click",e=>{const b=e.target.closest("[data-slot]");if(b)removeAt(+b.dataset.slot)});
 $("#fillRest").addEventListener("click",fillRest);
 $("#randBtn").addEventListener("click",randomFill);
+$("#barRand").addEventListener("click",()=>{randomFill();if(DB.settings.rbScroll!==false)setTimeout(showMyBox,260)});
 $("#clearBtn").addEventListener("click",clearBox);
 $("#tab1").addEventListener("click",()=>goStep(1));
 $("#tab2").addEventListener("click",()=>goStep(2));
@@ -2952,7 +2997,43 @@ function viewBoxes(){
         <td class="r">${ROLE()==="owner"?`<button class="danger" type="button" data-adel="${a.id}">Delete</button>`:""}</td></tr>`).join("")}
       </tbody></table></div>`:`<div class="empty">No extras yet.</div>`}
     </section>
+    ${btnPanels()}
   </div>`;
+}
+/* Boxes & extras: the phone bar random button and the floating "show my box" circle */
+const BTN_FX_RB=[["wiggle","Wiggle now and then"],["pulse","Gentle pulse"],["none","No movement"]],BTN_FX_FAB=[["bounce","Bounce"],["pulse","Gentle pulse"],["glow","Glowing ring"],["none","No movement"]];
+function btnPreviewHTML(){
+  const t=DB.settings,ic=String(t.rbIcon).trim()||"🎲",ic2=String(t.rbIcon2).trim()||"🔀",fi=String(t.fabIcon).trim()||"📦",tx=t.fabTextOn!==false?String(t.fabText||"").trim().slice(0,14):"";
+  return `<span class="barrand fx-${fxOk(t.rbFx,["wiggle","pulse","none"],"wiggle")}" style="--rb-bg:${hexOk(t.rbBg,"#FFD43B")}" title="Random fill">${esc(ic)}</span>
+    <span class="barrand fx-none" style="--rb-bg:${hexOk(t.rbBg,"#FFD43B")}" title="After the box is full (shuffle)">${esc(ic2)}</span>
+    <span class="fab fx-${fxOk(t.fabFx,["bounce","pulse","glow","none"],"bounce")}" style="--fab-bg:${hexOk(t.fabBg,"#FFD43B")};--fab-ink:${hexOk(t.fabInk,"#000096")}"><span aria-hidden="true">${esc(fi)}</span>${tx?`<small class="fab-tx">${esc(tx)}</small>`:""}</span>`;
+}
+function btnPanels(){
+  const t=DB.settings,sw=(k,label)=>`<label class="chk"><span class="sw"><input type="checkbox" data-k="settings::${k}" ${t[k]!==false?"checked":""}><span></span></span><span>${label}</span></label>`,
+    sel=(k,opts)=>`<select class="in" data-k="settings::${k}">${opts.map(([v,l])=>`<option value="${v}" ${t[k]===v?"selected":""}>${l}</option>`).join("")}</select>`,
+    col=(k,l)=>`<label class="af">${l}<input type="color" data-k="settings::${k}" value="${hexOk(t[k],"#FFD43B")}" style="width:100%;height:42px"></label>`;
+  return `<section class="panel">
+    <h2>Random button and "show my box" circle</h2>
+    <p class="sub">Two helpers for phone customers. Press <b>Publish</b> after changing them. Emoji work best as icons, one or two characters.</p>
+    <div class="stack" style="gap:14px">
+      <h3 style="margin:0;font-size:15px">1. Random button (next to the pick button on phones)</h3>
+      ${sw("rbOn","Show the random button")}
+      <div class="grid2"><label class="af">Icon<input class="in" data-k="settings::rbIcon" maxlength="4" value="${esc(t.rbIcon||"")}" placeholder="🎲"></label>
+        <label class="af">Icon once the box is full (shuffle)<input class="in" data-k="settings::rbIcon2" maxlength="4" value="${esc(t.rbIcon2||"")}" placeholder="🔀"></label></div>
+      <div class="grid2">${col("rbBg","Button colour")}<label class="af">Movement${sel("rbFx",BTN_FX_RB)}</label></div>
+      ${sw("rbScroll","Scroll to the box after the customer presses it")}
+      <h3 style="margin:6px 0 0;font-size:15px">2. Floating "show my box" circle</h3>
+      <p class="note" style="margin:0">Customers can drag it anywhere. It starts at the bottom left, above the price. Pressing it scrolls to their box.</p>
+      ${sw("fabOn","Show the floating circle")}
+      <div class="grid2"><label class="af">Icon<input class="in" data-k="settings::fabIcon" maxlength="4" value="${esc(t.fabIcon||"")}" placeholder="📦"></label>
+        <label class="af">Tiny text under the icon<input class="in" data-k="settings::fabText" maxlength="14" value="${esc(t.fabText||"")}" placeholder="My box"></label></div>
+      ${sw("fabTextOn","Show the tiny text")}
+      <div class="grid2">${col("fabBg","Circle colour")}${col("fabInk","Icon and text colour")}</div>
+      <label class="af">Movement${sel("fabFx",BTN_FX_FAB)}</label>
+      ${sw("fabHide","Hide the circle while the box is already on screen")}
+      <div class="af">Preview<div class="fabprev" id="btnPrev">${btnPreviewHTML()}</div></div>
+    </div>
+  </section>`;
 }
 
 /* --- Settings --- */
@@ -4286,6 +4367,8 @@ am.addEventListener("click",async e=>{const b=e.target.closest("button");if(!b)r
       toast(BSA.test.t);renderAdmin()}
     else if(d.bsa==="copy"){const i=b.parentNode.querySelector("input");try{await navigator.clipboard.writeText(i.value);toast("Copied")}catch(err){i.select()}}
   }catch(err){b.disabled=false;if(d.bsa==="test")b.textContent="Test connection";bsAdmMsg(err.message,true);toast(err.message)}});
+/* Boxes & extras: keep the little preview of the two buttons in step with the settings */
+["input","change"].forEach(ev=>am.addEventListener(ev,e=>{const k=e.target.dataset&&e.target.dataset.k;if(k&&/^settings::(rb|fab)/.test(k)){const pv=$("#btnPrev");if(pv)pv.innerHTML=btnPreviewHTML()}}));
 /* --- gift editor (Flash sales tab, Gifts promo) --- */
 am.addEventListener("input",e=>{const el=e.target,D=A.draft;
   if(el.dataset.gname!==undefined){D.gifts[+el.dataset.gname].name=el.value;document.querySelectorAll("[data-rchips]").forEach(c=>{c.innerHTML=giftChipsHTML(D,D.rules[+c.dataset.rchips],+c.dataset.rchips)});updatePreview()}
