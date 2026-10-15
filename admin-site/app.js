@@ -244,8 +244,8 @@ const bsBadge=o=>{const b=o.bship;if(!b||!b.courier||o.mode!=="delivery")return 
 const bsProof=(b,k)=>{const ov=b.proofOverride&&b.proofOverride[k];if(ov)return {urls:[ov],by:"shop"};const a=(b.proofs&&b.proofs[k])||[];return a.length?{urls:a,by:"courier"}:null};
 const bsHTML=(o,adm)=>{const b=o.bship;if(!b||!b.courier||o.mode!=="delivery")return "";
   const booked=!!b.biteshipId,st=b.status?(BS_ST[b.status]||b.status):"",nm=esc((b.courierName||b.courier)+" "+(b.serviceName||b.service)),dr=b.driver;
-  const fail=b.failed?`<div class="oc-alert cmp" style="margin:0 0 8px">🛵 ${esc(st||"Courier failed")}. ${adm?"Book again below"+(b.retries?" (already retried once)":""):"We're arranging another courier."}</div>`:"";
-  const lines=`<dt>Courier</dt><dd>${nm}${b.eta?` · ${esc(b.eta)}`:""}</dd>${st?`<dt>Status</dt><dd><b>${esc(st)}</b>${b.statusAt?` <small class="note">${fmtAgo(b.statusAt)}</small>`:""}</dd>`:booked?"":`<dt>Status</dt><dd>${adm?"Not booked yet":"We'll call the courier when your cookies are ready"}</dd>`}
+  const fail=adm&&b.failed?`<div class="oc-alert cmp" style="margin:0 0 8px">🛵 ${esc(st||"Courier failed")}. Book again below${b.retries?" (already retried once)":""}</div>`:"";
+  const lines=!adm?`<dt>Courier</dt><dd>${nm}${b.eta?` · ${esc(b.eta)}`:""}</dd>${b.waybill?`<dt>Waybill</dt><dd>${esc(b.waybill)}</dd>`:""}`:`<dt>Courier</dt><dd>${nm}${b.eta?` · ${esc(b.eta)}`:""}</dd>${st?`<dt>Status</dt><dd><b>${esc(st)}</b>${b.statusAt?` <small class="note">${fmtAgo(b.statusAt)}</small>`:""}</dd>`:booked?"":`<dt>Status</dt><dd>${adm?"Not booked yet":"We'll call the courier when your cookies are ready"}</dd>`}
     ${dr&&(dr.name||dr.plate)?`<dt>Driver</dt><dd>${esc(dr.name||"")}${dr.plate?` · ${esc(dr.plate)}`:""}${dr.phone?` · <a href="tel:${esc(dr.phone)}">${esc(dr.phone)}</a>`:""}</dd>`:""}
     ${b.waybill?`<dt>Waybill</dt><dd>${esc(b.waybill)}</dd>`:""}${b.link&&booked?`<dt>Tracking</dt><dd><a href="${esc(safeUrl(b.link))}" target="_blank" rel="noopener">Track the courier live</a></dd>`:""}
     ${adm&&b.price!==undefined?`<dt>Price</dt><dd>${money(b.price)} quoted${b.bookedPrice!==undefined&&b.bookedAt?` · ${money(b.bookedPrice)} booked`:""}</dd>`:""}`;
@@ -1237,8 +1237,8 @@ function drawBell(list){
     items.push({at:Infinity,h:`<button class="bell-it bell-pay" type="button" data-bellgo="${o.id}"><span class="bell-ic" aria-hidden="true">⏰</span><span class="bell-tx"><small>Order #${esc(o.code)} · ${isRej(o)?"payment rejected":"waiting for payment"}</small><b>${isRej(o)?"Payment rejected – please send a new proof":"Pay now or you'll miss your cookies!"}</b>${isRej(o)&&o.rejected.reason?`<span class="bell-rej">Reason: ${esc(o.rejected.reason)}</span>`:""}<span class="bell-cdrow">Time left: <span class="cd" data-exp="${o.expiresAt}">${fmtLeft(o.expiresAt-Date.now())}</span></span></span><span class="bell-ch" aria-hidden="true">›</span></button>`})});
   if(BELLF!=="deals")refundList().forEach(o=>{
     items.push({at:o.refund.at,h:`<button class="bell-it${o.refund.at>SEENV?" new":""}" type="button" data-bellgo="${o.id}"><span class="bell-ic" aria-hidden="true">💸</span><span class="bell-tx"><small>Order #${esc(o.code)} · ${fmtAgo(o.refund.at)}</small><b>${o.refund.full?"Your order was refunded":"Part of your order was refunded"}: ${money(o.refund.amount)}</b><span>${o.refund.note?esc(o.refund.note)+" · ":""}It can take a few days to show in your account.</span></span><span class="bell-ch" aria-hidden="true">›</span></button>`})});
-  if(BELLF!=="deals")list.forEach(x=>{const st=x.m.status,o=x.o,lab=st?stLabel(st,o.mode):"Update";
-    items.push({at:x.m.at,h:`<button class="bell-it${x.m.at>SEENV?" new":""}" type="button" data-bellgo="${o.id}"><span class="bell-ic" aria-hidden="true">${ST_ICON[st]||"📦"}</span><span class="bell-tx"><small>Order · ${fmtAgo(x.m.at)}</small><b>Order #${esc(o.code)} · ${esc(lab)}</b><span>${esc(x.m.text)}</span></span><span class="bell-ch" aria-hidden="true">›</span></button>`})});
+  if(BELLF!=="deals")list.forEach(x=>{const st=x.m.status,o=x.o,lab=x.m.courier?"Courier update":st==="complaint"?"Complaint update":st?stLabel(st,o.mode):"Update";
+    items.push({at:x.m.at,h:`<button class="bell-it${x.m.at>SEENV?" new":""}" type="button" data-bellgo="${o.id}"><span class="bell-ic" aria-hidden="true">${x.m.courier?"🛵":st==="complaint"?"💬":ST_ICON[st]||"📦"}</span><span class="bell-tx"><small>Order · ${fmtAgo(x.m.at)}</small><b>Order #${esc(o.code)} · ${esc(lab)}</b><span>${esc(x.m.text)}</span></span><span class="bell-ch" aria-hidden="true">›</span></button>`})});
   if(BELLF!=="orders")DB.sales.filter(s=>saleStatus(s)!=="ended").forEach(s=>{const live=saleStatus(s)==="live";
     items.push({at:live?s.start:Date.now()-3600e3,h:`<button class="bell-it" type="button" data-bellsale="1"><span class="bell-ic" aria-hidden="true">${isFD(s)?"🚚":isGift(s)?"🎁":"🔥"}</span><span class="bell-tx"><small>${isFD(s)?"Free delivery":isGift(s)?"Gifts":"Flash sale"} · ${live?fmtAgo(s.start):"coming up"}</small><b>${isFD(s)?(live?"Free delivery now":"Free delivery soon"):isGift(s)?(live?"Gifts now":"Gifts soon"):(live?"Flash sale now":"Flash sale soon")}: ${esc(s.name)}</b><span>${esc(saleOffText(s))} · ${live?"ends":"starts"} ${fmtDT(live?s.end:s.start)}</span></span><span class="bell-ch" aria-hidden="true">›</span></button>`})});
   if(BELLF!=="orders")activeBroadcasts().forEach(x=>{const p=x.pid&&prod(x.pid);
@@ -1294,14 +1294,41 @@ async function processProof(file){
     return c.toDataURL("image/jpeg",.78);
   }finally{URL.revokeObjectURL(url)}
 }
+const bsDriverLine=b=>{const d=b.driver;return d&&(d.name||d.plate||d.phone)?`Driver: <b>${esc(d.name||"Your driver")}</b>${d.plate?` · ${esc(d.plate)}`:""}${d.phone?` · <a href="tel:${esc(d.phone)}">${esc(d.phone)}</a>`:""}`:""};
+const bsLiveLink=b=>b.link&&b.biteshipId?`<a href="${esc(safeUrl(b.link))}" target="_blank" rel="noopener">Track the courier live</a>`:"";
+/* the "Courier pickup" step of the customer tracker: what the booking is doing right now */
+function courierStep(o,b){
+  const dl=bsDriverLine(b),lk=bsLiveLink(b),both=[dl,lk].filter(Boolean).join("<br>");
+  if(o.status==="ready"||o.status==="completed")return {label:"Picked up by the courier",sub:both};
+  if(b.biteshipId){
+    if(b.status==="allocated"||b.status==="picking_up")return {label:b.status==="picking_up"?"Driver on the way to pick up":"Driver found",sub:both||"Your driver is coming to pick up your cookies."};
+    return {label:"Searching for a driver…",srch:1,sub:["We're finding a courier for your order.",lk].filter(Boolean).join("<br>")};
+  }
+  if(b.failed)return {label:"Searching for a driver…",srch:1,sub:`<span class="trk-rej">No driver yet. We're arranging another courier.</span>`};
+  return {label:"Courier pickup",sub:"We'll call the courier when your cookies are ready."};
+}
 function moSteps(o){
   if(o.bship&&o.bship.biteshipId&&o.mode==="delivery"&&!o.courier)o.courier=(o.bship.courierName||o.bship.courier)+" "+(o.bship.serviceName||o.bship.service);
-  const labels=["Order placed","Payment","Confirmed","Baking",o.mode==="delivery"?"Out for delivery":"Ready for pickup",o.mode==="delivery"?"Delivered":"Picked up"];
-  const idx={awaiting:1,review:1,new:2,baking:3,ready:4,completed:5}[o.status]??1;
-  const del=o.mode==="delivery",ship=del&&(o.courier||o.awb);
-  const sub=i=>i===1&&isRej(o)?`<span class="trk-rej">Rejected${o.rejected.reason?": "+esc(o.rejected.reason):""}. Please send a new proof.</span>`:i===4&&del?(ship?`<span class="trk">${o.courier?`Courier: <b>${esc(o.courier)}</b>`:""}${o.courier&&o.awb?"<br>":""}${o.awb?`Airway bill: <b>${esc(o.awb)}</b> <button class="trkcopy" type="button" data-awbcopy="${esc(o.awb)}">Copy</button>`:""}</span>`:(o.status==="ready"?"Courier details will show here soon":"")):i===0?fmtDT(o.createdAt):i===1?(o.status==="awaiting"?"Waiting for your payment":o.status==="review"?"Proof sent, we're checking it":"Received"):"";
-  return `<ol class="track-l">${labels.map((l,i)=>{const done=i<idx||(o.status==="completed"&&i===5),now=i===idx&&!done;
-    return `<li class="${done?"done":now?"now":""}"><span class="dot">${done?"✓":""}</span><span>${l}${(done||now||(i===4&&ship&&o.status==="completed"))&&sub(i)?`<small>${sub(i)}</small>`:""}</span></li>`}).join("")}</ol>`;
+  const del=o.mode==="delivery",b=del&&o.bship&&o.bship.courier?o.bship:null,cs=b?courierStep(o,b):null,ship=del&&(o.courier||o.awb),cp=o.complaint;
+  const labels=["Order placed","Payment","Confirmed","Baking"];
+  if(b)labels.push(cs.label);
+  labels.push(del?"Out for delivery":"Ready for pickup",del?"Delivered":"Picked up");
+  const off=b?1:0,outI=4+off,endI=5+off,cpI=6+off;
+  if(cp)labels.push("Problem reported");
+  let idx={awaiting:1,review:1,new:2,baking:3,ready:4,completed:5}[o.status]??1;
+  if(b){if(idx>=4)idx+=1;else if(o.status==="baking"&&(b.biteshipId||b.failed))idx=4}
+  const failed=!!b&&o.status!=="completed"&&(b.status==="returned"||b.status==="disposed");
+  if(failed)labels[endI]="Delivery failed";
+  const cpDone=!!cp&&(cp.status==="resolved"||cp.status==="rejected");
+  const sub=i=>i===1&&isRej(o)?`<span class="trk-rej">Rejected${o.rejected.reason?": "+esc(o.rejected.reason):""}. Please send a new proof.</span>`:
+    i===outI&&del?(ship?`<span class="trk">${o.courier?`Courier: <b>${esc(o.courier)}</b>`:""}${o.courier&&o.awb?"<br>":""}${o.awb?`Airway bill: <b>${esc(o.awb)}</b> <button class="trkcopy" type="button" data-awbcopy="${esc(o.awb)}">Copy</button>`:""}</span>`:(o.status==="ready"?"Courier details will show here soon":"")):
+    i===0?fmtDT(o.createdAt):i===1?(o.status==="awaiting"?"Waiting for your payment":o.status==="review"?"Proof sent, we're checking it":"Received"):
+    b&&i===4?cs.sub:failed&&i===endI?`<span class="trk-rej">The courier couldn't deliver and your order is being returned. We'll contact you.</span>`:
+    cp&&i===cpI?`${CP_STATUS[cp.status]||""}${cp.reply?": "+esc(cp.reply):""}`:"";
+  return `<ol class="track-l">${labels.map((l,i)=>{
+    const bad=failed&&i===endI,done=!bad&&(i<idx||(o.status==="completed"&&i===endI)||(!!cp&&i===cpI&&cpDone)),now=!bad&&!done&&(i===idx||(!!cp&&i===cpI)),srch=!!b&&i===4&&!!cs.srch&&now;
+    const st=(done||now||bad||(i===outI&&ship&&o.status==="completed"))?sub(i):"";
+    return `<li class="${done?"done":now?"now":""}${bad?" bad":""}${srch?" srch":""}"><span class="dot">${done?"✓":bad?"!":""}</span><span>${l}${st?`<small>${st}</small>`:""}</span></li>`}).join("")}</ol>`;
 }
 
 /* --- ratings and complaints (customer) --- */
@@ -3839,7 +3866,9 @@ function openComplaint(id){
 }
 $("#drawer").addEventListener("click",e=>{
   if(e.target.closest("[data-cpsave]")){const o=DB.orders.find(x=>x.id===A.cpOpen);if(!o||!o.complaint)return;
-    o.complaint.status=$("#cpStatus").value;o.complaint.reply=$("#cpReply").value.trim();o.complaint.updatedAt=Date.now();saveDB();toast("Response saved");renderAdmin();openComplaint(o.id)}
+    const prevCp=o.complaint.status;o.complaint.status=$("#cpStatus").value;o.complaint.reply=$("#cpReply").value.trim();o.complaint.updatedAt=Date.now();
+    if(o.complaint.status==="resolved"&&prevCp!=="resolved")logMsg(o,chanList(o.notify||"both"),"complaint",`Hi ${o.customer.name.split(" ")[0]||"there"}, your complaint for order ${o.code} was resolved.${o.complaint.reply?" "+o.complaint.reply:""}`,"staff");
+    saveDB();toast("Response saved");renderAdmin();openComplaint(o.id)}
 });
 am.addEventListener("click",e=>{
   const f=e.target.closest("[data-cpfilter]");if(f){A.cpFilter=f.dataset.cpfilter;renderAdmin();return}

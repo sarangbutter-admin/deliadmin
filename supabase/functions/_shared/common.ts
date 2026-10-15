@@ -200,6 +200,11 @@ export async function bookOrder(db: any, key: string, cfg: any, row: { id: strin
     history: [...(sh.history || []), { s: cl(b.status, 30) || "confirmed", at: now }].slice(-25),
   };
   const next: any = { ...o, bship: nsh, courier: cl((sh.courierName || sh.courier) + " " + (sh.serviceName || sh.service), 40), awb: cl(cr.waybill_id, 40) || o.awb || "" };
+  // tell the customer the courier search has started (shows in their bell)
+  next.msgs = [...(o.msgs || []), {
+    at: now, channel: o.notify === "email" ? "email" : "whatsapp", status: o.status, by: "system", courier: true,
+    text: sh.failed ? "We booked another courier for your order. Searching for a driver now. Follow it in My orders." : "We're looking for a courier to pick up your order. You'll see the driver in My orders as soon as one accepts.",
+  }].slice(-80);
   await db.from("orders").update({ data: next, updated_at: now }).eq("id", row.id);
   return { bship: nsh, order: next };
 }

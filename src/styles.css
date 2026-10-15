@@ -1147,3 +1147,10 @@ body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
 .gm-c{position:absolute;left:50%;top:70px;width:8px;height:12px;border-radius:2px;pointer-events:none;animation:gmc 1.4s ease-out forwards}
 @keyframes gmc{to{transform:translate(var(--dx),var(--dy)) rotate(var(--r));opacity:0}}
 @media (prefers-reduced-motion:reduce){.gm-box,.gifthint-b,.gs-card,.gm-gifts{animation:none!important}}
+
+/* tracker: courier step, failed delivery */
+.track-l li.bad{color:#C8102E;font-weight:700}.track-l li.bad .dot{background:#C8102E;border-color:#C8102E}
+.track-l li.srch .dot{animation:trksrch 1.3s ease-in-out infinite}
+@keyframes trksrch{0%,100%{box-shadow:0 0 0 4px var(--ice)}50%{box-shadow:0 0 0 9px rgba(0,0,150,.08)}}
+.track-l li small a{color:var(--blue);font-weight:700}
+@media (prefers-reduced-motion:reduce){.track-l li.srch .dot{animation:none}}
