@@ -167,7 +167,7 @@ function migrate(db){
   if(db.settings.lowStockAt===undefined)db.settings.lowStockAt=10;
   if(db.settings.customOn===undefined)Object.assign(db.settings,{customOn:true,customMin:14,customStep:2,customMax:48,customPer:3.25});
   if(db.settings.fabGest===undefined)Object.assign(db.settings,{fabGest:true,fabBgType:"color",fabBg2:"#FF9F43",fabRing:"",fabImgSize:84,fabSizePx:58,fabOpacity:100,fabImg:"",rbImg:"",rbImg2:""});
-  if(db.settings.guardOn===undefined)Object.assign(db.settings,{guardOn:true,guardClear:true,guardShuf:true,guardIcon:"🛡️",
+  if(db.settings.guardOn===undefined)Object.assign(db.settings,{guardOn:true,guardClear:true,guardShuf:true,guardIcon:"🛡️",guardImg:"",
     guardClearTitle:"Clear your box?",guardClearText:"You already picked a courier. This will empty your whole box. Your courier choice stays.",guardClearOk:"Yes, clear it",guardClearNo:"Keep my box",
     guardShufTitle:"Shuffle your box?",guardShufText:"You already picked a courier. This swaps your flavors for a new random mix.",guardShufOk:"Yes, shuffle",guardShufNo:"Keep my box"});
   if(db.settings.rbOn===undefined)Object.assign(db.settings,{rbOn:true,rbIcon:"🎲",rbIcon2:"🔀",rbBg:"#FFD43B",rbFx:"wiggle",rbScroll:true,fabOn:true,fabIcon:"📦",fabText:"My box",fabTextOn:true,fabFx:"bounce",fabBg:"#FFD43B",fabInk:"#000096",fabHide:true});
@@ -902,7 +902,8 @@ function renderFab(){
 /* a small "are you sure?" before Clear box or Shuffle once a courier is chosen (wording set in Boxes & extras) */
 function guardCardHTML(kind,t){
   const k=kind==="clear"?"Clear":"Shuf",g=(f,d)=>String(t["guard"+k+f]||"").trim()||d;
-  return `<div class="cw-ring"><span class="cw-emo" aria-hidden="true">${esc(String(t.guardIcon||"").trim()||"🛡️")}</span></div><h3 id="gdTitle">${esc(g("Title","Are you sure?"))}</h3>${g("Text","")?`<p>${esc(g("Text",""))}</p>`:""}<div class="cw-act"><button class="btn btn-blue" type="button" data-gdno>${esc(g("No","Keep my box"))}</button><button class="btn btn-ghost-blue" type="button" data-gdok>${esc(g("Ok","Yes"))}</button></div>`;
+  const pic=imgOk(t.guardImg)?`<div class="gd-pic"><img class="${imgIsCut(t.guardImg,t.guardImgCut)?"cut":""}" src="${esc(imgOk(t.guardImg))}" alt="" draggable="false"></div>`:`<div class="cw-ring"><span class="cw-emo" aria-hidden="true">${esc(String(t.guardIcon||"").trim()||"🛡️")}</span></div>`;
+  return `${pic}<h3 id="gdTitle">${esc(g("Title","Are you sure?"))}</h3>${g("Text","")?`<p>${esc(g("Text",""))}</p>`:""}<div class="cw-act"><button class="btn btn-blue" type="button" data-gdno>${esc(g("No","Keep my box"))}</button><button class="btn btn-ghost-blue" type="button" data-gdok>${esc(g("Ok","Yes"))}</button></div>`;
 }
 let gdFn=null;
 function guardBox(kind,fn){
@@ -3085,10 +3086,11 @@ function guardPanel(){
       ${tx("guard"+k+"Title","Title",60)}${area("guard"+k+"Text","Message")}<div class="grid2">${tx("guard"+k+"No","Cancel button (shown first, on top)",24)}${tx("guard"+k+"Ok","Confirm button (shown below)",24)}</div>`;
   return `<section class="panel">
     <h2>"Are you sure?" pop-up for Clear box and Shuffle</h2>
-    <p class="sub">After a customer has chosen a courier, a small pop-up asks before the box is cleared or shuffled, so it can't happen by accident. Press <b>Publish</b> after changing the wording.</p>
+    <p class="sub">After a customer has chosen a courier, a small pop-up asks before the box is cleared or shuffled, so it can't happen by accident. Use an emoji or your own picture (a PNG or WebP with a transparent background looks best). Press <b>Publish</b> after changing it.</p>
     <div class="stack" style="gap:12px">
       ${sw("guardOn","Show the pop-up")}
-      <label class="af">Icon<input class="in" data-k="settings::guardIcon" maxlength="4" value="${esc(t.guardIcon||"")}" placeholder="🛡️" style="max-width:120px"></label>
+      <div class="grid2"><label class="af">Icon<input class="in" data-k="settings::guardIcon" maxlength="4" value="${esc(t.guardIcon||"")}" placeholder="🛡️"></label>
+        <div class="af">Own picture instead of the icon<div class="colin" style="flex-wrap:wrap;gap:8px;align-items:center"><span>${imgOk(t.guardImg)?`<img class="lpthumb" style="max-height:48px;max-width:48px;border-radius:50%" src="${esc(imgOk(t.guardImg))}" alt="">`:`<span class="note" style="margin:0">None</span>`}</span><label class="ghost mqbtn">${imgOk(t.guardImg)?"Replace picture":"Upload picture"}<input type="file" accept="image/*" hidden data-btnimg="guardImg"></label>${imgOk(t.guardImg)?`<button class="danger" type="button" data-btnimgrm="guardImg">Use the icon instead</button>`:""}</div></div></div>
       ${grp("Clear","Clear box")}${grp("Shuf","Shuffle")}
       <div class="af">Preview<div class="grid2" id="gdPrev">${guardPrevHTML()}</div></div>
     </div></section>`;
@@ -4498,11 +4500,11 @@ am.addEventListener("input",e=>{const m=e.target.dataset&&e.target.dataset.fpk;i
 const FP={};
 am.addEventListener("click",e=>{const b=e.target.closest("button");if(b&&b.dataset.fabreset!==undefined){Object.assign(DB.settings,{fabSizePx:58,fabOpacity:100,fabImgSize:84});saveDB();toast("Reset");renderAdmin()}});
 /* Boxes & extras: pictures for the two buttons */
-am.addEventListener("change",async e=>{const el=e.target,k=el.dataset&&el.dataset.btnimg;if(!k||!/^(rb|fab)Img2?$/.test(k))return;const f=el.files[0];if(!f)return;
-  try{const data=await lpResize(f,k==="fabImg"?220:140,true),cut=await imgHasAlpha(f),prev=DB.settings[k],prevC=DB.settings[k+"Cut"];DB.settings[k]=data;DB.settings[k+"Cut"]=cut;
+am.addEventListener("change",async e=>{const el=e.target,k=el.dataset&&el.dataset.btnimg;if(!k||!/^((rb|fab)Img2?|guardImg)$/.test(k))return;const f=el.files[0];if(!f)return;
+  try{const data=await lpResize(f,k==="fabImg"?220:k==="guardImg"?240:140,true),cut=await imgHasAlpha(f),prev=DB.settings[k],prevC=DB.settings[k+"Cut"];DB.settings[k]=data;DB.settings[k+"Cut"]=cut;
     if(!saveDB()){DB.settings[k]=prev;DB.settings[k+"Cut"]=prevC;toast("Not enough storage space. Remove another photo first.");return}renderAdmin();toast(cut?"Picture saved (see-through background kept)":"Picture saved (cropped round)")}catch(err){toast(err.message)}});
 am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
-  if(b.dataset.btnimgrm&&/^(rb|fab)Img2?$/.test(b.dataset.btnimgrm)){DB.settings[b.dataset.btnimgrm]="";delete DB.settings[b.dataset.btnimgrm+"Cut"];saveDB();renderAdmin();toast("Using the icon")}
+  if(b.dataset.btnimgrm&&/^((rb|fab)Img2?|guardImg)$/.test(b.dataset.btnimgrm)){DB.settings[b.dataset.btnimgrm]="";delete DB.settings[b.dataset.btnimgrm+"Cut"];saveDB();renderAdmin();toast("Using the icon")}
   else if(b.dataset.fabringoff!==undefined){DB.settings.fabRing="";saveDB();renderAdmin()}});
 /* Boxes & extras: keep the little preview of the two buttons in step with the settings */
 ["input","change"].forEach(ev=>am.addEventListener(ev,e=>{const k=e.target.dataset&&e.target.dataset.k;if(k&&/^settings::(rb|fab)/.test(k)){const pv=$("#btnPrev");if(pv)pv.innerHTML=btnPreviewHTML()}

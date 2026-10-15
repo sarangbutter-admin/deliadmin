@@ -1205,3 +1205,6 @@ body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
 .gslide input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;margin-top:-9px;border-radius:50%;background:var(--blue);border:0;box-shadow:0 1px 4px rgba(0,0,60,.4)}
 .gslide input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:var(--blue);border:0}
 .gs-ends{display:flex;justify-content:space-between;font-size:13px;color:var(--muted)}
+.gd-pic{width:104px;height:104px;margin:0 auto;display:grid;place-items:center}
+.gd-pic img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;box-shadow:0 6px 16px rgba(0,0,60,.28);pointer-events:none}
+.gd-pic img.cut{border-radius:0;object-fit:contain;box-shadow:none;filter:drop-shadow(0 5px 8px rgba(0,0,60,.3))}

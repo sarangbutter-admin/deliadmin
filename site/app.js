@@ -164,7 +164,7 @@ function migrate(db){
   if(db.settings.lowStockAt===undefined)db.settings.lowStockAt=10;
   if(db.settings.customOn===undefined)Object.assign(db.settings,{customOn:true,customMin:14,customStep:2,customMax:48,customPer:3.25});
   if(db.settings.fabGest===undefined)Object.assign(db.settings,{fabGest:true,fabBgType:"color",fabBg2:"#FF9F43",fabRing:"",fabImgSize:84,fabSizePx:58,fabOpacity:100,fabImg:"",rbImg:"",rbImg2:""});
-  if(db.settings.guardOn===undefined)Object.assign(db.settings,{guardOn:true,guardClear:true,guardShuf:true,guardIcon:"🛡️",
+  if(db.settings.guardOn===undefined)Object.assign(db.settings,{guardOn:true,guardClear:true,guardShuf:true,guardIcon:"🛡️",guardImg:"",
     guardClearTitle:"Clear your box?",guardClearText:"You already picked a courier. This will empty your whole box. Your courier choice stays.",guardClearOk:"Yes, clear it",guardClearNo:"Keep my box",
     guardShufTitle:"Shuffle your box?",guardShufText:"You already picked a courier. This swaps your flavors for a new random mix.",guardShufOk:"Yes, shuffle",guardShufNo:"Keep my box"});
   if(db.settings.rbOn===undefined)Object.assign(db.settings,{rbOn:true,rbIcon:"🎲",rbIcon2:"🔀",rbBg:"#FFD43B",rbFx:"wiggle",rbScroll:true,fabOn:true,fabIcon:"📦",fabText:"My box",fabTextOn:true,fabFx:"bounce",fabBg:"#FFD43B",fabInk:"#000096",fabHide:true});
@@ -889,7 +889,8 @@ function renderFab(){
 /* a small "are you sure?" before Clear box or Shuffle once a courier is chosen (wording set in Boxes & extras) */
 function guardCardHTML(kind,t){
   const k=kind==="clear"?"Clear":"Shuf",g=(f,d)=>String(t["guard"+k+f]||"").trim()||d;
-  return `<div class="cw-ring"><span class="cw-emo" aria-hidden="true">${esc(String(t.guardIcon||"").trim()||"🛡️")}</span></div><h3 id="gdTitle">${esc(g("Title","Are you sure?"))}</h3>${g("Text","")?`<p>${esc(g("Text",""))}</p>`:""}<div class="cw-act"><button class="btn btn-blue" type="button" data-gdno>${esc(g("No","Keep my box"))}</button><button class="btn btn-ghost-blue" type="button" data-gdok>${esc(g("Ok","Yes"))}</button></div>`;
+  const pic=imgOk(t.guardImg)?`<div class="gd-pic"><img class="${imgIsCut(t.guardImg,t.guardImgCut)?"cut":""}" src="${esc(imgOk(t.guardImg))}" alt="" draggable="false"></div>`:`<div class="cw-ring"><span class="cw-emo" aria-hidden="true">${esc(String(t.guardIcon||"").trim()||"🛡️")}</span></div>`;
+  return `${pic}<h3 id="gdTitle">${esc(g("Title","Are you sure?"))}</h3>${g("Text","")?`<p>${esc(g("Text",""))}</p>`:""}<div class="cw-act"><button class="btn btn-blue" type="button" data-gdno>${esc(g("No","Keep my box"))}</button><button class="btn btn-ghost-blue" type="button" data-gdok>${esc(g("Ok","Yes"))}</button></div>`;
 }
 let gdFn=null;
 function guardBox(kind,fn){
