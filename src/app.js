@@ -2229,7 +2229,7 @@ function openOrder(id){
       <div><span>${modeName(o)}</span><span class="num">${o.fee?money(o.fee):"Free"}</span></div>
       <div class="t"><span>Total</span><span class="num">${money(o.total)}</span></div></div></div>
     <div class="dsec"><h4>Messages to customer</h4><p class="hint" style="margin:0 0 8px">Customer prefers: ${o.notify==="whatsapp"?"WhatsApp":o.notify==="email"?"Email":"WhatsApp and email"}</p>
-      ${(o.msgs||[]).length?`<div class="ditems">${o.msgs.slice().reverse().map(m=>`<div style="display:grid;gap:2px"><span class="note"><b>${CHANNELS[m.channel]}</b> · ${fmtDT(m.at)} · ${m.by==="system"?"automatic":"staff"}</span><span style="font-size:14px">${esc(m.text)}</span>${m.channel==="whatsapp"?`<a href="${esc(waLink(o,m.text))}" target="_blank" rel="noopener" class="note">Send again on WhatsApp</a>`:`<a href="${esc(mailLink(o,m.text))}" class="note">Send again by email</a>`}</div>`).join("")}</div>`:`<p class="hint" style="margin:0">No messages yet. They're logged when you change the status.</p>`}</div>
+      ${(o.msgs||[]).length?`<div class="ditems">${o.msgs.slice().reverse().map(m=>`<div style="display:grid;gap:2px"><span class="note"><b>${CHANNELS[m.channel]}</b> · ${fmtDT(m.at)} · ${m.by==="system"?"automatic":"staff"}</span><span style="font-size:14px">${esc(m.text)}</span>${m.channel==="whatsapp"?`<a href="${esc(waLink(o,m.text))}" target="_blank" rel="noopener" class="note">Send again on WhatsApp</a>`:m.channel==="email"?`<a href="${esc(mailLink(o,m.text))}" class="note">Send again by email</a>`:""}</div>`).join("")}</div>`:`<p class="hint" style="margin:0">No messages yet. They're logged when you change the status.</p>`}</div>
   </div>`;
   d.hidden=false;
 }
@@ -2243,9 +2243,10 @@ function ordRows(){
 }
 const ordRank=o=>(o.payReq||o.rejReq)&&o.status==="review"?0:o.complaint&&(o.complaint.status==="open"||o.complaint.status==="review")?0:o.status==="review"?1:2;
 // order steps: forward only for staff; confirm payment needs proof (and an owner's approval when staff confirm it)
-function stepWhy(o,st){
+function stepWhy(o,st,extra){
   const cur=o.status,own=ROLE()==="owner",del=o.mode==="delivery";
   if(st===cur)return "";
+  if(cur==="review"&&st==="awaiting"&&!(extra&&extra.reject))return "Reject the payment proof first (Check payment, then Reject with a reason). An order with a proof can't go straight back to Awaiting payment.";
   if(cur==="cancelled"&&!["awaiting","review"].includes(st))return "A cancelled order can only be reopened as Awaiting payment (or Check payment if it has a proof). Then confirm the payment again.";
   if(st==="review"&&!o.proof)return "Check payment needs the customer's payment proof first.";
   if(["baking","ready","completed"].includes(cur)&&["awaiting","review"].includes(st))return "This order is already paid. Use Cancel order or Refund instead of moving it back to payment.";
@@ -2351,7 +2352,7 @@ $("#modal").addEventListener("click",e=>{
 
 
 /* --- customer messages: templates, log, confirm dialog --- */
-const CHANNELS={whatsapp:"WhatsApp",email:"Email"};
+const CHANNELS={whatsapp:"WhatsApp",email:"Email",bell:"Shop bell"};
 function rejMsg(o,reason){const nm=(o.customer.name.split(" ")[0]||"there");return `Hi ${nm}, we couldn't accept the payment proof for order ${o.code}${reason?": "+reason:""}. Please send a new payment proof in My orders before the time runs out, or your order will be cancelled automatically.`}
 function msgText(o,st){
   const nm=(o.customer.name.split(" ")[0]||"there"),shop=DB.page.name||"Delidome",when=whenTxt(o);
@@ -2411,7 +2412,7 @@ function bsApply(o,r){if(!o||!r)return;if(r.bship)o.bship=r.bship;if(r.status)o.
 function setOrderStatus(id,st,extra){
   const o=DB.orders.find(x=>x.id===id);if(!o)return;
   if(o.status===st){renderAdmin();return}
-  const why=stepWhy(o,st);if(why){toast(why);renderAdmin();return}
+  const why=stepWhy(o,st,extra);if(why){toast(why);renderAdmin();return}
   if(ROLE()!=="owner"&&o.status==="review"&&st==="new"){   // staff: ask an owner to approve
     if(!SBH.on){toast("Sent to the owner for approval");return}
     SBH.patchOrder(id,{status:"new"}).then(()=>{toast("Payment checked. Waiting for the owner to approve it.");renderAdmin()}).catch(e=>toast(e.message));return}
@@ -2437,8 +2438,8 @@ function renderStatusDialog(){
   <p style="margin:0 0 14px"><span class="mo-chip st-${o.status}">${esc(stLabel(o.status,o.mode))}</span> → <span class="mo-chip st-${SC.extra&&SC.extra.reject?"rejected":st}">${esc(SC.extra&&SC.extra.reject?"Rejected":stLabel(st,o.mode))}</span></p>
   ${st==="cancelled"?`<p class="hint" style="margin:0 0 12px">Cancelling puts the cookies back into stock.</p>`:""}
   <div class="af" style="gap:8px">Notify the customer by
-    <div class="stack" style="gap:8px">${opt("whatsapp","WhatsApp",c.phone)}${opt("email","Email",c.email)}${opt("both","Both")}${opt("none","Don't notify")}</div>
-    <p class="note" style="margin:0">The customer chose: ${esc(pref==="both"?"WhatsApp and email":CHANNELS[pref])}.</p></div>
+    <div class="stack" style="gap:8px">${opt("whatsapp","WhatsApp",c.phone)}${opt("email","Email",c.email)}${opt("both","Both")}${opt("none","Shop bell only")}</div>
+    <p class="note" style="margin:0">The customer chose: ${esc(pref==="both"?"WhatsApp and email":pref==="none"?"no WhatsApp or email":CHANNELS[pref])}. The bell in the shop is always updated.</p></div>
   <label class="af" style="margin-top:12px">Message<textarea class="in" id="scText" rows="4" maxlength="500">${esc(SC.extra&&SC.extra.reject?rejMsg(o,SC.extra.reason):msgText(Object.assign({},o,SC.extra&&SC.extra.reason?{cancelReason:SC.extra.reason}:{}),st))}</textarea></label>
   <div class="mo-row" style="margin-top:16px;gap:10px;justify-content:flex-end"><button class="ghost" type="button" data-mclose>Keep as ${esc(stLabel(o.status,o.mode))}</button><button class="btn btn-blue btn-sm" type="button" data-scok>Yes, change status</button></div>`;
   if(!$("#modal").hidden){}else openModal($("#modalCard").innerHTML,"status");
@@ -2452,7 +2453,7 @@ $("#modal").addEventListener("click",e=>{
     const ex=SC.extra;delete o.rejReq;delete o.payReq;if(ex&&ex.reject){o.rejected={at:Date.now(),reason:ex.reason||""};o.expiresAt=Math.max(payDeadlineMs(o),Date.now()+Math.max(5,+DB.settings.rejPayMin||120)*60e3)}
     if(ex&&ex.manual){}
     applyStatus(SC.id,SC.st);
-    if(channels.length&&text)logMsg(o,channels,SC.st,text,"staff");
+    if(text)logMsg(o,channels.length?channels:["bell"],SC.st,text,"staff");   // the shop bell always gets it
     saveDB();SC.done=true;SC.text=text;SC.channels=channels;renderStatusDialog();renderAdmin();if(A.openOrder===SC.id)openOrder(SC.id);
   }
 },true);
@@ -4067,7 +4068,7 @@ function openComplaint(id){
 $("#drawer").addEventListener("click",e=>{
   if(e.target.closest("[data-cpsave]")){const o=DB.orders.find(x=>x.id===A.cpOpen);if(!o||!o.complaint)return;
     const prevCp=o.complaint.status;o.complaint.status=$("#cpStatus").value;o.complaint.reply=$("#cpReply").value.trim();o.complaint.updatedAt=Date.now();
-    if(o.complaint.status==="resolved"&&prevCp!=="resolved")logMsg(o,chanList(o.notify||"both"),"complaint",`Hi ${o.customer.name.split(" ")[0]||"there"}, your complaint for order ${o.code} was resolved.${o.complaint.reply?" "+o.complaint.reply:""}`,"staff");
+    if(o.complaint.status==="resolved"&&prevCp!=="resolved")logMsg(o,(chanList(o.notify||"both")).length?chanList(o.notify||"both"):["bell"],"complaint",`Hi ${o.customer.name.split(" ")[0]||"there"}, your complaint for order ${o.code} was resolved.${o.complaint.reply?" "+o.complaint.reply:""}`,"staff");
     saveDB();toast("Response saved");renderAdmin();openComplaint(o.id)}
 });
 am.addEventListener("click",e=>{

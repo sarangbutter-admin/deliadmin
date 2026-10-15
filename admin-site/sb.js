@@ -233,7 +233,7 @@
     OFIELDS.forEach(function (k) { var v = o[k] === undefined ? null : o[k]; if (J(v) !== sn.f[k]) { p[k] = v; any = true; } });
     var ms = o.msgs || [];
     if (ms.length > sn.ml) {
-      var add = ms.slice(sn.ml).filter(function (m) { return m && (m.channel === "whatsapp" || m.channel === "email") && (m.by === "staff" || m.by === "system"); })
+      var add = ms.slice(sn.ml).filter(function (m) { return m && (m.channel === "whatsapp" || m.channel === "email" || m.channel === "bell") && (m.by === "staff" || m.by === "system"); })
         .map(function (m) { return { at: m.at, channel: m.channel, status: m.status, text: String(m.text || "").slice(0, 800), by: m.by }; });
       if (add.length) { p.msgsAdd = add; any = true; }
     }
