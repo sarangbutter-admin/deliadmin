@@ -1031,3 +1031,11 @@ body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
 .soc-i.prev svg{width:24px;height:24px}
 /* on phones the price bar and the floating box sit over the bottom of the page: leave room under the footer so nothing is covered */
 @media (max-width:900px){#siteFoot{padding-bottom:calc(180px + env(safe-area-inset-bottom,0px))}}
+
+/* sale and gift tags sit on the top edge of the size circle, above the number, so they never cover it */
+.sizes{padding-top:16px;row-gap:22px}
+.size .saletag{top:-13px;right:-4px;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,60,.22);z-index:1}
+.size .saletag.gifttag.l{left:-4px;right:auto}
+.size .saletag.gifttag:not(.l){right:-4px}
+.size .saletag .gt{font-weight:700}
+@media (max-width:370px){.size .saletag .gt{display:none}.size .saletag{font-size:10px;padding:2px 6px;top:-18px}.sizes{padding-top:22px}}
