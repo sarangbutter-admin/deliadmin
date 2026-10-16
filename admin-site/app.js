@@ -1973,7 +1973,7 @@ function viewCoupons(){
     <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="ghost" type="button" data-cpedit="${c.id}">Edit</button><button class="ghost" type="button" data-cptog="${c.id}">${c.on?"Turn off":"Turn on"}</button><button class="danger" type="button" data-cpdel="${c.id}">Delete</button></div></div>`}).join("");
   const sw=(l,k,h)=>`<div style="display:flex;gap:10px;align-items:center;margin-top:10px"><label class="sw"><input type="checkbox" data-cpf="${k}" ${F[k]?"checked":""} aria-label="${l}"><span></span></label><span class="stlabel"><b>${l}</b><br><small style="color:var(--muted)">${h}</small></span></div>`;
   const sizes=DB.sizes.filter(z=>z.active).map(z=>`<option value="${z.n}" ${String(F&&F.appliesTo)===String(z.n)?"selected":""}>Box of ${z.n} only</option>`).join("");
-  const form=F?`<section class="panel"><h2>${F.id?"Edit coupon":"New coupon"}</h2>
+  const form=F?`<section class="panel" id="cpForm"><h2>${F.id?"Edit coupon":"New coupon"}</h2>
     <div class="grid2" style="margin-top:10px"><label class="af">Code (letters and numbers)<input class="in" data-cpf="code" maxlength="20" value="${esc(F.code)}" style="text-transform:uppercase" placeholder="SWEET10"></label>
       <label class="af">What customers see<input class="in" data-cpf="desc" maxlength="60" value="${esc(F.desc)}" placeholder="10% off your box"></label></div>
     <div class="grid3" style="margin-top:10px"><label class="af">Type<select class="in" data-cpf="type" data-cprr="1"><option value="percent" ${F.type==="percent"?"selected":""}>Percent off</option><option value="amount" ${F.type==="amount"?"selected":""}>Amount off</option><option value="freedelivery" ${F.type==="freedelivery"?"selected":""}>Free delivery</option></select></label>
@@ -2742,7 +2742,7 @@ function reuseSale(id){
     d.rules=(s.rules||[]).map(r=>({id:uid(),from:r.from,to:r.to,limit:r.limit,mode:r.mode==="random"?"random":"specific",ids:(r.ids||[]).map(i=>gm[i]).filter(Boolean),custom:!(+r.from===+r.to&&DB.sizes.some(z=>z.n===+r.from))}));
     Object.assign(d,{tag:s.tag||"Gifts",bg:s.bg||"#FFE066",ink:s.ink||"#000096",fx:s.fx||"shine"});
   }
-  A.draft=d;renderAdmin();
+  A.draft=d;renderAdmin();showNew("#saleForm",false);
   const f=$("#saleForm");if(f)f.scrollIntoView({behavior:"smooth",block:"start"});
   toast(kind==="gifts"&&!d.rules.length?"Copied the gifts. Add the rules, then press Create.":"Copied into the form. Change what you like, then press Create.");
 }
@@ -2820,7 +2820,7 @@ function giftChipsHTML(D,r,i){
   return named.map(g=>`<button class="fchip" type="button" data-rgift="${i}:${g.id}" aria-pressed="${(r.ids||[]).includes(g.id)}">${esc(g.name)}</button>`).join("")||`<span class="note">Add gifts to the pool first.</span>`}
 function giftRuleCard(D,r,i,sizes,named){
   const lim=Math.max(1,Math.min(5,Math.round(+r.limit)||1)),n=(r.ids||[]).filter(id=>named.some(g=>g.id===id)).length,cm=DB.settings;
-  return `<div class="pmcard" style="gap:8px"><div class="colin" style="flex-wrap:wrap;align-items:end">
+  return `<div class="pmcard" data-rcard="${i}" style="gap:8px"><div class="colin" style="flex-wrap:wrap;align-items:end">
     <label class="af" style="margin:0;flex:1;min-width:140px">Box<select class="in" data-rbox="${i}">${sizes.map(z=>`<option value="${z.n}" ${!r.custom&&+r.from===z.n?"selected":""}>Box of ${z.n}</option>`).join("")}<option value="custom" ${r.custom?"selected":""}>Custom box</option></select></label>
     ${r.custom?`<label class="af" style="margin:0">From<div class="money-in" style="max-width:100px"><input class="in" type="number" min="1" step="1" data-rfrom="${i}" value="${+r.from||""}" aria-label="From cookies"></div></label><label class="af" style="margin:0">To<div class="money-in" style="max-width:100px"><input class="in" type="number" min="1" step="1" data-rto="${i}" value="${+r.to||""}" aria-label="To cookies"></div></label>`:""}
     <label class="af" style="margin:0">Gifts<div class="money-in" style="max-width:90px"><input class="in" type="number" min="1" max="5" step="1" data-rlim="${i}" value="${lim}" aria-label="How many gifts"></div></label>
@@ -3470,8 +3470,8 @@ am.addEventListener("input",e=>{const el=e.target;if(!el.dataset.cpf||!A.cp)retu
 am.addEventListener("change",e=>{const el=e.target;if(!el.dataset.cpf||!A.cp)return;cpSetF(el);if(el.dataset.cprr)renderAdmin()});
 function cpSetF(el){const k=el.dataset.cpf;A.cp[k]=el.type==="checkbox"?el.checked:el.type==="number"?(+el.value||0):el.value}
 am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;const d=b.dataset;
-  if(d.cpnew!==undefined){A.cp=CP_BLANK();renderAdmin();scrollTo(0,0)}
-  else if(d.cpedit){const c=DB.coupons.find(x=>x.id===d.cpedit);if(c){A.cp=anClone(c);renderAdmin();scrollTo(0,0)}}
+  if(d.cpnew!==undefined){A.cp=CP_BLANK();renderAdmin();showNew("#cpForm")}
+  else if(d.cpedit){const c=DB.coupons.find(x=>x.id===d.cpedit);if(c){A.cp=anClone(c);renderAdmin();showNew("#cpForm")}}
   else if(d.cpcancel!==undefined){A.cp=null;renderAdmin()}
   else if(d.cptog){const c=DB.coupons.find(x=>x.id===d.cptog);if(c){c.on=!c.on;saveDB();toast(c.on?"Coupon is on":"Coupon is off");renderAdmin()}}
   else if(d.cpdel){armed(b,()=>{DB.coupons=DB.coupons.filter(x=>x.id!==d.cpdel);saveDB();toast("Coupon deleted");renderAdmin()})}
@@ -3594,7 +3594,7 @@ am.addEventListener("change",async e=>{const el=e.target;
   if(el.dataset.pmimg){const m=DB.payMethods.find(x=>x.id===el.dataset.pmimg),f=el.files[0];if(!m||!f)return;try{const prev=m.img;m.img=await lpResize(f,900);if(!saveDB()){m.img=prev;toast("Not enough storage space. Try a smaller image.")}else toast("Image added")}catch(err){toast(err.message)}renderAdmin()}
 });
 am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;const d=b.dataset;
-  if(d.pmadd!==undefined){DB.payMethods.push({id:uid(),name:"",details:"",img:"",on:true});saveDB();renderAdmin()}
+  if(d.pmadd!==undefined){const np={id:uid(),name:"",details:"",img:"",on:true};DB.payMethods.push(np);saveDB();renderAdmin();showNew(document.querySelector(`[data-pm="${np.id}|details"]`)?.closest(".pmcard"))}
   else if(d.pmdel){armed(b,()=>{DB.payMethods=DB.payMethods.filter(x=>x.id!==d.pmdel);saveDB();toast("Method deleted");renderAdmin()})}
   else if(d.pmimgrm){const m=DB.payMethods.find(x=>x.id===d.pmimgrm);if(m){m.img="";saveDB();renderAdmin()}}
 });
@@ -3679,10 +3679,10 @@ am.addEventListener("click",e=>{
     if(!(p>0)){err.textContent="Set a price above 0.";err.hidden=false;return}
     DB.sizes.push({n,price:p,active:true});saveDB();toast(`Box of ${n} added`);renderAdmin()}
   else if(d.sdel){delConfirm("this box size",()=>{if(DB.sizes.length<=1){toast("Keep at least one box size");return}needOwner("delete a box size").then(()=>{DB.sizes=DB.sizes.filter(s=>String(s.n)!==d.sdel);saveDB();toast("Size deleted");renderAdmin()}).catch(()=>{})})}
-  else if(d.aadd!==undefined){DB.addons.push({id:uid(),name:"New extra",desc:"",price:1,active:false});saveDB();toast("Extra added, turned off");renderAdmin()}
+  else if(d.aadd!==undefined){const na={id:uid(),name:"New extra",desc:"",price:1,active:false};DB.addons.push(na);saveDB();toast("Extra added, turned off");renderAdmin();showNew(document.querySelector(`[data-k="addons:${na.id}:name"]`)?.closest("tr"))}
   else if(d.adel){delConfirm("this extra",()=>needOwner("delete an extra").then(()=>{DB.addons=DB.addons.filter(a=>a.id!==d.adel);saveDB();toast("Extra deleted");renderAdmin()}).catch(()=>{}))}
   else if(d.cwprev!==undefined){openCwPreview()}
-  else if(d.slotadd!==undefined){const sl=DB.settings.slots,mx=Math.max(-1,...sl.map(x=>SLOT_PRESETS.indexOf(x.t))),un=SLOT_PRESETS.filter(t=>!sl.some(x=>x.t===t)),u=un.find(t=>SLOT_PRESETS.indexOf(t)>mx)||un[0];if(!u){toast("All 23 time slots are already added.");return}DB.settings.slots.push({t:u,on:true,limit:0});slotSync();toast("Saved");renderAdmin()}
+  else if(d.slotadd!==undefined){const sl=DB.settings.slots,mx=Math.max(-1,...sl.map(x=>SLOT_PRESETS.indexOf(x.t))),un=SLOT_PRESETS.filter(t=>!sl.some(x=>x.t===t)),u=un.find(t=>SLOT_PRESETS.indexOf(t)>mx)||un[0];if(!u){toast("All 23 time slots are already added.");return}DB.settings.slots.push({t:u,on:true,limit:0});slotSync();toast("Saved");renderAdmin();showNew([...document.querySelectorAll(".slotrow")].pop(),false)}
   else if(d.slotdel!==undefined){const i=+d.slotdel,x=DB.settings.slots[i];if(x&&x.on&&DB.settings.slots.filter(y=>y.on).length<2){toast("Keep at least one time slot on.");return}DB.settings.slots.splice(i,1);slotSync();toast("Saved");renderAdmin()}
   else if(d.closed){const i=+d.closed,c=DB.settings.closedWeekdays;DB.settings.closedWeekdays=c.includes(i)?c.filter(x=>x!==i):[...c,i];saveDB();toast("Saved");renderAdmin()}
   else if(d.pbg){openBg(d.pbg);return}
@@ -4105,7 +4105,7 @@ am.addEventListener("change",async e=>{const el=e.target;if(el.dataset.socimg===
   try{const data=await lpResize(f,96,true),cut=await imgHasAlpha(f),prev=x.img,prevC=x.imgCut;x.img=data;x.imgCut=cut;
     if(!saveDB()){x.img=prev;x.imgCut=prevC;toast("Not enough storage space. Remove another photo first.");return}toast("Icon saved")}catch(err){toast(err.message)}lpRender()});
 am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b||A.tab!=="landing")return;const d=b.dataset,so=DB.page.footer.socials=DB.page.footer.socials||[];
-  if(d.socadd!==undefined){const k=($("#socKind")||{}).value||"custom";so.push({id:uid(),kind:k,name:SOC_NAME[k]||"Link",url:"",img:""});saveDB();toast("Button added. Add its link.");lpRender()}
+  if(d.socadd!==undefined){const k=($("#socKind")||{}).value||"custom",ns=so.length;so.push({id:uid(),kind:k,name:SOC_NAME[k]||"Link",url:"",img:""});saveDB();toast("Button added. Add its link.");lpRender();showNew(document.querySelector(`[data-lp="footer.socials.${ns}.url"]`)?.closest(".soced"))}
   else if(d.socdel!==undefined){armed(b,()=>{so.splice(+d.socdel,1);saveDB();toast("Button deleted");lpRender()})}
   else if(d.socimgrm!==undefined){const x=so[+d.socimgrm];if(x){x.img="";delete x.imgCut;saveDB();toast("Using the built-in icon");lpRender()}}});
 let lpT;function lpSave(){clearTimeout(lpT);lpT=setTimeout(()=>{if(saveDB())toast("Saved");else toast("Not enough storage space. Remove a photo, video or font.")},400)}
@@ -4164,12 +4164,12 @@ am.addEventListener("click",e=>{
   const b=e.target.closest("button");if(!b)return;const d=b.dataset,pg=DB.page;
   if(d.lpclear){lpSet(d.lpclear,"");saveDB();toast("Cleared");lpRender()}
   else if(d.lpfontrm){pg.fonts=pg.fonts.filter(f=>f.id!==d.lpfontrm);["headFont","bodyFont"].forEach(k=>{if(pg[k]==="f:"+d.lpfontrm)pg[k]=k==="headFont"?"display":"body"});saveDB();toast("Font removed");lpRender()}
-  else if(d.lpbadd!==undefined){pg.blocks.push({id:uid(),pos:"bottom",layout:"right",heading:"New section",text:"Write something here.",mediaType:"none",src:"",btnLabel:"",btnLink:"",bg:"",color:""});saveDB();toast("Section added");lpRender()}
+  else if(d.lpbadd!==undefined){const nb=pg.blocks.length;pg.blocks.push({id:uid(),pos:"bottom",layout:"right",heading:"New section",text:"Write something here.",mediaType:"none",src:"",btnLabel:"",btnLink:"",bg:"",color:""});saveDB();toast("Section added");lpRender();showNew(document.querySelector(`[data-lp="blocks.${nb}.heading"]`)?.closest(".lpblock"))}
   else if(d.lpbdel!==undefined){armed(b,()=>{pg.blocks.splice(+d.lpbdel,1);saveDB();toast("Section deleted");lpRender()})}
   else if(d.lpbup!==undefined||d.lpbdown!==undefined){const i=+(d.lpbup??d.lpbdown),j=d.lpbup!==undefined?i-1:i+1;if(j<0||j>=pg.blocks.length)return;[pg.blocks[i],pg.blocks[j]]=[pg.blocks[j],pg.blocks[i]];saveDB();lpRender()}
-  else if(d.lpsadd!==undefined){pg.strip.items.push({t:"New item",on:true});saveDB();lpRender()}
+  else if(d.lpsadd!==undefined){const ni=pg.strip.items.length;pg.strip.items.push({t:"New item",on:true});saveDB();lpRender();showNew(document.querySelector(`[data-lp="strip.items.${ni}.t"]`)?.closest(".colin"))}
   else if(d.lpsdel!==undefined){pg.strip.items.splice(+d.lpsdel,1);saveDB();lpRender()}
-  else if(d.lpfadd!==undefined){pg.faq.push({q:"New question",a:"Your answer."});saveDB();lpRender()}
+  else if(d.lpfadd!==undefined){const nf=pg.faq.length;pg.faq.push({q:"New question",a:"Your answer."});saveDB();lpRender();showNew(document.querySelector(`[data-lp="faq.${nf}.q"]`)?.closest(".lpblock"))}
   else if(d.lpfdel!==undefined){armed(b,()=>{pg.faq.splice(+d.lpfdel,1);saveDB();toast("Question deleted");lpRender()})}
   else if(d.lpreset!==undefined){armed(b,()=>{DB.page=defaultPage();saveDB();toast("Landing page reset");lpRender()})}
 });
@@ -4521,10 +4521,20 @@ $("#modal").addEventListener("change",async e=>{
 /* --- Badges (owner): design them, preview, save --- */
 const BD={edit:null};
 function bdSample(b){return `<div class="bdsample"><div class="pwrap">${plateHTML(DB.products.find(p=>p.status!=="hidden")||DB.products[0]||{id:"x",art:"bb"})}<div class="bdgs">${badgeHTML(b)}</div></div></div>`}
+// after opening a form or adding something to a list: scroll it into view, glow for a moment and (on a computer) put the cursor in its first box
+function showNew(target,focus){
+  requestAnimationFrame(()=>{
+    let el=typeof target==="string"?document.querySelector(target):target;if(!el)return;
+    const bar=document.getElementById("draftBar"),off=(bar&&getComputedStyle(bar).position==="sticky"?bar.offsetHeight:0)+14;
+    window.scrollTo({top:Math.max(0,el.getBoundingClientRect().top+scrollY-off),behavior:RM?"auto":"smooth"});
+    el.classList.remove("justadded");void el.offsetWidth;el.classList.add("justadded");setTimeout(()=>el.classList.remove("justadded"),2200);
+    if(focus!==false){const i=el.matches("input,textarea")?el:el.querySelector("input:not([type=hidden]):not([type=color]):not([type=file]):not([type=checkbox]):not([type=range]),textarea");
+      if(i&&matchMedia("(pointer:fine)").matches)setTimeout(()=>{try{i.focus({preventScroll:true});if(i.select)i.select()}catch(e){}},350)}
+  })}
 function viewBadges(){
   const B=DB.badges,E=BD.edit,sold=soldMap(),best=bestIds();
   const used=id=>DB.products.filter(p=>(p.badges||[]).includes(id)).length+(id==="best"?best.filter(x=>!(prod(x).badges||[]).includes("best")).length:0);
-  const form=E?`<section class="panel"><h2>${E.isNew?"New badge":"Edit badge"}</h2><p class="sub">Nothing changes in the shop until you tap Save badge.</p>
+  const form=E?`<section class="panel" id="bdForm"><h2>${E.isNew?"New badge":"Edit badge"}</h2><p class="sub">Nothing changes in the shop until you tap Save badge.</p>
     <div class="bdprev" id="bdPrev">${bdSample(E)}<div class="bdprev-big">${badgeHTML(E)}</div></div>
     <div class="grid2" style="margin-top:12px"><label class="af">Text (emoji welcome)<input class="in" id="bdText" maxlength="24" value="${esc(E.text)}" placeholder="🔥 Best seller"></label>
       <label class="af">Font<select class="in" id="bdFont">${Object.entries(BADGE_FONTS).map(([k,[l]])=>`<option value="${k}" ${E.font===k?"selected":""}>${l}</option>`).join("")}</select></label></div>
@@ -4556,8 +4566,8 @@ am.addEventListener("change",e=>{const el=e.target;if(A.tab!=="badges")return;if
   else if(k==="menuSort"){DB.settings.menuSort=el.value==="manual"?"manual":"popular";if(SBH.on&&SBH.changed)setTimeout(()=>draftPublish("settings",["menuSort"]),0)}   // the Badges page has no publish bar: the flavor order goes live straight away
   saveDB();toast("Saved");renderAdmin()});
 am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b||A.tab!=="badges")return;const d=b.dataset;
-  if(d.bdnew!==undefined){BD.edit={isNew:true,id:"b"+uid().slice(0,6),text:"⭐ Chef's pick",font:"display",color:"#FFFFFF",bg:"#000096",fx:"shine"};renderAdmin();scrollTo(0,0)}
-  else if(d.bdedit){const x=DB.badges.list.find(y=>y.id===d.bdedit);if(x){BD.edit=Object.assign({},x);renderAdmin();scrollTo(0,0)}}
+  if(d.bdnew!==undefined){BD.edit={isNew:true,id:"b"+uid().slice(0,6),text:"⭐ Chef's pick",font:"display",color:"#FFFFFF",bg:"#000096",fx:"shine"};renderAdmin();showNew("#bdForm")}
+  else if(d.bdedit){const x=DB.badges.list.find(y=>y.id===d.bdedit);if(x){BD.edit=Object.assign({},x);renderAdmin();showNew("#bdForm")}}
   else if(d.bdcancel!==undefined){BD.edit=null;renderAdmin()}
   else if(d.bdsave!==undefined){bdRead();const E=BD.edit,t=String(E.text||"").trim();
     if(!t){const er=$("#bdErr");er.textContent="Type the badge text.";er.hidden=false;return}
@@ -4716,7 +4726,7 @@ am.addEventListener("change",async e=>{const el=e.target,D=A.draft;
   if(el.dataset.gimg===undefined)return;const f=el.files[0];if(!f)return;
   try{D.gifts[+el.dataset.gimg].img=await lpResize(f,320,true);renderAdmin();toast("Picture added")}catch(err){toast(err.message)}});
 am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;const d=b.dataset,D=A.draft;
-  if(d.gadd!==undefined){if(D.gifts.length>=12){toast("Up to 12 gifts per promo.");return}D.gifts.push({id:uid(),name:"",img:"",stock:""});renderAdmin()}
+  if(d.gadd!==undefined){if(D.gifts.length>=12){toast("Up to 12 gifts per promo.");return}D.gifts.push({id:uid(),name:"",img:"",stock:""});renderAdmin();showNew(document.querySelector(`[data-gname="${D.gifts.length-1}"]`)?.closest(".pmcard"))}
   else if(d.gdel!==undefined){const g=D.gifts.splice(+d.gdel,1)[0];D.rules.forEach(r=>{r.ids=(r.ids||[]).filter(id=>id!==g.id)});renderAdmin()}
   else if(d.gimgrm!==undefined){D.gifts[+d.gimgrm].img="";renderAdmin()}
   else if(d.rnew!==undefined){if(D.rules.length>=12){toast("Up to 12 rules per promo.");return}
@@ -4724,7 +4734,7 @@ am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
     if(free)D.rules.push({id:uid(),from:free,to:free,limit:1,mode:"specific",ids:[]});
     else if(cm.customOn)D.rules.push({id:uid(),custom:true,from:cm.customMin||14,to:cm.customMax||cm.customMin||14,limit:1,mode:"specific",ids:[]});
     else{toast("Every box size already has a rule.");return}
-    renderAdmin()}
+    renderAdmin();showNew(document.querySelector(`[data-rcard="${D.rules.length-1}"]`),false)}
   else if(d.rdel!==undefined){D.rules.splice(+d.rdel,1);renderAdmin()}
   else if(d.rmode!==undefined){const[i,m]=d.rmode.split(":");D.rules[+i].mode=m;renderAdmin()}
   else if(d.rgift!==undefined){const k=d.rgift.indexOf(":"),r=D.rules[+d.rgift.slice(0,k)],id=d.rgift.slice(k+1),a=r.ids||[];r.ids=a.includes(id)?a.filter(x=>x!==id):a.concat(id);renderAdmin()}});
@@ -4793,7 +4803,7 @@ function cuRows(){
 function viewCustomers(){
   const F=CU.form||{name:"",phone:"",email:"",note:""};
   return head("Customers","Everyone who ordered is saved here automatically (one entry per WhatsApp number). You can also add a customer yourself.")+MOCK+`<div class="stack">
-    <section class="panel"><h2>${F.id?"Edit customer":"Add a customer"}</h2>
+    <section class="panel" id="cuForm"><h2>${F.id?"Edit customer":"Add a customer"}</h2>
       <div class="grid2" style="margin-top:10px"><label class="af">Full name<input class="in" id="cuName" maxlength="80" value="${esc(F.name)}" autocomplete="off"></label>
         <label class="af">WhatsApp number<input class="in" id="cuPhone" type="tel" inputmode="tel" maxlength="24" value="${esc(F.phone)}" placeholder="0812 3456 7890" autocomplete="off"></label></div>
       <div class="grid2" style="margin-top:10px"><label class="af">Email (optional)<input class="in" id="cuEmail" type="email" maxlength="120" value="${esc(F.email)}" autocomplete="off"></label>
@@ -4876,7 +4886,7 @@ am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b||A.tab!
       tmCall("admin_team_create",{p:{username:un,name:F.name.trim(),password:F.password,title:F.title.trim(),role:F.role,perms:F.perms}},"Login created for "+un)}
     else tmCall("admin_team_set",{p:{email:F.email,name:F.name.trim(),title:F.title.trim(),role:F.role,perms:F.perms}},"Saved")}
   else if(d.tmedit){const m=(TM.list||[]).find(x=>x.email===d.tmedit);if(!m)return;TM.err="";
-    TM.form={mode:"edit",email:m.email,username:m.username||"",name:m.name||"",title:m.title||"",role:m.role,perms:(m.perms||[]).slice(),password:""};renderAdmin();$("#tmForm").scrollIntoView({block:"start"})}
+    TM.form={mode:"edit",email:m.email,username:m.username||"",name:m.name||"",title:m.title||"",role:m.role,perms:(m.perms||[]).slice(),password:""};renderAdmin();showNew("#tmForm")}
   else if(d.tmpw){const m=(TM.list||[]).find(x=>x.email===d.tmpw);
     pwPrompt({title:"New password for "+(m&&(m.name||m.username)||d.tmpw),text:"At least 8 characters. Tell them the new password yourself.",button:"Set password",autocomplete:"new-password",
       run:async pw=>{if(pw.length<8)return {ok:false,err:"Password: at least 8 characters."};try{TM.list=await SBH.rpc("admin_team_password",{p_email:d.tmpw,p_password:pw});return {ok:true}}catch(x){return {ok:false,err:x.message}}}})
@@ -5130,7 +5140,7 @@ am.addEventListener("change",e=>{const el=e.target;if(!el.dataset||!el.dataset.k
 am.addEventListener("input",e=>{if(e.target.id==="cuSearch"){CU.q=e.target.value;const l=$("#cuList");if(l)l.innerHTML=cuRows()}});
 am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;const d=b.dataset;
   if(d.cusave!==undefined)cuSave();
-  else if(d.cuedit){const c=(CU.list||[]).find(x=>x.id===d.cuedit);if(c){CU.form=Object.assign({},c);CU.err="";renderAdmin();scrollTo(0,0)}}
+  else if(d.cuedit){const c=(CU.list||[]).find(x=>x.id===d.cuedit);if(c){CU.form=Object.assign({},c);CU.err="";renderAdmin();showNew("#cuForm")}}
   else if(d.cucancel!==undefined){CU.form=null;CU.err="";renderAdmin()}
   else if(d.cudel){armed(b,async()=>{try{if(SBH.on)CU.list=await SBH.rpc("admin_customer_delete",{p_id:d.cudel});else{DB.customers=DB.customers.filter(c=>c.id!==d.cudel);saveDB();CU.list=demoCustomers()}renderAdmin();toast("Customer removed")}catch(x){toast(x.message)}})}
   else if(d.tmadd!==undefined){const em=$("#tmEmail").value.trim();if(!em)return tmErr("Enter the person's email.");tmCall("admin_team_set",{p_email:em,p_role:$("#tmRole").value,p_name:$("#tmName").value.trim()},"Added to the team")}

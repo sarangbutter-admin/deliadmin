@@ -1327,3 +1327,9 @@ body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
 .lvprev,.fbprev{display:inline-flex;align-items:center;min-width:46px}
 .fbdemo{display:grid;gap:6px;background:var(--ice,#EEF0FF);border-radius:16px;padding:12px 14px;font-size:14px;max-width:360px}
 .fbdemo div{display:flex;justify-content:space-between;gap:12px;align-items:center}
+
+/* something that was just opened or added: a short blue glow so it is easy to spot */
+.justadded{animation:justAdded 2.2s ease-out}
+@keyframes justAdded{0%,40%{box-shadow:0 0 0 4px rgba(0,0,150,.35)}100%{box-shadow:0 0 0 0 rgba(0,0,150,0)}}
+@media (prefers-reduced-motion:reduce){.justadded{animation:none;box-shadow:0 0 0 3px rgba(0,0,150,.35)}}
+tr.justadded td{background:rgba(0,0,150,.07)}
