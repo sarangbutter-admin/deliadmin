@@ -529,7 +529,7 @@ function renderStoreStatic(){
   $("#addr").textContent = set.address;
   const act=DB.addons.filter(a=>a.active);
   $("#extrasBlock").hidden=!act.length;
-  $("#extras").innerHTML=act.map(a=>`<button class="extra" type="button" data-addon="${a.id}" aria-pressed="false"><span class="tick">✓</span><span><b>${esc(a.name)}</b><small>${esc(a.desc)}</small></span><span class="pr">+${money(a.price)}</span></button>`).join("");
+  $("#extras").innerHTML=act.map(a=>`<button class="extra" type="button" data-addon="${a.id}" aria-pressed="false"><span class="tick">✓</span>${lvAddon(a,46)}<span><b>${esc(a.name)}</b><small>${esc(a.desc)}</small></span><span class="pr">${addonPr(a)}</span></button>`).join("");
   heroFloats($("#dome"),DB.page.hero);
 }
 
@@ -580,12 +580,12 @@ function renderStore(){
   $("#pillCount").textContent=`${S.box.length}/${S.size}`;
   let L=`<div><dt>Box of ${S.size}</dt><dd>${money(q.base)}</dd></div>`;
   if(q.sale)L+=`<div class="saleln"><dt>${esc(q.sale.name)} (${saleOffText(q.sale)})</dt><dd>−${money(q.discount)}</dd></div>`;
-  giftLines(S.size).forEach(t=>{L+=`<div class="saleln giftln"><dt>${esc(t)}</dt><dd>FREE</dd></div>`});
+  giftLines(S.size).forEach(t=>{L+=`<div class="saleln giftln"><dt>${esc(t)}</dt><dd>${fbHTML("Gift")}</dd></div>`});
   if(q.coupon&&q.couponDisc>0)L+=`<div class="saleln"><dt>Coupon ${esc(q.coupon.code)}</dt><dd>−${money(q.couponDisc)}</dd></div>`;
   if(q.surcharge>0)L+=`<div><dt>Premium flavors</dt><dd>+${money(q.surcharge)}</dd></div>`;
   if(S.step===2){
-    S.addons.forEach(id=>{const a=DB.addons.find(x=>x.id===id);if(a)L+=`<div><dt>${esc(a.name)}</dt><dd>+${money(a.price)}</dd></div>`});
-    L+=`<div><dt>${OPT_NAME[optOf(S)]}</dt><dd>${q.feePending?"Choose a courier":q.fee?money(q.fee):"Free"}</dd></div>`;
+    S.addons.forEach(id=>{const a=DB.addons.find(x=>x.id===id);if(a)L+=`<div><dt class="withlv">${lvAddon(a,18,true)}${esc(a.name)}</dt><dd>${addonPr(a)}</dd></div>`});
+    L+=`<div><dt>${OPT_NAME[optOf(S)]}</dt><dd>${q.feePending?"Choose a courier":q.fee?money(q.fee):fbHTML("Del")}</dd></div>`;
     if(S.day)L+=`<div><dt>When</dt><dd>${S.mode!=="pickup"&&S.speed==="sameday"?(samedayOpen()?"Today (sameday)":"Sameday (after the cut-off)"):fmtDay(S.day)+(S.time?", "+esc(S.time):"")}</dd></div>`;
     if(bsOn()&&S.mode==="delivery"){const sh=bsShip(S);
       L+=`<div class="bscour${q.feePending?" need":""}" id="bsRow"><dt>Courier</dt><dd><button type="button" class="bscbtn" data-bscourier>${sh?`${esc((sh.courierName||sh.courier)+" "+(sh.serviceName||sh.service))} · Change`:S.bsSkip?"Standard delivery · Change":"🛵 Choose courier"}</button></dd></div>`}
@@ -958,6 +958,23 @@ addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("#slowSheet").hidden)$("#
 // size of every pop-up in the shop (Security tab, 70% to 130%)
 const popZ=t=>Math.min(130,Math.max(70,Math.round(+(t||DB.settings).popScale||100)));
 function applyPopScale(){document.documentElement.style.setProperty("--pop-z",String(popZ()/100))}
+/* lively picture-or-icon chips: used by the paid extras and the free badges (set in Boxes & extras) */
+const LV_FX=[["bounce","Bounce"],["wiggle","Wiggle"],["float","Float up and down"],["pulse","Pulse"],["spin","Slow spin"],["glow","Soft glow"],["none","Still"]];
+const LV_BGM=[["solid","Solid colour"],["gradient","Gradient"],["none","None (see through)"]];
+const lvBg=(o,d)=>{const m=o.bgMode||"solid",a=hexOk(o.bg,d),b=hexOk(o.bg2,"#FFFFFF");return m==="none"?"transparent":m==="gradient"?`linear-gradient(135deg,${a},${b})`:a};
+// o: {img,imgCut,icon,fx,bg,bg2,bgMode}; the picture when there is one, otherwise the icon
+function lvHTML(o,dflt,px,still){
+  const u=imgOk(o.img),fx=still?"none":fxOk(o.fx,LV_FX.map(x=>x[0]),"none");
+  return `<span class="lv fx-${fx}" style="--lv-s:${px}px;background:${lvBg(o,"#FFF4D6")}"><span class="lv-i">${u?`<img class="${imgIsCut(u,o.imgCut)?"":"crop"}" src="${esc(u)}" alt="" draggable="false">`:esc(String(o.icon||"").trim()||dflt)}</span></span>`}
+const addonIcon=a=>{const n=String(a.name||"").toLowerCase();return /wrap|gift|ribbon/.test(n)?"🎀":/card|note|message/.test(n)?"💌":/candle/.test(n)?"🕯️":/box|bag/.test(n)?"🛍️":"✨"};
+const lvAddon=(a,px,still)=>lvHTML(a,addonIcon(a),px,still);
+// "FREE" badges in the checkout box: gift, delivery / pickup, free extra
+const FB_DEF={Gift:{icon:"🎁",bg:"#FFE066",ink:"#000096",fx:"pulse",label:"Free gift"},Del:{icon:"🛵",bg:"#D9F7E8",ink:"#0A5F43",fx:"float",label:"Free delivery or pickup"},Extra:{icon:"✨",bg:"#E5E8FF",ink:"#000096",fx:"wiggle",label:"Free extra"}};
+function fbHTML(kind){const t=DB.settings,D=FB_DEF[kind],p="fb"+kind;
+  if(t[p+"On"]===false)return "Free";
+  const txt=String(t[p+"Txt"]||"").trim()||"FREE",o={img:t[p+"Img"],imgCut:t[p+"ImgCut"],icon:t[p+"Icon"],fx:t[p+"Fx"]||D.fx,bgMode:"none"};
+  return `<span class="fbadge" style="--fb-bg:${hexOk(t[p+"Bg"],D.bg)};--fb-ink:${hexOk(t[p+"Ink"],D.ink)}">${lvHTML(o,D.icon,18)}<b>${esc(txt)}</b></span>`}
+const addonPr=a=>a.price>0?"+"+money(a.price):fbHTML("Extra");
 function clearBox(){if(!S.box.length)return;S.shuf=0;S.box.forEach((_,i)=>ghostOut(i));S.box=[];S.step=1;renderStore()}
 function scrollToEl(el){
   const go=()=>{const fl=$("#flash"),head=$(".top").getBoundingClientRect().height+(fl.hidden||fl.parentNode===$(".top")?0:fl.getBoundingClientRect().height);
@@ -1128,10 +1145,10 @@ function renderCoSummary(){
   $("#summary").innerHTML=`<div><span>Box of ${S.size}</span><span class="num">${money(q.base)}</span></div>`+
     Object.entries(counts).map(([id,n])=>{const p=prod(id);return `<div class="m"><span>${n} × ${esc(p.name)}</span><span>${p.surcharge>0?"+"+money(p.surcharge*n):""}</span></div>`}).join("")+
     (q.sale?`<div class="sl"><span>${esc(q.sale.name)} (${saleOffText(q.sale)})</span><span class="num">−${money(q.discount)}</span></div>`:"")+
-    giftLines(S.size).map(t=>`<div class="sl"><span>${esc(t)}</span><span class="num">Free</span></div>`).join("")+
+    giftLines(S.size).map(t=>`<div class="sl"><span>${esc(t)}</span><span class="num">${fbHTML("Gift")}</span></div>`).join("")+
     (q.coupon&&q.couponDisc>0?`<div class="sl"><span>Coupon ${esc(q.coupon.code)}</span><span class="num">−${money(q.couponDisc)}</span></div>`:"")+
-    S.addons.map(id=>{const a=DB.addons.find(x=>x.id===id);return a?`<div><span>${esc(a.name)}</span><span class="num">+${money(a.price)}</span></div>`:""}).join("")+
-    `<div><span>${OPT_NAME[optOf(S)]}</span><span class="num">${q.feePending?"Choose a courier below":q.fee?money(q.fee):"Free"}</span></div>`+
+    S.addons.map(id=>{const a=DB.addons.find(x=>x.id===id);return a?`<div><span class="withlv">${lvAddon(a,22,true)}${esc(a.name)}</span><span class="num">${addonPr(a)}</span></div>`:""}).join("")+
+    `<div><span>${OPT_NAME[optOf(S)]}</span><span class="num">${q.feePending?"Choose a courier below":q.fee?money(q.fee):fbHTML("Del")}</span></div>`+
     `<div><span>When</span><span>${esc(whenTxt(S))}</span></div>`+
     (S.note?`<div><span>Note</span><span style="text-align:right">${esc(S.note)}</span></div>`:"")+
     `<div class="t"><span>Total</span><span class="num">${money(q.total)}</span></div>`;
@@ -3136,16 +3153,18 @@ function viewBoxes(){
         <p class="note" style="grid-column:span 2;margin:0">Example: a box of ${DB.settings.customMin} costs ${money(r2(DB.settings.customMin*DB.settings.customPer))}. Flash sales set to "Every box" apply to it; per-cookie flavor extras are added on top.</p></div>
     </section>
     <section class="panel">
-      <div class="phead"><div><h2>Paid extras</h2><p class="sub">Shown in step 2 of the box builder. Each one adds its price to the order.</p></div><button class="btn btn-blue btn-sm" type="button" data-aadd>+ Add extra</button></div>
+      <div class="phead"><div><h2>Paid extras</h2><p class="sub">Shown in step 2 of the box builder. Each one adds its price to the order. Give each one a picture (or an icon if there is no picture), a background and a movement. A free extra (price 0) shows your Free badge.</p></div><button class="btn btn-blue btn-sm" type="button" data-aadd>+ Add extra</button></div>
       ${DB.addons.length?`<div class="tablewrap"><table class="t" style="min-width:620px"><thead><tr><th>Name</th><th>Description</th><th>Price</th><th>Active</th><th></th></tr></thead><tbody>
       ${DB.addons.map(a=>`<tr>
         <td><input class="in" data-k="addons:${a.id}:name" value="${esc(a.name)}" aria-label="Extra name"></td>
         <td><input class="in" data-k="addons:${a.id}:desc" value="${esc(a.desc)}" aria-label="Extra description"></td>
         <td style="width:130px"><div class="money-in"><span>+${DB.settings.currency}</span><input class="in" type="number" min="0" step="0.5" data-k="addons:${a.id}:price" value="${a.price}" aria-label="Extra price"></div></td>
         <td><label class="sw"><input type="checkbox" data-k="addons:${a.id}:active" ${a.active?"checked":""} aria-label="${esc(a.name)} active"><span></span></label></td>
-        <td class="r">${ROLE()==="owner"?`<button class="danger" type="button" data-adel="${a.id}">Delete</button>`:""}</td></tr>`).join("")}
+        <td class="r">${ROLE()==="owner"?`<button class="danger" type="button" data-adel="${a.id}">Delete</button>`:""}</td></tr>
+      <tr class="adlook"><td colspan="5">${lvEditHTML(a)}</td></tr>`).join("")}
       </tbody></table></div>`:`<div class="empty">No extras yet.</div>`}
     </section>
+    ${fbPanel()}
     ${btnPanels()}
     ${guardPanel()}
   </div>`;
@@ -4626,6 +4645,52 @@ am.addEventListener("input",e=>{const m=e.target.dataset&&e.target.dataset.fpk;i
   const [k,lo,hi]=FP_KEYS[m];DB.settings[k]=Math.round(Math.min(hi,Math.max(lo,+e.target.value||lo)));fpLive();clearTimeout(FP.t);FP.t=setTimeout(saveSoon,250)});
 const FP={};
 am.addEventListener("click",e=>{const b=e.target.closest("button");if(b&&b.dataset.fabreset!==undefined){Object.assign(DB.settings,{fabSizePx:58,fabOpacity:100,fabImgSize:84});saveDB();toast("Reset");renderAdmin()}});
+/* Boxes & extras: pictures, icons, backgrounds and movement for the paid extras, and the Free badges of the checkout box */
+const lvSel=(attr,opts,cur)=>`<select class="in" ${attr}>${opts.map(([v,l])=>`<option value="${v}" ${cur===v?"selected":""}>${l}</option>`).join("")}</select>`;
+function lvEditHTML(a){
+  const u=imgOk(a.img);
+  return `<div class="lvedit"><span class="lvprev" data-lvprev="${a.id}">${lvAddon(a,46)}</span>
+    <label class="af">Icon<input class="in" data-k="addons:${a.id}:icon" maxlength="4" value="${esc(a.icon||"")}" placeholder="${addonIcon(a)}" style="width:80px"></label>
+    <div class="af">Own picture (used instead of the icon)<div class="colin" style="flex-wrap:wrap;gap:8px"><label class="ghost mqbtn">${u?"Replace picture":"Upload picture"}<input type="file" accept="image/*" hidden data-adimg="${a.id}"></label>${u?`<button class="danger" type="button" data-adimgrm="${a.id}">Use the icon</button>`:""}</div></div>
+    <label class="af">Background${lvSel(`data-k="addons:${a.id}:bgMode"`,LV_BGM,a.bgMode||"solid")}</label>
+    <label class="af">Colour<input type="color" data-k="addons:${a.id}:bg" value="${hexOk(a.bg,"#FFF4D6")}" style="width:56px;height:38px"></label>
+    <label class="af">2nd colour<input type="color" data-k="addons:${a.id}:bg2" value="${hexOk(a.bg2,"#FFFFFF")}" style="width:56px;height:38px"></label>
+    <label class="af">Movement${lvSel(`data-k="addons:${a.id}:fx"`,LV_FX,a.fx||"none")}</label></div>`;
+}
+function fbPanel(){
+  const t=DB.settings;
+  const grp=k=>{const D=FB_DEF[k],p="fb"+k,u=imgOk(t[p+"Img"]);
+    return `<div class="pmcard" style="gap:10px"><div class="phead" style="margin:0"><b>${D.label}</b><label class="chk"><span class="sw"><input type="checkbox" data-k="settings::${p}On" ${t[p+"On"]!==false?"checked":""}><span></span></span><span>Show as a badge</span></label></div>
+      <div class="lvedit"><span class="fbprev" data-fbprev="${k}">${fbHTML(k)}</span>
+        <label class="af">Text<input class="in" data-k="settings::${p}Txt" maxlength="14" value="${esc(t[p+"Txt"]||"")}" placeholder="FREE" style="width:110px"></label>
+        <label class="af">Icon<input class="in" data-k="settings::${p}Icon" maxlength="4" value="${esc(t[p+"Icon"]||"")}" placeholder="${D.icon}" style="width:80px"></label>
+        <div class="af">Own picture<div class="colin" style="flex-wrap:wrap;gap:8px"><label class="ghost mqbtn">${u?"Replace picture":"Upload picture"}<input type="file" accept="image/*" hidden data-fbimg="${p}"></label>${u?`<button class="danger" type="button" data-fbimgrm="${p}">Use the icon</button>`:""}</div></div>
+        <label class="af">Badge colour<input type="color" data-k="settings::${p}Bg" value="${hexOk(t[p+"Bg"],D.bg)}" style="width:56px;height:38px"></label>
+        <label class="af">Text colour<input type="color" data-k="settings::${p}Ink" value="${hexOk(t[p+"Ink"],D.ink)}" style="width:56px;height:38px"></label>
+        <label class="af">Movement${lvSel(`data-k="settings::${p}Fx"`,LV_FX,t[p+"Fx"]||D.fx)}</label></div></div>`};
+  return `<section class="panel"><h2>Free badges in the checkout box</h2>
+    <p class="sub">Wherever the checkout box says a line is free, customers see a badge instead of plain text. Set the wording, an icon or your own picture, the colours and the movement. Press <b>Publish</b> after changing it.</p>
+    <div class="stack" style="gap:12px">${["Gift","Del","Extra"].map(grp).join("")}
+      <div class="af">Preview in the checkout box<div class="fbdemo" id="fbDemo">${["Gift","Del","Extra"].map(k=>`<div><span>${FB_DEF[k].label}</span><span>${fbHTML(k)}</span></div>`).join("")}</div></div></div></section>`;
+}
+function lvPrevDraw(){
+  document.querySelectorAll("[data-lvprev]").forEach(el=>{const a=DB.addons.find(x=>x.id===el.dataset.lvprev);if(a)el.innerHTML=lvAddon(a,46)});
+  document.querySelectorAll("[data-fbprev]").forEach(el=>{el.innerHTML=fbHTML(el.dataset.fbprev)});
+  const d=$("#fbDemo");if(d)d.innerHTML=["Gift","Del","Extra"].map(k=>`<div><span>${FB_DEF[k].label}</span><span>${fbHTML(k)}</span></div>`).join("");
+}
+["input","change"].forEach(ev=>am.addEventListener(ev,e=>{const k=e.target.dataset&&e.target.dataset.k;if(k&&(/^addons:/.test(k)||/^settings::fb/.test(k)))lvPrevDraw()}));
+// a picture for an extra or a free badge: an animated picture is kept as it is, any other picture is resized small
+async function lvPicture(f){
+  if(await imgAnimated(f)){if(f.size>400e3)throw new Error("That animated picture is over 400 KB. Try a smaller or shorter one.");return {img:await readData(f),cut:true}}
+  return {img:await lpResize(f,128,true),cut:await imgHasAlpha(f)}}
+am.addEventListener("change",async e=>{const el=e.target,id=el.dataset&&el.dataset.adimg,fb=el.dataset&&el.dataset.fbimg;if(!id&&!fb)return;const f=el.files[0];if(!f)return;
+  try{const r=await lvPicture(f),o=id?DB.addons.find(x=>x.id===id):DB.settings,ki=id?"img":fb+"Img",kc=id?"imgCut":fb+"ImgCut";if(!o)return;
+    const pi=o[ki],pc=o[kc];o[ki]=r.img;o[kc]=r.cut;
+    if(!saveDB()){o[ki]=pi;o[kc]=pc;toast("Not enough storage space. Remove another photo first.");return}
+    renderAdmin();toast("Picture saved")}catch(err){toast(err.message)}});
+am.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;const d=b.dataset;
+  if(d.adimgrm){const a=DB.addons.find(x=>x.id===d.adimgrm);if(a){a.img="";delete a.imgCut;saveDB();renderAdmin();toast("Using the icon")}}
+  else if(d.fbimgrm){DB.settings[d.fbimgrm+"Img"]="";delete DB.settings[d.fbimgrm+"ImgCut"];saveDB();renderAdmin();toast("Using the icon")}});
 /* Boxes & extras: pictures for the two buttons */
 am.addEventListener("change",async e=>{const el=e.target,k=el.dataset&&el.dataset.btnimg;if(!k||!/^((rb|fab)Img2?|guardImg)$/.test(k))return;const f=el.files[0];if(!f)return;
   try{const data=await lpResize(f,k==="fabImg"?220:k==="guardImg"?240:140,true),cut=await imgHasAlpha(f),prev=DB.settings[k],prevC=DB.settings[k+"Cut"];DB.settings[k]=data;DB.settings[k+"Cut"]=cut;

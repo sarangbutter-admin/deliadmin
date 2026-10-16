@@ -1039,3 +1039,24 @@ body.pcd-fx .bell-pay{animation:pcdGlow 1.6s ease-in-out infinite}
 .size .saletag.gifttag:not(.l){right:-4px}
 .size .saletag .gt{font-weight:700}
 @media (max-width:370px){.size .saletag .gt{display:none}.size .saletag{font-size:10px;padding:2px 6px;top:-18px}.sizes{padding-top:22px}}
+
+/* lively picture-or-icon chips (paid extras, free badges) */
+.lv{display:inline-grid;place-items:center;width:var(--lv-s,44px);height:var(--lv-s,44px);border-radius:30%;flex:none;line-height:1}
+.lv-i{font-size:calc(var(--lv-s,44px)*.58);display:grid;place-items:center;width:100%;height:100%}
+.lv-i img{width:84%;height:84%;object-fit:contain;display:block}
+.lv-i img.crop{width:100%;height:100%;object-fit:cover;border-radius:30%}
+.lv.fx-bounce .lv-i{animation:slBounce 1.1s ease-in-out infinite}
+.lv.fx-wiggle .lv-i{animation:cwWiggle 1.2s ease-in-out infinite;transform-origin:50% 80%}
+.lv.fx-float .lv-i{animation:slFloat 2.4s ease-in-out infinite}
+.lv.fx-pulse .lv-i{animation:slPulse 1.4s ease-in-out infinite}
+.lv.fx-spin .lv-i{animation:slSpin 6s linear infinite}
+.lv.fx-glow{animation:lvGlow 2s ease-in-out infinite}
+@keyframes lvGlow{0%,100%{box-shadow:0 0 0 0 rgba(255,184,0,0)}50%{box-shadow:0 0 12px 3px rgba(255,184,0,.65)}}
+@media (prefers-reduced-motion:reduce){.lv .lv-i,.lv{animation:none!important}}
+.extra .lv{margin-left:-2px}
+.withlv{display:inline-flex;align-items:center;gap:6px}
+.fbadge{display:inline-flex;align-items:center;gap:4px;background:var(--fb-bg,#FFE066);color:var(--fb-ink,#000096);border-radius:999px;padding:2px 10px 2px 3px;font-size:12px;font-weight:800;letter-spacing:.04em;line-height:1.2;opacity:1}
+.fbadge b{font-weight:800}
+.lines dd .fbadge{margin-left:auto}
+/* editors */
+.lvedit .af{min-width:90px}

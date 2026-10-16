@@ -520,7 +520,7 @@ function renderStoreStatic(){
   $("#addr").textContent = set.address;
   const act=DB.addons.filter(a=>a.active);
   $("#extrasBlock").hidden=!act.length;
-  $("#extras").innerHTML=act.map(a=>`<button class="extra" type="button" data-addon="${a.id}" aria-pressed="false"><span class="tick">✓</span><span><b>${esc(a.name)}</b><small>${esc(a.desc)}</small></span><span class="pr">+${money(a.price)}</span></button>`).join("");
+  $("#extras").innerHTML=act.map(a=>`<button class="extra" type="button" data-addon="${a.id}" aria-pressed="false"><span class="tick">✓</span>${lvAddon(a,46)}<span><b>${esc(a.name)}</b><small>${esc(a.desc)}</small></span><span class="pr">${addonPr(a)}</span></button>`).join("");
   heroFloats($("#dome"),DB.page.hero);
 }
 function ctaState(){
@@ -570,12 +570,12 @@ function renderStore(){
   $("#pillCount").textContent=`${S.box.length}/${S.size}`;
   let L=`<div><dt>Box of ${S.size}</dt><dd>${money(q.base)}</dd></div>`;
   if(q.sale)L+=`<div class="saleln"><dt>${esc(q.sale.name)} (${saleOffText(q.sale)})</dt><dd>−${money(q.discount)}</dd></div>`;
-  giftLines(S.size).forEach(t=>{L+=`<div class="saleln giftln"><dt>${esc(t)}</dt><dd>FREE</dd></div>`});
+  giftLines(S.size).forEach(t=>{L+=`<div class="saleln giftln"><dt>${esc(t)}</dt><dd>${fbHTML("Gift")}</dd></div>`});
   if(q.coupon&&q.couponDisc>0)L+=`<div class="saleln"><dt>Coupon ${esc(q.coupon.code)}</dt><dd>−${money(q.couponDisc)}</dd></div>`;
   if(q.surcharge>0)L+=`<div><dt>Premium flavors</dt><dd>+${money(q.surcharge)}</dd></div>`;
   if(S.step===2){
-    S.addons.forEach(id=>{const a=DB.addons.find(x=>x.id===id);if(a)L+=`<div><dt>${esc(a.name)}</dt><dd>+${money(a.price)}</dd></div>`});
-    L+=`<div><dt>${OPT_NAME[optOf(S)]}</dt><dd>${q.feePending?"Choose a courier":q.fee?money(q.fee):"Free"}</dd></div>`;
+    S.addons.forEach(id=>{const a=DB.addons.find(x=>x.id===id);if(a)L+=`<div><dt class="withlv">${lvAddon(a,18,true)}${esc(a.name)}</dt><dd>${addonPr(a)}</dd></div>`});
+    L+=`<div><dt>${OPT_NAME[optOf(S)]}</dt><dd>${q.feePending?"Choose a courier":q.fee?money(q.fee):fbHTML("Del")}</dd></div>`;
     if(S.day)L+=`<div><dt>When</dt><dd>${S.mode!=="pickup"&&S.speed==="sameday"?(samedayOpen()?"Today (sameday)":"Sameday (after the cut-off)"):fmtDay(S.day)+(S.time?", "+esc(S.time):"")}</dd></div>`;
     if(bsOn()&&S.mode==="delivery"){const sh=bsShip(S);
       L+=`<div class="bscour${q.feePending?" need":""}" id="bsRow"><dt>Courier</dt><dd><button type="button" class="bscbtn" data-bscourier>${sh?`${esc((sh.courierName||sh.courier)+" "+(sh.serviceName||sh.service))} · Change`:S.bsSkip?"Standard delivery · Change":"🛵 Choose courier"}</button></dd></div>`}
@@ -945,6 +945,23 @@ addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("#slowSheet").hidden)$("#
 // size of every pop-up in the shop (Security tab, 70% to 130%)
 const popZ=t=>Math.min(130,Math.max(70,Math.round(+(t||DB.settings).popScale||100)));
 function applyPopScale(){document.documentElement.style.setProperty("--pop-z",String(popZ()/100))}
+/* lively picture-or-icon chips: used by the paid extras and the free badges (set in Boxes & extras) */
+const LV_FX=[["bounce","Bounce"],["wiggle","Wiggle"],["float","Float up and down"],["pulse","Pulse"],["spin","Slow spin"],["glow","Soft glow"],["none","Still"]];
+const LV_BGM=[["solid","Solid colour"],["gradient","Gradient"],["none","None (see through)"]];
+const lvBg=(o,d)=>{const m=o.bgMode||"solid",a=hexOk(o.bg,d),b=hexOk(o.bg2,"#FFFFFF");return m==="none"?"transparent":m==="gradient"?`linear-gradient(135deg,${a},${b})`:a};
+// o: {img,imgCut,icon,fx,bg,bg2,bgMode}; the picture when there is one, otherwise the icon
+function lvHTML(o,dflt,px,still){
+  const u=imgOk(o.img),fx=still?"none":fxOk(o.fx,LV_FX.map(x=>x[0]),"none");
+  return `<span class="lv fx-${fx}" style="--lv-s:${px}px;background:${lvBg(o,"#FFF4D6")}"><span class="lv-i">${u?`<img class="${imgIsCut(u,o.imgCut)?"":"crop"}" src="${esc(u)}" alt="" draggable="false">`:esc(String(o.icon||"").trim()||dflt)}</span></span>`}
+const addonIcon=a=>{const n=String(a.name||"").toLowerCase();return /wrap|gift|ribbon/.test(n)?"🎀":/card|note|message/.test(n)?"💌":/candle/.test(n)?"🕯️":/box|bag/.test(n)?"🛍️":"✨"};
+const lvAddon=(a,px,still)=>lvHTML(a,addonIcon(a),px,still);
+// "FREE" badges in the checkout box: gift, delivery / pickup, free extra
+const FB_DEF={Gift:{icon:"🎁",bg:"#FFE066",ink:"#000096",fx:"pulse",label:"Free gift"},Del:{icon:"🛵",bg:"#D9F7E8",ink:"#0A5F43",fx:"float",label:"Free delivery or pickup"},Extra:{icon:"✨",bg:"#E5E8FF",ink:"#000096",fx:"wiggle",label:"Free extra"}};
+function fbHTML(kind){const t=DB.settings,D=FB_DEF[kind],p="fb"+kind;
+  if(t[p+"On"]===false)return "Free";
+  const txt=String(t[p+"Txt"]||"").trim()||"FREE",o={img:t[p+"Img"],imgCut:t[p+"ImgCut"],icon:t[p+"Icon"],fx:t[p+"Fx"]||D.fx,bgMode:"none"};
+  return `<span class="fbadge" style="--fb-bg:${hexOk(t[p+"Bg"],D.bg)};--fb-ink:${hexOk(t[p+"Ink"],D.ink)}">${lvHTML(o,D.icon,18)}<b>${esc(txt)}</b></span>`}
+const addonPr=a=>a.price>0?"+"+money(a.price):fbHTML("Extra");
 function clearBox(){if(!S.box.length)return;S.shuf=0;S.box.forEach((_,i)=>ghostOut(i));S.box=[];S.step=1;renderStore()}
 function scrollToEl(el){
   const go=()=>{const fl=$("#flash"),head=$(".top").getBoundingClientRect().height+(fl.hidden||fl.parentNode===$(".top")?0:fl.getBoundingClientRect().height);
@@ -1114,10 +1131,10 @@ function renderCoSummary(){
   $("#summary").innerHTML=`<div><span>Box of ${S.size}</span><span class="num">${money(q.base)}</span></div>`+
     Object.entries(counts).map(([id,n])=>{const p=prod(id);return `<div class="m"><span>${n} × ${esc(p.name)}</span><span>${p.surcharge>0?"+"+money(p.surcharge*n):""}</span></div>`}).join("")+
     (q.sale?`<div class="sl"><span>${esc(q.sale.name)} (${saleOffText(q.sale)})</span><span class="num">−${money(q.discount)}</span></div>`:"")+
-    giftLines(S.size).map(t=>`<div class="sl"><span>${esc(t)}</span><span class="num">Free</span></div>`).join("")+
+    giftLines(S.size).map(t=>`<div class="sl"><span>${esc(t)}</span><span class="num">${fbHTML("Gift")}</span></div>`).join("")+
     (q.coupon&&q.couponDisc>0?`<div class="sl"><span>Coupon ${esc(q.coupon.code)}</span><span class="num">−${money(q.couponDisc)}</span></div>`:"")+
-    S.addons.map(id=>{const a=DB.addons.find(x=>x.id===id);return a?`<div><span>${esc(a.name)}</span><span class="num">+${money(a.price)}</span></div>`:""}).join("")+
-    `<div><span>${OPT_NAME[optOf(S)]}</span><span class="num">${q.feePending?"Choose a courier below":q.fee?money(q.fee):"Free"}</span></div>`+
+    S.addons.map(id=>{const a=DB.addons.find(x=>x.id===id);return a?`<div><span class="withlv">${lvAddon(a,22,true)}${esc(a.name)}</span><span class="num">${addonPr(a)}</span></div>`:""}).join("")+
+    `<div><span>${OPT_NAME[optOf(S)]}</span><span class="num">${q.feePending?"Choose a courier below":q.fee?money(q.fee):fbHTML("Del")}</span></div>`+
     `<div><span>When</span><span>${esc(whenTxt(S))}</span></div>`+
     (S.note?`<div><span>Note</span><span style="text-align:right">${esc(S.note)}</span></div>`:"")+
     `<div class="t"><span>Total</span><span class="num">${money(q.total)}</span></div>`;
