@@ -1784,7 +1784,10 @@ function lpEnsureFonts(pg){
   for(const id in lpFaces)if(!ids.has(id)){try{document.fonts.delete(lpFaces[id])}catch(e){}delete lpFaces[id]}
   (pg.fonts||[]).forEach(f=>{if(lpFaces[f.id])return;try{const ff=new FontFace("DD-"+f.id,`url(${f.data})`);document.fonts.add(ff);lpFaces[f.id]=ff;ff.load().then(()=>mqFit()).catch(()=>{})}catch(e){}});
 }
-function lpFamily(key,pg){if(String(key).startsWith("f:")){const f=(pg.fonts||[]).find(x=>x.id===key.slice(2));if(f)return `"DD-${f.id}",var(--body)`}return (MQ_FONTS[key]||MQ_FONTS.body)[1]}
+const LP_STACK={display:'"Unbounded","Arial Black",system-ui,sans-serif',body:'"Instrument Sans",system-ui,-apple-system,"Segoe UI",sans-serif'};
+function lpFamily(key,pg,role){const fb=LP_STACK[role==="head"?"display":"body"];
+  if(String(key).startsWith("f:")){const f=(pg.fonts||[]).find(x=>x.id===key.slice(2));if(f)return `"DD-${f.id}",${fb}`}
+  const m=MQ_FONTS[key]||MQ_FONTS.body;return key==="display"?LP_STACK.display:key==="body"?LP_STACK.body:m[1]}
 function videoHTML(src,{bg=false}={}){
   src=safeMedia(src);if(!src)return "";
   if(/^data:video\//i.test(src)||/\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(src))
@@ -1844,7 +1847,7 @@ function renderLanding(){
   const pg=DB.page,sv=$("#storeView");if(!pg||!sv)return;
   lpEnsureFonts(pg);
   sv.style.setProperty("--blue",pg.brand);sv.style.setProperty("--ink",pg.ink);
-  sv.style.setProperty("--display",lpFamily(pg.headFont,pg));sv.style.setProperty("--body",lpFamily(pg.bodyFont,pg));
+  sv.style.setProperty("--display",lpFamily(pg.headFont,pg,"head"));sv.style.setProperty("--body",lpFamily(pg.bodyFont,pg,"body"));
   document.documentElement.style.setProperty("--pagebg",pg.bg);
   const nm=pg.name||"delidome";document.title=`${nm} Cookie Boxes`;
   $("#brandTxt").textContent=nm;$("#ftBrand").textContent=nm;$(".top .logo").setAttribute("aria-label",`${nm} home`);
