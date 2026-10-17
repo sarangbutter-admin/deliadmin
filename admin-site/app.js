@@ -169,7 +169,7 @@ function migrate(db){
   if(db.settings.fabGest===undefined)Object.assign(db.settings,{fabGest:true,fabBgType:"color",fabBg2:"#FF9F43",fabRing:"",fabImgSize:84,fabSizePx:58,fabOpacity:100,fabImg:"",rbImg:"",rbImg2:""});
   if(db.settings.guardOn===undefined)Object.assign(db.settings,{guardOn:true,guardClear:true,guardShuf:true,guardIcon:"🛡️",guardImg:"",
     guardClearTitle:"Clear your box?",guardClearText:"You already picked a courier. This will empty your whole box. Your courier choice stays.",guardClearOk:"Yes, clear it",guardClearNo:"Keep my box",
-    guardShufTitle:"Shuffle your box?",guardShufText:"You already picked a courier. This swaps your flavors for a new random mix.",guardShufOk:"Yes, shuffle",guardShufNo:"Keep my box"});
+    guardShufTitle:"Shuffle your box?",guardShufText:"You already picked a courier. This swaps only the flavors we picked for you. The ones you chose yourself stay.",guardShufOk:"Yes, shuffle",guardShufNo:"Keep my box"});
   if(db.settings.rbOn===undefined)Object.assign(db.settings,{rbOn:true,rbIcon:"🎲",rbIcon2:"🔀",rbBg:"#FFD43B",rbFx:"wiggle",rbScroll:true,fabOn:true,fabIcon:"📦",fabText:"My box",fabTextOn:true,fabFx:"bounce",fabBg:"#FFD43B",fabInk:"#000096",fabHide:true});
   if(!Array.isArray(db.categories)){db.categories=DEFAULT_CATS.map(c=>({...c}));db.products.forEach(p=>{if(p.cat===undefined)p.cat=CAT_OF[p.id]||""})}
   db.products.forEach(p=>{if(p.cat===undefined)p.cat="";if(!Array.isArray(p.reviews))p.reviews=[]});
@@ -359,11 +359,11 @@ function crumbColors(p){
 
 /* ================= SHOP ================= */
 loadDB();
-const fresh = () => ({size:6, box:[], step:1, mode:"pickup", speed:"scheduled", day:null, time:null, note:"", addons:[], coupon:"", ship:null, bsSkip:false, dnote:"", dphoto:""});
+const fresh = () => ({size:6, box:[], auto:[], step:1, mode:"pickup", speed:"scheduled", day:null, time:null, note:"", addons:[], coupon:"", ship:null, bsSkip:false, dnote:"", dphoto:""});
 let S = fresh(), hadCart=false;
 try{const s=JSON.parse(localStorage.getItem(CART_KEY)||"null");if(s&&Array.isArray(s.box)){S={...S,...s,step:s.step===2?2:1};hadCart=true;
   }}catch(e){}
-const saveCart = () => {try{localStorage.setItem(CART_KEY,JSON.stringify({size:S.size,box:S.box,mode:S.mode,speed:S.speed,note:S.note,addons:S.addons,editId:S.editId||null,day:S.day,time:S.time,step:S.step,coupon:S.coupon||""}))}catch(e){}};
+const saveCart = () => {try{localStorage.setItem(CART_KEY,JSON.stringify({size:S.size,box:S.box,auto:S.auto,mode:S.mode,speed:S.speed,note:S.note,addons:S.addons,editId:S.editId||null,day:S.day,time:S.time,step:S.step,coupon:S.coupon||""}))}catch(e){}};
 const activeSizes = () => DB.sizes.filter(s=>s.active).sort((a,b)=>a.n-b.n);
 const heldOwn = id => {if(!S.editId||view!=="store")return 0;const o=DB.orders.find(x=>x.id===S.editId);return o&&o.holds&&o.status==="awaiting"?(o.items[id]||0):0};
 const stockLeft = p => p&&p.track?Math.max(0,p.stock+heldOwn(p.id)):Infinity;
@@ -377,13 +377,15 @@ function sanitizeCart(){
   const sz=activeSizes();
   if(!sz.find(s=>s.n===S.size)&&!validCustom(S.size))S.size=(sz.find(s=>s.n===6)||sz[0]||{n:6}).n;
   const used={};
-  S.box=S.box.filter(id=>{const p=prod(id);if(!p||p.status!=="available")return false;used[id]=(used[id]||0)+1;return used[id]<=stockLeft(p)}).slice(0,S.size);
+  {const was=S.auto||[],au=[];
+    S.box=S.box.filter((id,i)=>{const p=prod(id);if(!p||p.status!=="available")return false;used[id]=(used[id]||0)+1;const ok=used[id]<=stockLeft(p);if(ok)au.push(!!was[i]);return ok}).slice(0,S.size);S.auto=au.slice(0,S.box.length)}
   S.addons=(S.addons||[]).filter(id=>DB.addons.find(a=>a.id===id&&a.active));
   if(S.editId){const eo=DB.orders.find(x=>x.id===S.editId);if(!eo||eo.status!=="awaiting")S.editId=null}
   if(!full())S.step=1;
 }
 const full = () => S.box.length===S.size && S.size>0;
 const countOf = id => S.box.filter(x=>x===id).length;
+const isAuto = i => !!(S.auto&&S.auto[i]);
 const Q = () => quote(S,DB,{withDelivery:S.step===2});
 const total = () => {const q=Q();return S.step===2?q.total:r2(q.total-q.addons)};
 
@@ -574,7 +576,7 @@ function renderStore(){
   const cols=S.size<=4?2:S.size<=9?3:4;
   $("#slots").style.gridTemplateColumns=`repeat(${cols},minmax(0,1fr))`;
   $("#slots").innerHTML=Array.from({length:S.size},(_,i)=>{const id=S.box[i];if(!id)return `<div class="slot" aria-hidden="true"></div>`;
-    const p=prod(id),pd=pop.get(i);return `<button class="slot filled${pd!==undefined?" pop":""}" type="button" data-slot="${i}" style="--i:${i};--pd:${pd||0}ms" aria-label="Remove ${esc(p.name)}">${plateHTML(p)}</button>`}).join("");
+    const p=prod(id),pd=pop.get(i);return `<button class="slot filled${pd!==undefined?" pop":""}" type="button" data-slot="${i}" style="--i:${i};--pd:${pd||0}ms" aria-label="Remove ${esc(p.name)}${isAuto(i)?" (picked by shuffle)":""}">${plateHTML(p)}${isAuto(i)?`<span class="autodie" aria-hidden="true">🎲</span>`:""}</button>`}).join("");
   $("#bpTitle").textContent=`Box of ${S.size}`;
   $("#bpCount").textContent=`${S.box.length} of ${S.size}`;
   $("#pillCount").textContent=`${S.box.length}/${S.size}`;
@@ -718,7 +720,7 @@ function celebrate(){if(RM)return;const p=$(".boxpanel");
   if(inView(p.getBoundingClientRect()))crumbs(p.querySelector(".slots"),{dough:"#FFFFFF",edge:"#D9DCFA",chips:["#FFFFFF","#EEF0FF"]})}
 
 /* --- box actions --- */
-function setSize(n){S.size=n;if(S.box.length>n)S.box=S.box.slice(0,n);if(!full())S.step=1;renderStore()}
+function setSize(n){S.size=n;if(S.box.length>n){S.box=S.box.slice(0,n);S.auto=(S.auto||[]).slice(0,n)}if(!full())S.step=1;renderStore()}
 
 function cpMsg(t,ok){const m=$("#cpnMsg");if(!m)return;m.textContent=t||"";m.hidden=!t;m.classList.toggle("ok",!!ok);clearTimeout(cpMsg.t);if(t)cpMsg.t=setTimeout(()=>{m.hidden=true},6000)}
 function renderGiftHint(){
@@ -782,7 +784,7 @@ $("#menuGrid").addEventListener("click",e=>{
 function add(id,card){
   if(full())return;
   if(countOf(id)>=stockLeft(prod(id))){toast(`That's all we have of ${prod(id).name} right now`);return}
-  S.box.push(id);const idx=S.box.length-1;
+  S.box.push(id);S.auto=S.auto||[];S.auto[S.box.length-1]=false;const idx=S.box.length-1;
   if(!card||RM)pop.set(idx,0);
   renderStore();
   if(card&&!RM){const pl=card.querySelector(".plate"),p=prod(id),st=card.querySelector(".stepper");
@@ -791,20 +793,29 @@ function add(id,card){
   if(full())celebrate();
 }
 function removeAt(i){
-  const id=S.box[i];if(id===undefined)return;ghostOut(i);S.box.splice(i,1);S.step=1;renderStore();
+  const id=S.box[i];if(id===undefined)return;ghostOut(i);S.box.splice(i,1);if(S.auto)S.auto.splice(i,1);S.step=1;renderStore();
   if(!RM){const card=document.querySelector(`.card[data-id="${id}"]`);if(card&&inView(card.getBoundingClientRect())){shake(card.querySelector(".plate")||card.querySelector("h4"));bump(card.querySelector("output"))}}
 }
 function removeOne(id,card){const i=S.box.lastIndexOf(id);if(i<0)return;removeAt(i);if(card&&!RM)tag(card.querySelector(".stepper"),"−1")}
 const randomId = () => {const a=pickable();return a.length?a[Math.floor(Math.random()*a.length)].id:null};
 function fillBox(base){
-  let k=0;while(!full()){const id=randomId();if(!id)break;S.box.push(id);S.shuf=1;pop.set(S.box.length-1,base+k++*80)}
+  S.auto=S.auto||[];let k=0;while(!full()){const id=randomId();if(!id)break;S.box.push(id);S.auto[S.box.length-1]=true;S.shuf=1;pop.set(S.box.length-1,base+k++*80)}
   if(!full())toast("Not enough stock to fill the whole box");
 }
 function fillRest(){if(!pickable().length){toast("Every flavor is out of stock right now");return}fillBox(0);renderStore();if(full())celebrate()}
+// shuffle a full box: only the spots the random button filled get new flavors; what the customer picked by hand stays exactly as it is
+function reshuffle(){
+  const idx=S.box.map((_,i)=>i).filter(isAuto);
+  if(!idx.length){toast("Every spot is hand-picked, so there's nothing to shuffle. Remove one to let us pick it for you.");return false}
+  const old=idx.map(i=>S.box[i]);idx.forEach(i=>{ghostOut(i);S.box[i]=null});
+  let k=0;idx.forEach((i,n)=>{
+    let id=null;for(let t=0;t<6&&(!id||id===old[n]);t++){const c=randomId();if(c)id=c;if(id&&id!==old[n])break}   // try for a different flavor than before
+    S.box[i]=id||old[n];pop.set(i,180+k++*80)});
+  S.shuf=1;return true}
 function randomFill(){
-  if(!availProducts().length){toast("Every flavor is out of stock right now");return}let base=0;
-  if(full()){S.box.forEach((_,i)=>ghostOut(i));S.box=[];S.shuf=0;base=180}
-  fillBox(base);
+  if(!availProducts().length){toast("Every flavor is out of stock right now");return}
+  if(full()){if(!reshuffle())return}
+  else fillBox(0);
   renderStore();if(full())celebrate();
   if(!RM)$("#randBtn svg").animate([{transform:"rotate(0)"},{transform:"rotate(360deg)"}],{duration:500,easing:"ease-out"});
 }
@@ -914,7 +925,7 @@ function guardCardHTML(kind,t){
 let gdFn=null;
 function guardBox(kind,fn){
   const t=DB.settings,on=t.guardOn!==false&&(kind==="clear"?t.guardClear!==false:t.guardShuf!==false);
-  if(!on||!bsOn()||S.mode!=="delivery"||!S.ship||!S.box.length||(kind!=="clear"&&!full())){fn();return}
+  if(!on||!bsOn()||S.mode!=="delivery"||!S.ship||!S.box.length||(kind!=="clear"&&!full())||(kind==="shuf"&&!S.box.some((_,i)=>isAuto(i)))){fn();return}
   gdFn=fn;$("#gdCard").innerHTML=guardCardHTML(kind,t);$("#gdSheet").hidden=false;
   setTimeout(()=>{const b=$("#gdCard [data-gdno]");b&&b.focus()},60);
 }
@@ -975,7 +986,7 @@ function fbHTML(kind){const t=DB.settings,D=FB_DEF[kind],p="fb"+kind;
   const txt=String(t[p+"Txt"]||"").trim()||"FREE",o={img:t[p+"Img"],imgCut:t[p+"ImgCut"],icon:t[p+"Icon"],fx:t[p+"Fx"]||D.fx,bgMode:"none"};
   return `<span class="fbadge" style="--fb-bg:${hexOk(t[p+"Bg"],D.bg)};--fb-ink:${hexOk(t[p+"Ink"],D.ink)}">${lvHTML(o,D.icon,18)}<b>${esc(txt)}</b></span>`}
 const addonPr=a=>a.price>0?"+"+money(a.price):fbHTML("Extra");
-function clearBox(){if(!S.box.length)return;S.shuf=0;S.box.forEach((_,i)=>ghostOut(i));S.box=[];S.step=1;renderStore()}
+function clearBox(){if(!S.box.length)return;S.shuf=0;S.box.forEach((_,i)=>ghostOut(i));S.box=[];S.auto=[];S.step=1;renderStore()}
 function scrollToEl(el){
   const go=()=>{const fl=$("#flash"),head=$(".top").getBoundingClientRect().height+(fl.hidden||fl.parentNode===$(".top")?0:fl.getBoundingClientRect().height);
     const y=el.getBoundingClientRect().top+window.scrollY-head-16;
@@ -1605,7 +1616,7 @@ function renderEditBar(){
 }
 function startEdit(id){
   const o=DB.orders.find(x=>x.id===id);if(!o||o.status!=="awaiting"){toast("This order can't be edited any more");return}
-  S.editId=id;S.size=o.size;S.box=Object.entries(o.items).flatMap(([pid,n])=>Array(n).fill(pid));S.mode=o.mode;S.speed=o.speed==="sameday"?"sameday":"scheduled";S.note=o.note||"";S.addons=[...o.addons];S.coupon=o.coupon||"";
+  S.editId=id;S.size=o.size;S.box=Object.entries(o.items).flatMap(([pid,n])=>Array(n).fill(pid));S.auto=[];S.mode=o.mode;S.speed=o.speed==="sameday"?"sameday":"scheduled";S.note=o.note||"";S.addons=[...o.addons];S.coupon=o.coupon||"";
   S.day=dayOptions().some(d=>ymd(d)===o.day)?o.day:null;S.time=S.day?o.time:null;S.step=1;fixWhen();
   closeMO();sanitizeCart();renderStoreStatic();renderStore();renderEditBar();saveCart();scrollToEl($("#build"));toast(`Editing ${o.code}`);
 }
@@ -1690,7 +1701,7 @@ $("#moSheet").addEventListener("submit",async e=>{
     }catch(ex){bad(ex.message);btn.disabled=false;btn.textContent="I've paid, send proof"}
   }
 });
-$("#editBar").addEventListener("click",e=>{if(e.target.id==="stopEdit"){S.editId=null;S.box=[];S.step=1;S.day=null;S.time=null;S.note="";S.addons=[];S.coupon="";S.size=6;sanitizeCart();renderEditBar();renderStoreStatic();renderStore();saveCart();toast("Editing stopped")}});
+$("#editBar").addEventListener("click",e=>{if(e.target.id==="stopEdit"){S.editId=null;S.box=[];S.auto=[];S.step=1;S.day=null;S.time=null;S.note="";S.addons=[];S.coupon="";S.size=6;sanitizeCart();renderEditBar();renderStoreStatic();renderStore();saveCart();toast("Editing stopped")}});
 /* live countdowns + automatic cancellation */
 function tickCountdowns(){
   const now=Date.now();
